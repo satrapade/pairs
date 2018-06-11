@@ -1,7 +1,7 @@
 
 require(data.table)
 
-melt2file<-function(m,fn="N:/Depts/Share/UK Alpha Team/Analytics/db_cache/tret.csv"){
+melt2file<-function(m,fn){
     if(file.exists(fn))file.remove(fn)
     cn<-colnames(m)
     if(ncol(m)>100){
@@ -19,7 +19,8 @@ melt2file<-function(m,fn="N:/Depts/Share/UK Alpha Team/Analytics/db_cache/tret.c
     }
     m
   }
-  
+
+
   
 
 
