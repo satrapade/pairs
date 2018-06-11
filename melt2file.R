@@ -1,8 +1,8 @@
 
 require(data.table)
 
-melt2file<-function(m,fn="N:/Depts/Share/UK Alpha Team/Analytics/db_cache/tret.csv"){
-    file.remove(fn)
+  melt2file<-function(m,fn="N:/Depts/Share/UK Alpha Team/Analytics/db_cache/tret.csv"){
+    if(file.exists(fn))file.remove(fn)
     cn<-colnames(m)
     if(ncol(m)>100){
       cns<-split(cn,seq_along(cn)%%as.integer(ncol(m)/100))
@@ -17,7 +17,7 @@ melt2file<-function(m,fn="N:/Depts/Share/UK Alpha Team/Analytics/db_cache/tret.c
       )
       fwrite(m_dt,file=fn,append=TRUE)
     }
-}
+  }
   
 
 
