@@ -108,7 +108,7 @@ show_matrix<-function(x,n,size="2cm",center=TRUE,hline=TRUE){
 \Sexpr{paste(zcolors$definition,collapse="\n")}
 
 <<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
-pm<-"DH"
+pm<-"ABC"
 
 securities<-fread("N:/Depts/Share/UK Alpha Team/Analytics/db_cache/exposure_securities.csv")
 
@@ -163,28 +163,35 @@ make_pair_section<-function(p,lw=0.25){
       )
   ]
   g1<-plot_pair_constituents(p,lw)+
-  geom_line(
-    data=pnl_df[exposure=="all"],
-    mapping=aes(x=date,y=pnl,group=exposure),
-    color=rgb(0,0,0,0.5),
-    size=2
-  )+geom_line(
-    data=pnl_df[exposure=="long"],
-    mapping=aes(x=date,y=pnl,group=exposure),
-    color=rgb(0,0.5,0,0.5),
-    size=2
-  )+geom_line(
-    data=pnl_df[exposure=="short"],
-    mapping=aes(x=date,y=pnl,group=exposure),
-    color=rgb(0.5,0,0,0.5),
-    size=2
+  theme(
+    axis.title.x = element_blank(),
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank()
   )
+  g2<-ggplot(
+    data=pnl_df,mapping=aes(x=date,y=pnl,group=exposure,color=exposure)
+  )+geom_line(size=2)+
+  scale_color_manual(
+    values=c("black", "red", "green"), 
+    name="P&L",
+    breaks=c("all", "long", "short"),
+    labels=c("All", "Long", "Short")
+  )+scale_x_date(
+    labels = date_format("%Y-%m-%d"),
+    breaks = pretty(sort(unique(ptf[grepl(p,bucket)]$date)), n = 10)
+  ) + theme(axis.text.x=element_text(angle=50,size=10,vjust=0.5))
+  g3<-rbind(ggplotGrob(g1), ggplotGrob(g2), size = "last")
+  n1 <- length(ggplot_build(g1)$panel$ranges[[1]]$y.labels)
+  n2 <- length(g2$panel$ranges[[1]]$y.labels)
+  panels <- g3$layout$t[grep("panel", g3$layout$name)]
+  g3$heights[panels[1]]<-unit(3,"null")
+  g3$heights[panels[2]]<-unit(1,"null")
   paste0(
     "\\newpage",
     paste0("\\section{pair detail : ",latexTranslate(p),"}"),
     "\\begin{center}",
     make_plot(
-      plot(g1),
+      plot(g3),
       width="20cm",
       height="20cm",
       envir=environment()
@@ -250,5 +257,4 @@ pm_pairs<-paste(
 
 
 \end{document}
-
 
