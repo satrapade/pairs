@@ -1,0 +1,254 @@
+
+
+
+\documentclass{article}
+
+\usepackage{verbatim}
+\usepackage[portrait, headheight = 1cm, margin=1cm, top = 1cm, nofoot]{geometry} 
+\usepackage[export]{adjustbox} 
+\usepackage{graphicx}
+\usepackage[dvipsnames,table]{xcolor} 
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric}
+\usetikzlibrary{shapes.misc}
+\usepackage{xfrac}
+\usepackage{hyperref}
+\usepackage{amsmath}
+\usepackage{longtable}
+\usepackage{multirow}
+
+\begin{document}
+
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+source("https://raw.githubusercontent.com/satrapade/utility/master/utility_functions.R")
+source("https://raw.githubusercontent.com/satrapade/latex_utils/master/latex_helpers_v2.R")
+source("https://raw.githubusercontent.com/satrapade/utility/master/tikz_shape.R")
+source("https://raw.githubusercontent.com/satrapade/utility/master/make_date_range.R")
+
+require(Rcpp)
+Rcpp::sourceCpp("rcpp_vector_primitives.cpp")
+
+require(clue)
+#require(DBI)
+require(Hmisc)
+require(ztable)
+require(magrittr)
+require(gsubfn)
+require(ggplot2)
+require(ggrepel)
+
+source("https://raw.githubusercontent.com/satrapade/utility/master/with_columns.R")
+source("https://raw.githubusercontent.com/satrapade/utility/master/nn_cast.R")
+source("https://raw.githubusercontent.com/satrapade/utility/master/make_query.R")
+source(paste0(
+  "https://raw.githubusercontent.com/satrapade/pairs/master/melt2file.R",
+  "?token=ABS5bpbZ05iq9Zg_wfW1iMRsQkTpNtMEks5bJ7PLwA%3D%3D"
+))
+source(paste0(
+  "https://raw.githubusercontent.com/satrapade/pairs/master/col2pair.R",
+  "?token=ABS5bkAFm5uVbG8JwqJaVpo5DkAQtbHLks5bJ74awA%3D%3D"
+))
+source(paste0(
+  "https://raw.githubusercontent.com/satrapade/pairs/master/col2ticker.R",
+  "?token=ABS5boqLxqlt-9HfgwP1s5EyiBztkhUqks5bJ73nwA%3D%3D"
+))
+
+options(ztable.type="latex")
+xt<-function(m,center=TRUE,color=TRUE,hline=TRUE){
+  x<-m
+  if(any(class(x) %in% "data.frame")){
+    x<-ztable(x,include.rownames=FALSE,digits=0,align=stri_flatten(rep("c",ncol(x))),hline.after=NULL)
+  }
+  x0<-capture.output(print(x,type="latex"))
+  start<-head(which(grepl("(^\\\\begin\\{tabular\\})|(^\\\\begin\\{longtable\\})",x0)),1)
+  end<-tail(which(grepl("(^\\\\end\\{tabular\\})|(^\\\\end\\{longtable\\})",x0)),1)
+  cols<-which(grepl("^\\\\definecolor\\{[a-z0-9\\-]+\\}",x0))
+  excl<-numeric(0)
+  if(!hline)excl<-union(excl,which(grepl("^\\\\hline",x0)))
+  x1<-paste0(c(
+    if(color)x0[cols]else"",
+    if(center)"\\begin{center}\n"else"",
+    x0[setdiff(start:end,excl)],
+    if(center)"\\end{center}\n"else""
+  ),collapse="\n")
+  x1
+}
+
+
+nz2col<-function(x,col="orange",include.rownames = FALSE){
+  tx<-ztable(
+    if(!is.null(rownames(x)))data.table(x,keep.rownames=TRUE) else data.table(x,keep.rownames=FALSE),
+    include.rownames =  FALSE,digits=0
+  )
+  k<-if(!is.null(rownames(x))) 2 else 1
+  for(s in apply(which(x>0,arr.ind = TRUE),1,list)){
+    tx<-addCellColor(tx,rows=s[[1]][1]+1,cols=s[[1]][2]+k,col)
+  }
+  tx
+}
+
+show_matrix<-function(x,n,size="2cm",center=TRUE,hline=TRUE){
+  paste0(
+    if(center)"\\begin{center}\n "else"",
+    paste0("\\begin{tabular}{m{",size,"} c}\n "),
+    paste0("\\resizebox{",size,"}{!}{\\tt ",n,"}\n "),
+    "& \n",
+    xt(nz2col(x,include.rownames = TRUE,col="white"),color=FALSE,center=FALSE,hline=hline),"\n",
+    " \\\\ \n",
+    "\\end{tabular} \n",
+    if(center)"\\end{center} \n"else"",
+    sep="",
+    collapse=""
+  )
+}
+
+
+@
+
+\Sexpr{paste(zcolors$definition,collapse="\n")}
+
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+pm<-"DH"
+
+securities<-fread("N:/Depts/Share/UK Alpha Team/Analytics/db_cache/exposure_securities.csv")
+
+ptf<-fread("N:/Depts/Share/UK Alpha Team/Analytics/db_cache/ptf.csv")[date>"2017-01-01"]
+ptf$date<-as.Date(ptf$date,format="%Y-%m-%d")
+i<-match(ptf$security,securities$exposure_security_external_id)
+ptf$ticker<-gsub(" Equity","",securities$security_ticker[i])
+
+all_buckets<-sort(unique(ptf$bucket))
+all_tickers<-sort(unique(ptf$ticker))
+all_dates<-sort(unique(ptf$date))
+
+@
+
+
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+
+plot_pair_constituents<-function(p,line_width=0.25){
+  ggplot(
+    data=ptf[grepl(p,bucket)],
+    mapping=aes(
+      x=date,
+      y=market_value,
+      group=security,
+      color=ticker
+    )
+  ) +
+  geom_hline(aes(yintercept=0),size=0.25,color=rgb(0,0,0,0.5),show.legend=FALSE) +
+  geom_line(size=line_width)+
+  scale_colour_discrete(name=p) +
+  scale_x_date(
+    labels = date_format("%Y-%m-%d"),
+    breaks = pretty(sort(unique(ptf[grepl(p,bucket)]$date)), n = 10)) +
+  theme(axis.text.x=element_text(angle=50,size=10,vjust=0.5))
+}
+
+make_pair_section<-function(p,lw=0.25){
+  pnl_df<-ptf[grepl(p,bucket)][
+      TRUE,
+      .(
+        daily_pnl=sum(scrub(market_value)*scrub(tret)),
+        daily_long_pnl=sum(ifelse(scrub(market_value)>0,scrub(market_value)*scrub(tret),0)),
+        daily_short_pnl=sum(ifelse(scrub(market_value)<0,scrub(market_value)*scrub(tret),0))
+      ),
+      keyby=date
+  ][
+      TRUE,
+      .(
+        date=rep(date,times=3),
+        pnl=c(cumsum(daily_pnl), cumsum(daily_long_pnl), cumsum(daily_short_pnl)),
+        exposure=rep(c("all","long","short"),each=length(date))
+      )
+  ]
+  g1<-plot_pair_constituents(p,lw)+
+  geom_line(
+    data=pnl_df[exposure=="all"],
+    mapping=aes(x=date,y=pnl,group=exposure),
+    color=rgb(0,0,0,0.5),
+    size=2
+  )+geom_line(
+    data=pnl_df[exposure=="long"],
+    mapping=aes(x=date,y=pnl,group=exposure),
+    color=rgb(0,0.5,0,0.5),
+    size=2
+  )+geom_line(
+    data=pnl_df[exposure=="short"],
+    mapping=aes(x=date,y=pnl,group=exposure),
+    color=rgb(0.5,0,0,0.5),
+    size=2
+  )
+  paste0(
+    "\\newpage",
+    paste0("\\section{pair detail : ",latexTranslate(p),"}"),
+    "\\begin{center}",
+    make_plot(
+      plot(g1),
+      width="20cm",
+      height="20cm",
+      envir=environment()
+    ),
+    "\\end{center}",
+    sep="\n"
+  )
+}
+
+
+
+g1<-plot_pair_constituents(paste0("^",pm,"_PAIR_"))+
+theme(
+  legend.position="none",
+  strip.text.y = element_text(size = 8,angle=0),
+  axis.title.y = element_blank(),
+  axis.text.y = element_blank(),
+  axis.ticks.y = element_blank(),
+  panel.grid.major = element_blank(),
+  panel.grid.minor = element_blank(),
+  panel.background = element_blank()
+)+
+facet_grid(
+  rows=vars(bucket),
+  labeller=labeller(bucket=function(x)gsub("_PAIR_","",x))
+)
+
+g2<-ggplot_gtable(ggplot_build(g1))
+stripr <- which(grepl('strip-r', g2$layout$name))
+for (i in stripr) {
+  j <- which(grepl('rect', g2$grobs[[i]]$grobs[[1]]$childrenOrder))
+  k <- which(grepl('title', g2$grobs[[i]]$grobs[[1]]$childrenOrder))
+  pair<-g2$grobs[[i]]$grobs[[1]]$children[[k]]$children[[1]][[1]]
+  the_bucket<-paste0(gsub("[0-9]+","",pair),"_PAIR_",gsub("[A-Z]+","",pair))
+  pnl<-ptf[bucket==the_bucket,sum(scrub(market_value)*scrub(tret))]
+  g2$grobs[[i]]$grobs[[1]]$children[[j]]$gp$fill <- ifelse(pnl>0,"green","red")
+}
+
+
+pm_pairs<-paste(
+  mapply(
+    make_pair_section,
+    p=all_buckets[grepl(paste0("^",pm),all_buckets)],
+    MoreArgs=list(lw=1)
+  ),
+  collapse="\n"
+)
+@
+
+
+\section{\Sexpr{pm} pairs: positioning timeline overview}
+
+\vskip 5mm
+
+\Sexpr{make_plot(
+  plot(g2),
+  width="20cm",
+  height="20cm",
+  envir=environment()
+)}
+
+\Sexpr{pm_pairs}
+
+
+\end{document}
+
+
