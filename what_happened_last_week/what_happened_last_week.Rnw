@@ -1,0 +1,2604 @@
+
+%
+% scrape status
+%
+
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+# required packages
+require(Hmisc)
+require(digest)
+require(stringi)
+require(readxl)
+require(scales)
+require(data.table)
+require(Matrix)
+require(Matrix.utils)
+require(clue)
+require(Rtsne)
+
+source(
+  "https://raw.githubusercontent.com/satrapade/utility/master/utility_functions.R"
+)
+source(
+  "https://raw.githubusercontent.com/satrapade/latex_utils/master/latex_helpers_v2.R"
+)
+
+x<-list.files(
+  path="N:/Depts/Share/UK Alpha Team/Analytics/risk_reports/figure",
+  pattern="*.pdf",
+  full.names=TRUE
+)
+if(length(x)>0)file.remove(x)
+
+#
+# daily data
+#
+
+data_loaded<-fread("N:/Depts/Share/UK Alpha Team/Analytics/market_data/data_loaded.csv")
+for(i in 1:nrow(data_loaded)){
+    if(data_loaded$class[i]!="matrix")next;
+    assign(data_loaded$name[i],load_matrix(data_loaded$fn[i],row_names = TRUE))
+}
+rm("i")
+
+#
+# daily data
+#
+
+data_directory<-"N:/Depts/Share/UK Alpha Team/Analytics/duke_summary"
+prefix<-"duke_"
+row_names<-TRUE
+# pair-level data
+pair_exposure     <- load_matrix(paste0(data_directory,"/",prefix,"pair_exposure.csv"),row_names=row_names)
+pair_days         <- load_matrix(paste0(data_directory,"/",prefix,"pair_days.csv"),row_names=row_names)
+pair_local_pnl    <- load_matrix(paste0(data_directory,"/",prefix,"pair_local_pnl.csv"),row_names=row_names)
+pair_long_pnl     <- load_matrix(paste0(data_directory,"/",prefix,"pair_long_pnl.csv"),row_names=row_names)
+pair_short_pnl    <- load_matrix(paste0(data_directory,"/",prefix,"pair_short_pnl.csv"),row_names=row_names)
+drop_one_pair_pnl <- load_matrix(paste0(data_directory,"/",prefix,"drop_one_pair_pnl.csv"),row_names=row_names)
+
+# manager-level data
+manager_exposure          <- load_matrix(paste0(data_directory,"/",prefix,"manager_exposure.csv"),row_names=row_names)
+manager_local_pnl         <- load_matrix(paste0(data_directory,"/",prefix,"manager_local_pnl.csv"),row_names=row_names)
+drop_one_manager_pnl      <- load_matrix(paste0(data_directory,"/",prefix,"drop_one_manager_pnl.csv"),row_names=row_names)
+manager_drop_one_pair_pnl <- load_matrix(paste0(data_directory,"/",prefix,"manager_drop_one_pair_pnl.csv"),row_names=row_names)
+
+# fund-level data
+exposure        <- load_matrix(paste0(data_directory,"/",prefix,"exposure.csv"),row_names=row_names)
+long_exposure   <- load_matrix(paste0(data_directory,"/",prefix,"long_exposure.csv"),row_names=row_names)
+short_exposure  <- load_matrix(paste0(data_directory,"/",prefix,"short_exposure.csv"),row_names=row_names)
+local_pnl       <- load_matrix(paste0(data_directory,"/",prefix,"local_pnl.csv"),row_names=row_names)
+
+# color assigment
+manager_col <- fread("N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/manager_col.csv")
+pair_col    <- fread("N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/pair_col.csv")
+
+#determine pairs, managers and pair-to-manager mapping
+pairs<-sort(unique(colnames(pair_exposure)))
+managers<-sort(unique(colnames(manager_exposure)))
+manager_pairs<-structure(
+  diag(length(managers))[match(gsub("[0-9]+","",pairs),managers),],
+  dimnames=list(pairs,managers)
+)
+
+keys<-fread("N:/Depts/Share/UK Alpha Team/Analytics/pair_icons/keys.csv")
+images<-fread("N:/Depts/Share/UK Alpha Team/Analytics/pair_icons/images.csv")
+
+icon<-function(icon_name,icon_table=images,height="2cm",width="3cm"){
+  icon_table[
+    ,
+    .SD,
+    keyby=name
+  ][
+    icon_name,
+    paste0("\\includegraphics[height=",height,",width=",width,",valign=T]{",file,"}")
+  ]
+}
+
+#
+# intraday data
+#
+
+intraday<-fread("N:/Depts/Share/UK Alpha Team/Analytics/market_data/intraday.csv")
+intraday_perf<-as.matrix(fread("N:/Depts/Share/UK Alpha Team/Analytics/market_data/intraday_perf.csv"))
+bar_intervals<-fread("N:/Depts/Share/UK Alpha Team/Analytics/market_data/bar_intervals.csv")
+intraday_pair<-as.matrix(fread("N:/Depts/Share/UK Alpha Team/Analytics/market_data/intraday_pair.csv"))
+intraday_pair_longs<-as.matrix(fread("N:/Depts/Share/UK Alpha Team/Analytics/market_data/intraday_pair_longs.csv"))
+intraday_pair_shorts<-as.matrix(fread("N:/Depts/Share/UK Alpha Team/Analytics/market_data/intraday_pair_shorts.csv"))
+
+last_bar<-tail(which(bar_intervals$day==max(bar_intervals$day)),1)
+first_bar<-head(which(bar_intervals$day==max(bar_intervals$day)),1)
+
+row_size2universe<-function(x,u){
+  m<-matrix(0,nrow=length(u),ncol=ncol(x),dimnames=list(u,colnames(x)))
+  i<-match(rownames(x),u)
+  j<-match(colnames(x),colnames(m))
+  m[i,j]<-as.matrix(x)
+  m
+}
+
+mc<-function(x,p="*",rows=1:nrow(x),cols=which(grepl(p,colnames(x))))x[rows,cols,drop=FALSE]
+
+make_pair<-function(
+  w,
+  intraday_perf=get("intraday_perf",envir=.GlobalEnv)
+){
+  new_pair<-matrix(
+    0,
+    nrow=ncol(intraday_perf),
+    ncol=1,
+    dimnames=list(colnames(intraday_perf),NULL)
+  )
+  res<-do.call(rbind,mapply(function(n,w){
+    i<-which(grepl(paste0("^",n),rownames(new_pair)))
+    j<-rep(1,length(i))
+    ij<-structure(
+      cbind(i,j,rep(w,length(i))),
+      dimnames=list(rownames(new_pair)[i],c("i","j","w"))
+    )
+    ij
+  },n=names(w),w=w,SIMPLIFY=FALSE))
+  new_pair[res[,c(1,2)]]<-res[,3]
+  pnl<-structure(
+    intraday_perf%*%new_pair,
+    dimnames=list(rownames(intraday_perf),"new_pair")
+  )
+  structure(pnl,.Names=attributes(intraday_perf)$datetime)
+}
+
+
+pair_exposure<-local({
+  res<-load_matrix(
+    "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_pair_exposure.csv",
+    row_names=TRUE
+  )
+  res[rownames(res) %in% colnames(intraday_perf),]
+})
+
+manager_exposure<-local({
+  res<-load_matrix(
+    "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_manager_exposure.csv",
+    row_names=TRUE
+  )
+  res[rownames(res) %in% colnames(intraday_perf),]
+})
+
+
+plot_intraday_pnl<-function(
+  pm="*",
+  intraday_pair=get("intraday_pair",envir=.GlobalEnv),
+  bar_intervals=get("bar_intervals",envir=.GlobalEnv),
+  now=max(intraday$times),
+  ndx=grepl(paste0("^",pm),colnames(intraday_pair)),
+  bars=which(bar_intervals$day>0),
+  ylab="P&L (bps)",
+  do_plot=TRUE
+){
+  pnl<-10000*rowSums(intraday_pair[bars,ndx,drop=FALSE])
+  cumpnl<-cumsum(pnl)
+  if(!do_plot)return(structure(pnl,.Names=attributes(intraday_pair)$datetime))
+  plot(
+    0,
+    type="n",
+    xlim=c(1,length(pnl)),
+    ylim=c(min(cumpnl),max(cumpnl)),
+    axes=FALSE,
+    main=paste(pm,":",round(sum(pnl),digits=0)),
+    ylab=ylab,
+    xlab=paste("period ending",now)
+  )
+  lines(cumpnl,lwd=3,col=rgb(0,0,1,0.33))
+  day_edge<-which(abs(diff(bar_intervals$day[bars]))>0)+1
+  if(length(day_edge)>0)abline(v=day_edge,col=rgb(1,0,0,0.25))
+  day_name<-stri_sub(weekdays(as.Date(bar_intervals$date[bars])),1,3)
+  if(length(day_edge)>0){
+    day_loc<-day_edge-c(day_edge[1]/2,diff(day_edge)/2)
+    axis(1,at=day_loc,labels=day_name[day_loc])
+  }else{
+    axis(1,at=length(bars)/2,labels = day_name[1])
+  }
+  axis(2)
+  #structure(pnl,.Names=attributes(intraday_pair)$datetime)
+}
+
+the_pairs<-c("*",colnames(manager_exposure))
+
+days_in_data<-sort(unique(bar_intervals$date[bar_intervals$day>0]))
+
+summary_table<-data.table(
+  pair=the_pairs,
+  all=structure(
+    format=quote(n_fmt(round(this,digits=1))),
+    mapply(function(p){
+      pnls<-10000*colSums(mc(intraday_pair,paste0("^",p)))
+      sum(pnls)
+    },p=the_pairs)
+  ),
+  longs=structure(
+    format=quote(n_fmt(round(this,digits=1))),
+    mapply(function(p){
+      pnls<-10000*colSums(mc(intraday_pair_longs,paste0("^",p)))
+      sum(pnls)
+    },p=the_pairs)
+  ),
+  shorts=structure(
+    format=quote(n_fmt(round(this,digits=1))),
+    mapply(function(p){
+      pnls<-10000*colSums(mc(intraday_pair_shorts,paste0("^",p)))
+      sum(pnls)
+    },p=the_pairs)
+  ),
+  do.call(data.table,mapply(function(i)structure(
+    format=quote(n_fmt(round(this,digits=1))),
+    hdr=bquote(stri_sub(.(i),6,-1)),
+    mapply(function(p){
+      the_day<-i
+      ndx<-bar_intervals$date==the_day
+      pnls<-10000*colSums(mc(intraday_pair,paste0("^",p))[ndx,,drop=FALSE])
+      sum(pnls)
+    },p=the_pairs)
+  ),days_in_data,SIMPLIFY=FALSE))
+)
+
+
+backtest_hit_ratio_table<-data.table(
+  pair=the_pairs,
+  do.call(data.table,mapply(function(i)structure(
+    format=quote(n_fmt(round(this,digits=0))),
+    hdr=bquote(tbl(c("H",stri_sub(.(i),6,-1)),align="@{}c@{}")),
+    mapply(function(p){
+      the_day<-i
+      if(is.na(the_day))return(0)
+      ndx<-bar_intervals$date==the_day
+      pnls<-10000*colSums(mc(intraday_pair,paste0("^",p))[ndx,,drop=FALSE])
+      round(100*sum(pnls>0)/length(pnls),digits=1)
+    },p=the_pairs)
+  ),days_in_data,SIMPLIFY=FALSE))
+)
+
+backtest_winloss_ratio_table<-data.table(
+  pair=the_pairs,
+  do.call(data.table,mapply(function(i)structure(
+    format=quote(n_fmt(round(this,digits=1))),
+    hdr=bquote(
+      tbl(
+        c("WL",stri_sub(.(i),6,-1)),
+        align="@{}c@{}"
+      )
+    ),
+    mapply(function(p){
+      the_day<-i
+      if(is.na(the_day))return(0)
+      ndx<-bar_intervals$date==the_day
+      if(sum(ndx)<1)return(0)
+      pnls<-10000*colSums(mc(intraday_pair,paste0("^",p))[ndx,,drop=FALSE])
+      winners<-if(sum(pnls>0)>0){sum(pnls[pnls>0])}else{0}
+      losers<-if(sum(pnls<0)>0){sum(-pnls[pnls<0])}else{0}
+      if(losers>0){winners/losers}else{0}
+    },p=the_pairs)
+  ),days_in_data,SIMPLIFY=FALSE))
+)
+
+backtest_plot_table<-data.table(
+  pm=structure(hdr="{\\bf PM}",paste0("{\\bf ",the_pairs,"}")),
+  do.call(data.table,mapply(function(i)structure(
+    hdr=tbl(
+        c(
+          stri_sub(weekdays(as.Date(i)),1,3),
+          stri_sub(i,6,-1)
+        ),
+        align="@{}c@{}"
+    ),
+    mapply(function(p){
+      the_day<-i
+      if(is.na(the_day))return(0)
+      ndx<-bar_intervals$date==the_day & bar_intervals$day>0
+      if(sum(ndx)<1){
+        res<-make_plot(expression({
+          plot(NA,type="n",xlab="",ylab="",xlim=c(0,1),ylim=c(0,1),axes=FALSE)
+          text(0.5,0.5,labels="No data",cex=5)
+        }),width="2cm",height="2cm")
+        return(res)
+      }
+      pnls<-cumsum(10000*rowSums(mc(intraday_pair,paste0("^",p))[ndx,,drop=FALSE]))
+      all_pnls<-cumsum(10000*rowSums(mc(intraday_pair,paste0("^",p))))
+      day_pnl<-round(tail(pnls,1),digits=1)
+      ylim<-c(min(pnls),max(pnls))
+      make_plot(expression({
+        par(mai=c(0,0,0,0))
+        plot(pnls,type="l",xlab="",ylab="",axes=FALSE,lwd=30,col=rgb(0,0,1,0.33),ylim=ylim)
+        abline(h=0,col="red")
+        text(
+          x=length(pnls)/2,
+          y=mean(ylim),
+          labels=ifelse(day_pnl>0,paste0("+",day_pnl),paste0("-",abs(day_pnl))),
+          col=ifelse(day_pnl>0,rgb(0,0.5,0),rgb(0.5,0,0)),
+          font=2,
+          cex=10
+        )
+      }),width="2cm",height="2cm",envir=environment())
+    },p=the_pairs)
+  ),days_in_data,SIMPLIFY=FALSE))
+)
+
+
+
+@
+
+
+\documentclass{article}
+
+\usepackage[portrait, headheight = 0cm, margin=0.25cm, top = 0.25cm, nofoot]{geometry} 
+\usepackage[export]{adjustbox} 
+\usepackage{graphicx}
+\usepackage[space]{grffile}
+\usepackage[dvipsnames,table]{xcolor} % [dvipsnames,table] for setting colors \usepackage{amsmath} \usepackage{xfrac}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric}
+\usetikzlibrary{shapes.misc}
+\usetikzlibrary{arrows}
+\usepackage{xfrac}
+
+\DeclareRobustCommand\Tstrut{\rule{0pt}{2.6ex}}         % = `top' strut
+\DeclareRobustCommand\Bstrut{\rule[-0.9ex]{0pt}{0pt}}   % = `bottom' strut
+\renewcommand{\familydefault}{\sfdefault}
+
+\begin{document}
+
+\section{Contents}
+
+\vskip 5mm
+
+\noindent This report contains an analysis of recent performance of the {\bf current} portfolio.
+Historical P\&L numbers in this report do not reflect actual portfolio performance, 
+because historical changes of portfolio composition are not included in the analysis. 
+
+\vskip 5mm
+
+\noindent The purpose of this analysis is to help future positioning, not to evaluate 
+past decisions. This is more like a {\bf backtest} rather than a performance 
+attribution.
+
+\vskip 5mm
+
+\noindent Current position information is obtained by scraping the latest portfolio 
+sheet.
+
+\newpage 
+\section{Summary: Recent performance of \underline{current} portfolio holdings}
+
+\vskip 5mm
+
+\begin{center}
+\Sexpr{ntable(
+  summary_table,
+  add_rownames=FALSE,
+  title=paste("14 day intra-day backtest summary, up to", max(attributes(intraday_perf)$datetime)),
+  scale=0.75
+)}
+\end{center}
+
+\vskip 5mm
+
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+a1<-c("m{1cm}",rep("@{}|@{}m{2cm}",ncol(backtest_plot_table)-1))
+@
+\begin{center}
+\Sexpr{ntable(
+  backtest_plot_table,
+  add_rownames=FALSE,
+  title="Intra-day performance by manager, total", 
+  scale=0.75,
+  alternating=FALSE,
+  align=a1,
+  halign="c",
+  row_end="\\hline\\\\[-7mm]"
+)}
+\end{center}
+
+\vskip 5mm
+
+
+\begin{center}
+\begin{tabular}{cc}
+\Sexpr{ntable(
+  backtest_hit_ratio_table,
+  add_rownames=FALSE,
+  title=paste(
+    "14 day hit ratios, up to", 
+    max(attributes(intraday_perf)$datetime)
+  ),
+  scale=0.6
+)}
+&
+\Sexpr{ntable(
+  backtest_winloss_ratio_table,
+  add_rownames=FALSE,
+  title=paste(
+    "14 day win/loss ratios, up to", 
+    max(attributes(intraday_perf)$datetime)
+  ),
+  scale=0.6
+)}
+\\
+\end{tabular}
+\end{center}
+
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+
+backtest_long_vs_short_px_table<-data.table(
+  pm=structure(hdr="{\\bf PM}",paste0("{\\bf ",the_pairs,"}")),
+  do.call(data.table,mapply(function(i)structure(
+    hdr=tbl(
+        c(
+          stri_sub(weekdays(as.Date(i)),1,3),
+          stri_sub(i,6,-1)
+        ),
+        align="@{}c@{}"
+    ),
+    mapply(function(p){
+      the_day<-i
+      if(is.na(the_day))return(0)
+      ndx<-bar_intervals$date==the_day & bar_intervals$day>0
+      if(sum(ndx)<1){
+        res<-make_plot(expression({
+          plot(NA,type="n",xlab="",ylab="",xlim=c(0,1),ylim=c(0,1),axes=FALSE)
+          text(0.5,0.5,labels="No data",cex=5)
+        }),width="2cm",height="2cm")
+        return(res)
+      }
+      long_pnls<-cumsum(rowSums(mc(intraday_pair_longs,paste0("^",p))[ndx,,drop=FALSE]))
+      short_pnls<-cumsum(rowSums(mc(intraday_pair_shorts,paste0("^",p))[ndx,,drop=FALSE]))
+      final_long<-round(10000*tail(long_pnls,1),digits=0)
+      final_long_text<-ifelse(sign(final_long)>0,paste0("+",final_long),final_long)
+      final_short<-round(10000*tail(short_pnls,1),digits=0)
+      final_short_text<-ifelse(sign(final_short)>0,paste0("+",final_short),final_short)
+      ylim<-c(min(c(long_pnls,short_pnls)),max(c(long_pnls,short_pnls)))
+      make_plot(expression({
+        par(mai=c(0,0,0,0))
+        plot(
+          x=c(1,sum(ndx)),
+          y=ylim,
+          type="n",
+          xlab="",
+          ylab="",
+          axes=FALSE
+        )
+        lines(
+          x=seq_along(short_pnls),
+          y=short_pnls,
+          lwd=20,
+          col=rgb(1,0,0,0.5)
+        )
+        lines(
+          x=seq_along(long_pnls),
+          y=long_pnls,          
+          lwd=20,
+          col=rgb(0,1,0,0.5)
+        )
+        text(
+          x=sum(ndx)/2,
+          y=mean(ylim),
+          labels=paste0("L:",final_long_text,"\n","S:",final_short_text),
+          col="black",
+          font=2,
+          cex=8
+        )
+      }),width="2cm",height="2cm",envir=environment())
+    },p=the_pairs)
+  ),days_in_data,SIMPLIFY=FALSE))
+)
+
+a1<-c("m{1cm}",rep("@{}|@{}m{2cm}",ncol(backtest_long_vs_short_px_table)-1))
+
+@
+\newpage
+\section{Long vs short leg price performance}
+
+\vskip 5mm
+
+\noindent P\&L from long and short legs of manager positions should have opposite signs most of 
+the time. In addition, magnitutes should be roughly the same. Patters of realized behaviour 
+can be used to pinpoint positioning inefficiencies.
+
+\vskip 10mm
+
+\begin{center}
+\Sexpr{ntable(
+  backtest_long_vs_short_px_table,
+  add_rownames=FALSE,
+  title=paste0(
+    "Long leg (",dot("green"),") vs short leg (",dot("red"),"),",
+    "legend is long, short P\\&L  L:(long P\\&L), S:(short P\\&L), all in bps"
+  ), 
+  scale=0.75,
+  alternating=FALSE,
+  align=a1,
+  halign="c",
+  row_end="\\hline\\\\[-7mm]"
+)}
+\end{center}
+
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+
+backtest_long_vs_short_table<-data.table(
+  pm=structure(hdr="{\\bf PM}",paste0("{\\bf ",the_pairs,"}")),
+  do.call(data.table,mapply(function(i)structure(
+    hdr=tbl(
+        c(
+          stri_sub(weekdays(as.Date(i)),1,3),
+          stri_sub(i,6,-1)
+        ),
+        align="@{}c@{}"
+    ),
+    mapply(function(p){
+      the_day<-i
+      if(is.na(the_day))return(0)
+      ndx<-bar_intervals$date==the_day & bar_intervals$day>0
+      if(sum(ndx)<1){
+        res<-make_plot(expression({
+          plot(NA,type="n",xlab="",ylab="",xlim=c(0,1),ylim=c(0,1),axes=FALSE)
+          text(0.5,0.5,labels="No data",cex=5)
+        }),width="2cm",height="2cm")
+        return(res)
+      }
+      long_pnls<-cumsum(rowSums(mc(intraday_pair_longs,paste0("^",p))[ndx,,drop=FALSE]))
+      short_pnls<-cumsum(rowSums(mc(intraday_pair_shorts,paste0("^",p))[ndx,,drop=FALSE]))
+      xlim<-c(min(long_pnls),max(long_pnls))
+      ylim<-c(min(short_pnls),max(short_pnls))
+      ls_cor<-cor(long_pnls,short_pnls)
+      cs<-abs(ls_cor)
+      rr<-colorRamp(c("white","red"))
+      gr<-colorRamp(c("white","green"))
+      ls_col<-ifelse(
+        ls_cor<0,
+        alpha(rgb(gr(cs)/255),0.33),
+        alpha(rgb(rr(cs)/255),0.33)
+      )
+      make_plot(expression({
+        par(mai=c(0,0,0,0))
+        plot(
+          x=xlim,
+          y=ylim,
+          type="n",
+          xlab="",
+          ylab="",
+          axes=FALSE
+        )
+        rect(xlim[1],ylim[1],xlim[2],ylim[2],col=ls_col,border=NA)
+        lines(
+          x=long_pnls,
+          y=short_pnls,
+          lwd=20,
+          col=rgb(0,0,1,0.5)
+        )
+        text(
+          x=mean(range(long_pnls)),
+          y=mean(range(short_pnls)),
+          labels=round(100*ls_cor,digits=1),
+          col="black",
+          font=2,
+          cex=8
+        )
+      }),width="2cm",height="2cm",envir=environment())
+    },p=the_pairs)
+  ),days_in_data,SIMPLIFY=FALSE))
+)
+
+a1<-c("m{1cm}",rep("@{}|@{}m{2cm}",ncol(backtest_long_vs_short_table)-1))
+
+@
+\newpage
+\section{Long vs short leg price correlation}
+
+\vskip 5mm
+
+\noindent Long and short legs of manager positions should be negatively correlated to
+avoid net beta exposures. Reviewing realized behaviour in the form of a ``portfolio path'' 
+allows us to identify days with unexpected price action and can be used to evaluate
+hedge efficiency. On the grid below, plots are color-coded by the correlation between 
+long and short leg performances. Positive correlations are on a red background because
+these are situations where the hedge increased (rather than reduced) outcome volatility.
+
+\vskip 10mm
+
+\begin{center}
+\Sexpr{ntable(
+  backtest_long_vs_short_table,
+  add_rownames=FALSE,
+  title=paste0(
+    "Long leg (x axis) vs short leg (y axis), ",
+    "color-coded by sign of correlation ", 
+    "(",dot("green"),") negative",
+    "(",dot("red"),") positive"
+  ),
+  scale=0.75,
+  alternating=FALSE,
+  align=a1,
+  halign="c",
+  row_end="\\hline\\\\[-7mm]"
+)}
+\end{center}
+
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+
+backtest_return_cross_section_table<-data.table(
+  pm=structure(hdr="{\\bf PM}",paste0("{\\bf ",the_pairs,"}")),
+  do.call(data.table,mapply(function(i)structure(
+    hdr=tbl(
+        c(
+          stri_sub(weekdays(as.Date(i)),1,3),
+          stri_sub(i,6,-1)
+        ),
+        align="@{}c@{}"
+    ),
+    mapply(function(p){
+      if(FALSE)cat(p,"\n")
+      the_day<-i
+      if(is.na(the_day))return(0)
+      ndx<-bar_intervals$date==the_day & bar_intervals$day>0
+      if(sum(ndx)<1){
+        res<-make_plot(expression({
+          plot(NA,type="n",xlab="",ylab="",xlim=c(0,1),ylim=c(0,1),axes=FALSE)
+          text(0.5,0.5,labels="No data",cex=5)
+        }),width="2cm",height="2cm")
+        return(res)
+      }
+      pnls<-colSums(mc(intraday_pair,paste0("^",p))[ndx,,drop=FALSE])
+      if(length(pnls)<1){
+        res<-make_plot(expression({
+          plot(NA,type="n",xlab="",ylab="",xlim=c(0,1),ylim=c(0,1),axes=FALSE)
+          text(0.5,0.5,labels="No data",cex=5)
+        }),width="2cm",height="2cm")
+        return(res)
+      }
+      vols<-colSums(mc(abs(intraday_pair),paste0("^",p))[ndx,,drop=FALSE])
+      xlim<-c(1,length(pnls))
+      ylim<-c(min(pnls),max(pnls))
+      make_plot(expression({
+        par(mai=c(0,0,0,0))
+        plot(
+          x=xlim,
+          y=ylim,
+          type="n",
+          xlab="",
+          ylab="",
+          axes=FALSE
+        )
+        points(
+          x=seq_along(pnls),
+          y=sort(pnls),
+          cex=5,
+          pch=19,
+          col=ifelse(sort(pnls)>0,rgb(0,1,0,0.5),rgb(1,0,0,0.5))
+        )
+        abline(h=0,v=findInterval(0,sort(pnls)),col=rgb(0,0,1,0.25),lwd=10)
+      }),width="2cm",height="2cm",envir=environment())
+    },p=the_pairs)
+  ),days_in_data,SIMPLIFY=FALSE))
+)
+
+a1<-c("m{1cm}",rep("@{}|@{}m{2cm}",ncol(backtest_return_cross_section_table)-1))
+
+@
+\newpage
+\section{Cross-section of pair returns}
+
+\vskip 5mm
+
+\noindent The cross-section of daily pair returns allows us to distinguish between specific and 
+systematic P\&L drivers. If the outcome is determined by one or two outliers we can assume there
+is no single factor driving performance. On the grid of plots below, the location of the faint, 
+vertical blue line is proportional to the {\bf hit ratio} whereas the faint, horizontal
+blue line's location is proportional to the {\bf win/loss ratio}.
+
+
+\vskip 10mm
+
+\begin{center}
+\Sexpr{ntable(
+  backtest_return_cross_section_table,
+  add_rownames=FALSE,
+  title=paste0(
+    "Pairs sorted on performance, ",
+    "color-coded by daily P\\&L ", 
+    "(",dot("green"),") positive",
+    "(",dot("red"),") negative"
+  ),
+  scale=0.75,
+  alternating=FALSE,
+  align=a1,
+  halign="c",
+  row_end="\\hline\\\\[-7mm]"
+)}
+\end{center}
+
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+
+backtest_ordered_pair_returns_table<-data.table(
+  pm=structure(hdr="{\\bf PM}",paste0("{\\bf ",the_pairs,"}")),
+  do.call(data.table,mapply(function(i)structure(
+    hdr=tbl(
+        c(
+          stri_sub(weekdays(as.Date(i)),1,3),
+          stri_sub(i,6,-1)
+        ),
+        align="@{}c@{}"
+    ),
+    mapply(function(p){
+      if(FALSE)cat(p,":",i,"\n")
+      the_day<-i
+      if(is.na(the_day))return(0)
+      ndx<-bar_intervals$date==the_day & bar_intervals$day>0
+      if(sum(ndx)<1){
+        res<-make_plot(expression({
+          plot(NA,type="n",xlab="",ylab="",xlim=c(0,1),ylim=c(0,1),axes=FALSE)
+          text(0.5,0.5,labels="No data",cex=5)
+        }),width="2cm",height="2cm")
+        return(res)
+      }
+      pnls<-mc(intraday_pair,paste0("^",p))[ndx,,drop=FALSE]
+      cum_pnls<-apply(pnls,2,cumsum)
+      xlim<-c(1,nrow(pnls))
+      ylim<-c(min(cum_pnls),max(cum_pnls))
+      rr<-colorRamp(c("white","red"))
+      gr<-colorRamp(c("white","green"))
+      x<-as.vector(row(cum_pnls))
+      y<-as.vector(cum_pnls)
+      up_col<-if(all(pmax(y,0)<1e-10)){
+        rep(rgb(1,1,1),length(y))
+      } else rgb(gr(pmax(y,0)/max(y))/255)
+      dn_col<-if(all(pmin(y,0)>(-1e-10))){
+        rep(rgb(1,1,1),length(y))
+      } else rgb(rr(pmin(y,0)/min(y))/255)
+      max_pnl<-max(cum_pnls)
+      min_pnl<-min(cum_pnls)
+      max_name<-colnames(cum_pnls)[which(cum_pnls==max_pnl,arr.ind = TRUE)[1,2]]
+      max_text<-paste0(max_name," : ",ifelse(max_pnl>0,"+","-"),round(10000*abs(max_pnl),digits=1))
+      min_name<-colnames(cum_pnls)[which(cum_pnls==min_pnl,arr.ind = TRUE)[1,2]]
+      min_text<-paste0(min_name," : ",ifelse(min_pnl>0,"+","-"),round(10000*abs(min_pnl),digits=1))
+      make_plot(expression({
+        par(mai=c(0,0,0,0))
+        plot(
+          x=xlim,
+          y=ylim,
+          type="n",
+          xlab="",
+          ylab="",
+          axes=FALSE
+        )
+        points(
+          x=x,
+          y=y,
+          col=ifelse(y>0,up_col,dn_col),
+          cex=2,
+          pch=19
+        )
+        abline(h=0,col=rgb(0,0,1,0.5),lwd=10)
+        text(
+          x=mean(xlim),
+          y=mean(ylim),
+          labels=paste0(max_text,"\n",min_text),
+          col="black",
+          font=2,
+          cex=5
+        )
+      }),width="2cm",height="2cm",envir=environment())
+    },p=the_pairs)
+  ),days_in_data,SIMPLIFY=FALSE))
+)
+
+a1<-c("m{1cm}",rep("@{}|@{}m{2cm}",ncol(backtest_ordered_pair_returns_table)-1))
+
+@
+\newpage
+\section{Individual pair returns}
+
+\vskip 5mm
+
+\noindent The cross-section of daily pair returns allows us to distinguish between specific and 
+systematic P\&L drivers. This grid plot shows P\&L contributions from individual pairs at 10-minute
+intervals. The pairs with the highest gains and losses are displayed in the center of each plot.
+
+\vskip 10mm
+
+\begin{center}
+\Sexpr{ntable(
+  backtest_ordered_pair_returns_table,
+  add_rownames=FALSE,
+  title=paste0(
+    "Pairs contributions, ",
+    "color-coded by  P\\&L ", 
+    "(",dot("green"),") positive",
+    "(",dot("red"),") negative"
+  ),
+  scale=0.75,
+  alternating=FALSE,
+  align=a1,
+  halign="c",
+  row_end="\\hline\\\\[-7mm]"
+)}
+\end{center}
+
+
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+ndx_regex<-"(^SX[0-9A-Z]{1,2}P Index)|(MSEEMOMO Index)|(MCX Index)|(UKX Index)"
+open_bars<-which(bar_intervals$day>0)
+sector_indices<-mc(intraday_perf,ndx_regex)[open_bars,,drop=FALSE]
+sector_betas<-cov(intraday_perf[open_bars,"SXXP Index"],sector_indices)/var(intraday_perf[open_bars,"SXXP Index"])
+sector_betas[,"SXXP Index"]<-0
+sector_hedges<-intraday_perf[,"SXXP Index",drop=FALSE]%*%sector_betas
+sector_spreads<-mc(intraday_perf,ndx_regex)-sector_hedges
+
+# bct : backtest correl table
+#
+
+bct_pm<-structure(hdr="{\\bf PM}",paste0("{\\bf ",the_pairs,"}"))
+
+no_plot<-make_plot(expression({
+  plot(NA,type="n",xlab="",ylab="",xlim=c(0,1),ylim=c(0,1),axes=FALSE)
+  text(0.5,0.5,labels="No data",cex=5)
+}),width="2cm",height="2cm")
+
+make_pm_date_cor_plot<-function(the_pm,the_day){
+  if(is.na(the_day))return("bad day")
+  ndx<-bar_intervals$date==the_day & bar_intervals$day>0
+  if(sum(ndx)<10)return(no_plot)
+  pnls<-rowSums(mc(intraday_pair,paste0("^",the_pm))[ndx,,drop=FALSE])
+  if(all(abs(pnls)<1e-10))return(no_plot)
+  if(sd(pnls)<1e-10)return(no_plot)
+  sector_spreads_sd<-apply(sector_spreads[ndx,,drop=FALSE],2,sd)
+  sector_spreads_used<-sector_spreads[ndx,sector_spreads_sd>0,drop=FALSE]
+  res<-try({
+      cm<-round(100*drop(cor(pnls,sector_spreads_used)),digits=1)
+      si<-names(which.max(abs(cm)))
+      sr<-sector_spreads[ndx,si,drop=FALSE]
+      if(length(sr)!=length(pnls))return("pnls, sr have different lengths")
+      make_plot(expression({
+        par(mai=c(0,0,0,0))
+        plot(pnls,sr,type="p",xlab="",ylab="",axes=FALSE,lwd=20,pch=19,col=rgb(0,0,1,0.2))
+        abline(h=0,col=rgb(1,0,0,0.2),lwd=20)
+        abline(v=0,col=rgb(1,0,0,0.2),lwd=20)
+        text(
+          x=mean(range(pnls)),
+          y=mean(range(sr)),
+          labels=paste0(gsub(" Index","",si),"\n",cm[si]),
+          col=ifelse(cm[si]>0,rgb(0,0.33,0),rgb(0.33,0,0)),
+          font=2,
+          cex=5
+        )
+      }),width="2cm",height="2cm",envir=environment())
+  },silent=FALSE)
+  if(class(res)=="try-error")return(latexTranslate(as.character(res)))
+  res
+}
+
+pm_day_combo=data.table(
+  pair=rep(the_pairs,times=length(days_in_data)),
+  day=rep(days_in_data,each=length(the_pairs))
+)[,.(
+  pair=pair,
+  day=day,
+  plot=mapply(make_pm_date_cor_plot,the_pm=pair,the_day=day)
+)]
+
+pm_day_matrix<-matrix(
+  "",
+  ncol=length(days_in_data),
+  nrow=length(the_pairs),
+  dimnames = list(the_pairs,days_in_data)
+)
+pm_day_matrix[cbind(
+  match(pm_day_combo$pair,the_pairs),
+  match(pm_day_combo$day,days_in_data)
+)]<-pm_day_combo$plot
+
+
+backtest_correl_table<-data.table(
+  pm=bct_pm,
+  pm_day_matrix,
+  period_betas=structure(
+    hdr=tbl(c("whole period stats","for selected","indices")),
+    mapply(function(m){
+      pnl<-rowSums(mc(intraday_pair,paste0("^",m))[open_bars,,drop=FALSE])
+      stats<-rbind(
+        data.table(
+          stat="SXXP",
+          cor=round(100*safe_cor(pnl,sector_indices[,"SXXP Index"]),digits=0),
+          beta=round(10000*safe_beta(pnl,sector_indices[,"SXXP Index"]),digits=0),
+          hedge=local({
+            beta<-safe_beta(pnl,sector_indices[,"SXXP Index"])
+            res<-sd(pnl-beta*sector_indices[,"SXXP Index"])/sd(pnl)
+            round(100*res,digits=0)
+          })
+        ),
+        data.table(
+          stat="SX6P",
+          cor=round(100*safe_cor(pnl,sector_indices[,"SX6P Index"]),digits=0),
+          beta=round(10000*safe_beta(pnl,sector_indices[,"SX6P Index"]),digits=0),
+          hedge=local({
+            beta<-safe_beta(pnl,sector_indices[,"SX6P Index"])
+            res<-sd(pnl-beta*sector_indices[,"SX6P Index"])/sd(pnl)
+            round(100*res,digits=0)
+          })
+        ),
+        data.table(
+          stat="SX8P",
+          cor=round(100*safe_cor(pnl,sector_indices[,"SX8P Index"]),digits=0),
+          beta=round(10000*safe_beta(pnl,sector_indices[,"SX8P Index"]),digits=0),
+          hedge=local({
+            beta<-safe_beta(pnl,sector_indices[,"SX8P Index"])
+            res<-sd(pnl-beta*sector_indices[,"SX8P Index"])/sd(pnl)
+            round(100*res,digits=0)
+          })
+        ),
+        data.table(
+          stat="SX7P",
+          cor=round(100*safe_cor(pnl,sector_indices[,"SX7P Index"]),digits=0),
+          beta=round(10000*safe_beta(pnl,sector_indices[,"SX7P Index"]),digits=0),
+          hedge=local({
+            beta<-safe_beta(pnl,sector_indices[,"SX7P Index"])
+            res<-sd(pnl-beta*sector_indices[,"SX7P Index"])/sd(pnl)
+            round(100*res,digits=0)
+          })
+        ),
+        data.table(
+          stat="MCX",
+          cor=round(100*safe_cor(pnl,sector_indices[,"MCX Index"]),digits=0),
+          beta=round(10000*safe_beta(pnl,sector_indices[,"MCX Index"]),digits=0),
+          hedge=local({
+            beta<-safe_beta(pnl,sector_indices[,"MCX Index"])
+            res<-sd(pnl-beta*sector_indices[,"MCX Index"])/sd(pnl)
+            round(100*res,digits=0)
+          })
+        )
+      )
+      ntable(df=stats,alternating="FALSE",add_rownames=FALSE,scale=0.75)
+    },the_pairs)
+  )
+)
+
+a1<-c("m{1cm}",rep("@{}|@{}m{2cm}",ncol(backtest_correl_table)-2),"@{}|@{}m{3cm}")
+
+@
+\newpage
+\section{Return correlations}
+
+\vskip 5mm
+
+\noindent Identifying the index with the highest intra-day correlation to a manager's
+position may help with understanding P\&L drivers.
+
+\vskip 10mm
+
+\begin{center}
+\Sexpr{ntable(
+  backtest_correl_table,
+  add_rownames=FALSE,
+  title="Market-hedged sector index with highest intra-day correlation (x axis: manager return)", 
+  scale=0.75,
+  alternating=FALSE,
+  align=a1,
+  halign="c",
+  row_end="\\hline\\\\[-6mm]"
+)}
+\end{center}
+
+
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+ndx_regex<-"^SX[0-9A-Z]{1,2}P Index$"
+
+ndx_tickers<-Filter(
+  function(x)grepl(ndx_regex,x),
+  intersect(colnames(factor_local_tret),colnames(intraday_perf))
+)
+
+open_bars<-which(bar_intervals$day>0)
+
+intraday_sector_indices<-structure(
+  intraday_perf[open_bars,ndx_tickers,drop=FALSE],
+  dimnames=list(
+    paste0(bar_intervals$date[open_bars],"T",bar_intervals$time[open_bars]),
+    ndx_tickers
+  )
+)
+
+daily_sector_indices<-factor_local_tret[,ndx_tickers,drop=FALSE]
+
+
+intraday_managers<-structure(
+  mapply(
+    function(p)rowSums(mc(intraday_pair[open_bars,],paste0("^",p))),
+    the_pairs
+  ),
+  dimnames=list(
+    paste0(bar_intervals$date[open_bars],"T",bar_intervals$time[open_bars]),
+    the_pairs
+  )
+)
+
+
+sector_pairs<-data.table(
+  ndx1=rep(ndx_tickers,times=length(ndx_tickers)),
+  ndx2=rep(ndx_tickers,each=length(ndx_tickers))      
+)[
+ ndx1!=ndx2
+][,
+ c(
+   "intraday_cov","daily_cov",
+   "intraday_cor","daily_cor",
+   "intraday_vol1","daily_vol1",
+   "intraday_vol2","daily_vol2"
+  ):=list(
+  intraday_cov=mapply(
+    cov,
+    data.table(intraday_sector_indices[,ndx1]),
+    data.table(intraday_sector_indices[,ndx2])
+  ),
+  daily_cov=mapply(
+    cov,
+    data.table(daily_sector_indices[,ndx1]),
+    data.table(daily_sector_indices[,ndx2])
+  ),
+  intraday_cor=mapply(
+    cor,
+    data.table(intraday_sector_indices[,ndx1]),
+    data.table(intraday_sector_indices[,ndx2])
+  ),
+  daily_cor=mapply(
+    cor,
+    data.table(daily_sector_indices[,ndx1]),
+    data.table(daily_sector_indices[,ndx2])
+  ),
+  intraday_vol1=apply(intraday_sector_indices[,ndx1],2,sd),
+  daily_vol1=apply(daily_sector_indices[,ndx1],2,sd),
+  intraday_vol2=apply(intraday_sector_indices[,ndx2],2,sd),
+  daily_vol2=apply(daily_sector_indices[,ndx2],2,sd)
+ )
+][,
+ c("intraday_beta","daily_beta"):=list(
+   intraday_beta=intraday_cov/(intraday_vol2*intraday_vol2),
+   daily_beta=daily_cov/(daily_vol2*daily_vol2)
+  )
+][,
+  c(
+   "intraday_spread","daily_spread",
+   "intraday_money_neutral_spread","daily_money_neutral_spread"
+  ):=list(
+   intraday_spread=mapply(
+    function(ndx1,ndx2,intraday_beta){
+      structure(
+        intraday_sector_indices[,ndx1]-intraday_beta*intraday_sector_indices[,ndx2],
+        .Names=rownames(intraday_sector_indices)
+      )
+    },
+    ndx1=ndx1,
+    ndx2=ndx2,
+    intraday_beta=intraday_beta,
+    SIMPLIFY=FALSE
+  ),
+  daily_spread=mapply(
+    function(ndx1,ndx2,daily_beta){
+      structure(
+        daily_sector_indices[,ndx1]-daily_beta*daily_sector_indices[,ndx2],
+        .Names=rownames(daily_sector_indices)
+      )
+    },
+    ndx1=ndx1,
+    ndx2=ndx2,
+    daily_beta=daily_beta,
+    SIMPLIFY=FALSE
+  ),
+  intraday_money_neutral_spread=mapply(
+    function(ndx1,ndx2){
+      structure(
+        intraday_sector_indices[,ndx1]-intraday_sector_indices[,ndx2],
+        .Names=rownames(intraday_sector_indices)
+      )
+    },
+    ndx1=ndx1,
+    ndx2=ndx2,
+    SIMPLIFY=FALSE
+  ),
+  daily_money_neutral_spread=mapply(
+    function(ndx1,ndx2){
+      structure(
+        daily_sector_indices[,ndx1]-daily_sector_indices[,ndx2],
+        .Names=rownames(daily_sector_indices)
+      )
+    },
+    ndx1=ndx1,
+    ndx2=ndx2,
+    SIMPLIFY=FALSE
+  )
+)
+][,
+  c(
+    "intraday_spread_vol",
+    "daily_spread_vol",
+    "sn"
+  ):=list(
+    intraday_spread_vol=mapply(sd,intraday_spread),
+    daily_spread_vol=mapply(sd,daily_spread),
+    sn=gsub(" Index","",paste0(ndx1,"|",ndx2))
+  )
+]
+
+max_cor_table<-data.table(
+  pm=structure(hdr="{\\bf PM}",paste0("{\\bf ",the_pairs,"}")),
+  gross=mapply(function(p)round(100*sum(abs(mc(pair_exposure,p))),digits=0),the_pairs),
+  intraday_sector=structure(
+    hdr=tbl(c("10-day cor on 10min bars","market-neutral sector")),
+    mapply(function(p){
+      res<-mapply(
+        safe_cor,
+        strat=structure(
+          sector_pairs[ndx2=="SXXP Index",intraday_spread],
+          .Names=sector_pairs[ndx2=="SXXP Index",sn]
+        ),
+        MoreArgs=list(factor=intraday_managers[,p,drop=FALSE])
+      )
+      res1<-mapply(
+        function(x,y){
+          if(any(is.na(c(x,y))))return(0)
+          if(any(is.na(c(sd(x),sd(y)))))return(0)
+          if(any(c(sd(x),sd(y))==0))return(0)
+          cov(x,y)/var(x)
+        },
+        x=structure(
+          sector_pairs[ndx2=="SXXP Index",intraday_spread],
+          .Names=sector_pairs[ndx2=="SXXP Index",sn]
+        ),
+        MoreArgs=list(y=intraday_managers[,p,drop=FALSE])
+      )
+      o<-order(-abs(res))[1:5]
+      ntable(
+        df=data.table(
+          sector=gsub(" Index","",sector_pairs[ndx2=="SXXP Index",ndx1][o]),
+          cor=round(100*res[o],digits=1),
+          beta=round(100*res1[o],digits=1)
+        ),
+        add_rownames=FALSE,
+        add_header=TRUE,
+        alternating=FALSE
+      )
+    },the_pairs)
+  ),
+  daily_sector=structure(
+    hdr=tbl(c("2year cor on daily returns","market-neutral sector")),
+    mapply(function(p){
+      res<-mapply(
+        safe_cor,
+        strat=structure(
+          sector_pairs[ndx2=="SXXP Index",daily_spread],
+          .Names=sector_pairs[ndx2=="SXXP Index",sn]
+        ),
+        MoreArgs=list(factor=rowSums(mc(manager_local_pnl,p)))
+      )
+      res1<-mapply(
+        function(x,y){
+          if(any(is.na(c(x,y))))return(0)
+          if(any(is.na(c(sd(x),sd(y)))))return(0)
+          if(any(c(sd(x),sd(y))==0))return(0)
+          cov(x,y)/var(x)
+        },
+        x=structure(
+          sector_pairs[ndx2=="SXXP Index",daily_spread],
+          .Names=sector_pairs[ndx2=="SXXP Index",sn]
+        ),
+        MoreArgs=list(rowSums(mc(manager_local_pnl,p)))
+      )
+      o<-order(-abs(res))[1:5]
+      ntable(
+        df=data.table(
+          sector=gsub(" Index","",sector_pairs[ndx2=="SXXP Index",ndx1][o]),
+          cor=round(100*res[o],digits=1),
+          beta=round(100*res1[o],digits=1)
+        ),
+        add_rownames=FALSE,
+        add_header=TRUE,
+        alternating=FALSE
+      )
+    },the_pairs)
+  ),
+  intraday_spreads=structure(
+    hdr=tbl(c("10-day cor on 10min bars","beta-neutral spread")),
+    mapply(function(p){
+      res<-mapply(
+        safe_cor,
+        strat=structure(sector_pairs$intraday_spread,.Names=sector_pairs$sn),
+        MoreArgs=list(factor=intraday_managers[,p,drop=FALSE])
+      )
+      res1<-mapply(
+        function(x,y){
+          if(any(is.na(c(x,y))))return(0)
+          if(any(is.na(c(sd(x),sd(y)))))return(0)
+          if(any(c(sd(x),sd(y))==0))return(0)
+          cov(x,y)/var(x)
+        },
+        x=structure(sector_pairs$intraday_spread,.Names=sector_pairs$sn),
+        MoreArgs=list(y=intraday_managers[,p,drop=FALSE])
+      )
+      o<-order(-abs(res))[1:5]
+      ntable(
+        df=data.table(
+          spread=sector_pairs$sn[o],
+          cor=round(100*res[o],digits=1),
+          beta=round(100*res1[o],digits=1)
+        ),
+        add_rownames=FALSE,
+        add_header=TRUE,
+        alternating=FALSE
+      )
+    },the_pairs)
+  ),
+  daily_spreads=structure(
+    hdr=tbl(c("2 year cor on daily returns","beta-neutral spread")),
+    mapply(function(p){
+      res<-mapply(
+        safe_cor,
+        strat=structure(sector_pairs$daily_spread,.Names=sector_pairs$sn),
+        MoreArgs=list(factor=rowSums(mc(manager_local_pnl,p)))
+      )
+      res1<-mapply(
+        function(x,y){
+          if(any(is.na(c(x,y))))return(0)
+          if(any(is.na(c(sd(x),sd(y)))))return(0)
+          if(any(c(sd(x),sd(y))==0))return(0)
+          cov(x,y)/var(x)
+        },
+        structure(sector_pairs$daily_spread,.Names=sector_pairs$sn),
+        MoreArgs=list(rowSums(mc(manager_local_pnl,p)))
+      )
+      o<-order(-abs(res))[1:5]
+      ntable(
+        df=data.table(
+          spread=sector_pairs$sn[o],
+          cor=round(100*res[o],digits=1),
+          beta=round(100*res1[o],digits=1)
+        ),
+        add_rownames=FALSE,
+        add_header=TRUE,
+        alternating=FALSE
+      )
+    },the_pairs)
+  ),
+  long_short_correl=structure(
+    hdr=tbl(c("Long vs short correlations","by manager, pairs")),
+    mapply(function(p){
+      daily_long_pnl<-rowSums(mc(pair_long_pnl,p))
+      daily_short_pnl<-rowSums(mc(pair_short_pnl,p))
+      intraday_long_pnl<-structure(
+        rowSums(mc(intraday_pair_longs[open_bars,],p)),
+        .Names=paste0(bar_intervals$date[open_bars],"T",bar_intervals$time[open_bars])
+      )
+      intraday_short_pnl<-structure(
+        rowSums(mc(intraday_pair_shorts[open_bars,],p)),
+        .Names=paste0(bar_intervals$date[open_bars],"T",bar_intervals$time[open_bars])
+      )
+      df<-rbind(
+        data.table(
+          window="2yr, daily, L/S",
+          cor=round(100*cor(daily_long_pnl,daily_short_pnl),digits=1)
+        ),
+        data.table(
+          window="2yr, daily, pair mean",
+          cor=round(100*mean(mapply(
+            safe_cor,
+            data.table(mc(pair_long_pnl,p)),
+            data.table(mc(pair_short_pnl,p))
+          )),digits=1)
+        ),
+        data.table(
+          window="10day, 10min, L/S",
+          cor=round(100*cor(intraday_long_pnl,(-1)*intraday_short_pnl),digits=1)
+        ),
+        data.table(
+          window="10day, 10min, pair mean",
+          cor=round(100*mean(mapply(
+            safe_cor,
+            data.table(mc(intraday_pair_longs[open_bars,,drop=FALSE],p)),
+            data.table((-1)*mc(intraday_pair_shorts[open_bars,,drop=FALSE],p))
+          )),digits=1)
+        ),
+        data.table(
+          window="1day, 10min, L/S",
+          cor=round(100*safe_cor(
+            rowSums(mc(intraday_pair_longs[bar_intervals$day==max(bar_intervals$day),,drop=FALSE],p)),
+            (-1)*rowSums(mc(intraday_pair_shorts[bar_intervals$day==max(bar_intervals$day),,drop=FALSE],p))
+          ),digits=1)
+        )
+      )
+      ntable(
+        df=df,
+        add_rownames=FALSE,
+        add_header=TRUE,
+        alternating=FALSE
+      )
+    },the_pairs)
+  )
+)
+
+a1<-c("m{1cm}","@{}|@{}c","@{}|@{}c","@{}|@{}c","@{}|@{}c","@{}|@{}c","@{}|@{}c")
+
+#
+#
+#
+best_spread<-function(pm,n=5){
+   pm_bars<-rowSums(mc(intraday_pair[open_bars,],pm))
+   res<-mapply(
+    cor,
+    structure(sector_pairs$intraday_spread,.Names=sector_pairs$sn),
+    MoreArgs=list(pm_bars)
+   )
+   res1<-mapply(
+    function(x,y)cov(x,y)/var(x),
+    x=structure(sector_pairs$intraday_spread,.Names=sector_pairs$sn),
+    MoreArgs=list(y=pm_bars)
+  )
+  o<-order(-abs(res))[1:n]
+  data.table(
+    spread=sector_pairs$sn[o],
+    cor=round(100*res[o],digits=1),
+    beta=round(100*res1[o],digits=1)
+  )
+}
+
+x<-best_spread("*",5)
+intraday_best<-do.call(cbind,sector_pairs[,.SD,keyby=sn][x$spread,intraday_spread])%*%matrix(sign(x$cor)/5,ncol=1)
+intraday_duke<-rowSums(intraday_pair[open_bars,])
+duke_best_sd_ratio<-sd(intraday_best)/sd(intraday_duke)
+
+x1<-cumsum(intraday_duke)
+x2<-cumsum(intraday_best/duke_best_sd_ratio)
+x3<-cumsum(intraday_best)
+ylim<-c(min(c(x1,x2)),max(c(x1,x2)))
+
+
+@
+\newpage
+\section{Relevant spreads and indices: Beta-neutral case}
+
+\vskip 5mm
+
+\noindent Identifying the index and index spreads with the highintra-day correlation 
+to a manager's position may help with understanding P\&L drivers. In addition, portfolio
+or manager-level overlays can be constructed using this information.
+
+\vskip 10mm
+
+\begin{center}
+\Sexpr{ntable(
+  max_cor_table,
+  add_rownames=FALSE,
+  title=paste0(
+    curly("\\bf Current portfolio")," : ",
+    "Spread with highest similarity to manager positions, position correlations (pct), betas (pct AUM)"
+  ), 
+  scale=0.75,
+  alternating=FALSE,
+  align=a1,
+  halign="c",
+  row_end="\\hline"
+)}
+\end{center}
+
+\begin{center}
+\begin{tabular}{m{8cm} m{8cm}}
+\hline
+\begin{center}
+\begin{tabular}{m{8cm}}
+ 10-day performance (\Sexpr{dot("red")}) of an equally-weighted portfolio comprising the 
+ top 5 most correlated {\bf beta-neutral} spreads.  DUKE performance (\Sexpr{dot("blue")}) over 
+ the same period. The spread portfolio has been scaled to match DUKE's volatility. 
+\\
+\Sexpr{ntable(
+  df=rbind(
+    data.table(
+      stat="DUKE-proxy 2w correlation (pct)",
+      value=round(100*cor(diff(x1),diff(x2)),digits=0)
+    ),
+    data.table(
+      stat="DUKE 2w beta to proxy (bps)",
+      value=round(10000*safe_beta(diff(x1),diff(x3)),digits=0)
+    ),
+    data.table(
+      stat="2w vol reduction on shorting proxy (pct)",
+      value=round(100*(1-sd(diff(x1)-safe_beta(diff(x1),diff(x3))*diff(x3))/sd(diff(x1))),digits=0)
+    )
+  ),
+  add_rownames=FALSE,
+  alternating=FALSE
+)}
+\\
+\end{tabular}
+\end{center}
+&
+\Sexpr{make_plot(expression(
+  par(mai=c(0,0,0,0)),
+  plot(x1,type="l",lwd=3,col=rgb(0,0,1,0.5),ylim=ylim,axes=FALSE,xlab="",ylab=""),
+  lines(x2,lwd=3,col=rgb(1,0,0,0.5))
+),width="8cm",height="4cm",envir=environment())}
+\\
+\hline
+\end{tabular}
+\end{center}
+
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+
+
+relevant_spread_table_money_neutral<-data.table(
+  pm=structure(hdr="{\\bf PM}",paste0("{\\bf ",the_pairs,"}")),
+  gross=mapply(function(p)round(100*sum(abs(mc(pair_exposure,p))),digits=0),the_pairs),
+  intraday_sector=structure(
+    hdr=tbl(c("10-day cor on 10min bars","money-neutral sector")),
+    mapply(function(p){
+      res<-mapply(
+        safe_cor,
+        strat=structure(
+          sector_pairs[ndx2=="SXXP Index",intraday_money_neutral_spread],
+          .Names=sector_pairs[ndx2=="SXXP Index",sn]
+        ),
+        MoreArgs=list(factor=intraday_managers[,p])
+      )
+      res1<-mapply(
+        function(x,y){
+          if(any(is.na(c(x,y))))return(0)
+          if(any(is.na(c(sd(x),sd(y)))))return(0)
+          if(any(c(sd(x),sd(y))==0))return(0)
+          cov(x,y)/var(x)
+        },
+        x=structure(
+          sector_pairs[ndx2=="SXXP Index",intraday_money_neutral_spread],
+          .Names=sector_pairs[ndx2=="SXXP Index",sn]
+        ),
+        MoreArgs=list(y=intraday_managers[,p])
+      )
+      o<-order(-abs(res))[1:5]
+      ntable(
+        df=data.table(
+          sector=gsub(" Index","",sector_pairs[ndx2=="SXXP Index",ndx1][o]),
+          cor=round(100*res[o],digits=1),
+          beta=round(100*res1[o],digits=1)
+        ),
+        add_rownames=FALSE,
+        add_header=TRUE,
+        alternating=FALSE
+      )
+    },the_pairs)
+  ),
+  daily_sector=structure(
+    hdr=tbl(c("2year cor on daily returns","money-neutral sector")),
+    mapply(function(p){
+      res<-mapply(
+        safe_cor,
+        strat=structure(
+          sector_pairs[ndx2=="SXXP Index",daily_money_neutral_spread],
+          .Names=sector_pairs[ndx2=="SXXP Index",sn]
+        ),
+        MoreArgs=list(factor=rowSums(mc(manager_local_pnl,p)))
+      )
+      res1<-mapply(
+        function(x,y){
+          if(any(is.na(c(x,y))))return(0)
+          if(any(is.na(c(sd(x),sd(y)))))return(0)
+          if(any(c(sd(x),sd(y))==0))return(0)
+          cov(x,y)/var(x)
+        },
+        x=structure(
+          sector_pairs[ndx2=="SXXP Index",daily_money_neutral_spread],
+          .Names=sector_pairs[ndx2=="SXXP Index",sn]
+        ),
+        MoreArgs=list(rowSums(mc(manager_local_pnl,p)))
+      )
+      o<-order(-abs(res))[1:5]
+      ntable(
+        df=data.table(
+          sector=gsub(" Index","",sector_pairs[ndx2=="SXXP Index",ndx1][o]),
+          cor=round(100*res[o],digits=1),
+          beta=round(100*res1[o],digits=1)
+        ),
+        add_rownames=FALSE,
+        add_header=TRUE,
+        alternating=FALSE
+      )
+    },the_pairs)
+  ),
+  intraday_spreads=structure(
+    hdr=tbl(c("10-day cor on 10min bars","money-neutral spread")),
+    mapply(function(p){
+      res<-mapply(
+        safe_cor,
+        strat=structure(sector_pairs$intraday_money_neutral_spread,.Names=sector_pairs$sn),
+        MoreArgs=list(factor=intraday_managers[,p])
+      )
+      res1<-mapply(
+        function(x,y){
+          if(any(is.na(c(x,y))))return(0)
+          if(any(is.na(c(sd(x),sd(y)))))return(0)
+          if(any(c(sd(x),sd(y))==0))return(0)
+          cov(x,y)/var(x)
+        },
+        x=structure(sector_pairs$intraday_money_neutral_spread,.Names=sector_pairs$sn),
+        MoreArgs=list(y=intraday_managers[,p])
+      )
+      o<-order(-res)[1:5]
+      ntable(
+        df=data.table(
+          spread=sector_pairs$sn[o],
+          cor=round(100*res[o],digits=1),
+          beta=round(100*res1[o],digits=1)
+        ),
+        add_rownames=FALSE,
+        add_header=TRUE,
+        alternating=FALSE
+      )
+    },the_pairs)
+  ),
+  daily_spreads=structure(
+    hdr=tbl(c("2 year cor on daily returns","money-neutral spread")),
+    mapply(function(p){
+      res<-mapply(
+        safe_cor,
+        strat=structure(sector_pairs$daily_money_neutral_spread,.Names=sector_pairs$sn),
+        MoreArgs=list(factor=rowSums(mc(manager_local_pnl,p)))
+      )
+      res1<-mapply(
+        function(x,y){
+          if(any(is.na(c(x,y))))return(0)
+          if(any(is.na(c(sd(x),sd(y)))))return(0)
+          if(any(c(sd(x),sd(y))==0))return(0)
+          cov(x,y)/var(x)
+        },
+        structure(sector_pairs$daily_money_neutral_spread,.Names=sector_pairs$sn),
+        MoreArgs=list(rowSums(mc(manager_local_pnl,p)))
+      )
+      o<-order(-res)[1:5]
+      ntable(
+        df=data.table(
+          spread=sector_pairs$sn[o],
+          cor=round(100*res[o],digits=1),
+          beta=round(100*res1[o],digits=1)
+        ),
+        add_rownames=FALSE,
+        add_header=TRUE,
+        alternating=FALSE
+      )
+    },the_pairs)
+  ),
+  long_short_correl=structure(
+    hdr=tbl(c("Long vs short correlations","by manager, pairs")),
+    mapply(function(p){
+      daily_long_pnl<-rowSums(mc(pair_long_pnl,p))
+      daily_short_pnl<-rowSums(mc(pair_short_pnl,p))
+      intraday_long_pnl<-structure(
+        rowSums(mc(intraday_pair_longs[open_bars,],p)),
+        .Names=paste0(bar_intervals$date[open_bars],"T",bar_intervals$time[open_bars])
+      )
+      intraday_short_pnl<-structure(
+        rowSums(mc(intraday_pair_shorts[open_bars,],p)),
+        .Names=paste0(bar_intervals$date[open_bars],"T",bar_intervals$time[open_bars])
+      )
+      df<-rbind(
+        data.table(
+          window="2yr, daily, L/S",
+          cor=round(100*cor(daily_long_pnl,daily_short_pnl),digits=1)
+        ),
+        data.table(
+          window="2yr, daily, pair mean",
+          cor=round(100*mean(mapply(
+            safe_cor,
+            data.table(mc(pair_long_pnl,p)),
+            data.table(mc(pair_short_pnl,p))
+          )),digits=1)
+        ),
+        data.table(
+          window="10day, 10min, L/S",
+          cor=round(100*cor(intraday_long_pnl,(-1)*intraday_short_pnl),digits=1)
+        ),
+        data.table(
+          window="10day, 10min, pair mean",
+          cor=round(100*mean(mapply(
+            safe_cor,
+            data.table(mc(intraday_pair_longs[open_bars,],p)),
+            data.table((-1)*mc(intraday_pair_shorts[open_bars,],p))
+          )),digits=1)
+        ),
+        data.table(
+          window="1day, 10min, L/S",
+          cor=round(100*safe_cor(
+            rowSums(mc(intraday_pair_longs[bar_intervals$day==max(bar_intervals$day),,drop=FALSE],p)),
+            (-1)*rowSums(mc(intraday_pair_shorts[bar_intervals$day==max(bar_intervals$day),,drop=FALSE],p))
+          ),digits=1)
+        )
+      )
+      ntable(
+        df=df,
+        add_rownames=FALSE,
+        add_header=TRUE,
+        alternating=FALSE
+      )
+    },the_pairs)
+  )
+)
+
+a1<-c("m{1cm}","@{}|@{}c","@{}|@{}c","@{}|@{}c","@{}|@{}c","@{}|@{}c","@{}|@{}c")
+
+#
+#
+#
+best_money_neutral_spread<-function(pm,n=5){
+   pm_bars<-rowSums(mc(intraday_pair[open_bars,],pm))
+   res<-mapply(
+    safe_cor,
+    strat=structure(sector_pairs$intraday_money_neutral_spread,.Names=sector_pairs$sn),
+    MoreArgs=list(factor=pm_bars)
+   )
+   res1<-mapply(
+    function(x,y){
+      if(any(is.na(c(x,y))))return(0)
+      if(any(is.na(c(sd(x),sd(y)))))return(0)
+      if(any(c(sd(x),sd(y))==0))return(0)
+      cov(x,y)/var(x)
+    },
+    x=structure(sector_pairs$intraday_money_neutral_spread,.Names=sector_pairs$sn),
+    MoreArgs=list(y=pm_bars)
+  )
+  o<-order(-res)[1:n]
+  data.table(
+    spread=sector_pairs$sn[o],
+    cor=round(100*res[o],digits=1),
+    beta=round(100*res1[o],digits=1)
+  )
+}
+
+n<-5
+x<-best_money_neutral_spread("*",n)
+
+intraday_best_money_neutral<-
+  do.call(cbind,sector_pairs[,.SD,keyby=sn][x$spread,intraday_money_neutral_spread]) %*%
+  matrix(sign(x$cor)/n,ncol=1)
+
+intraday_duke<-rowSums(intraday_pair[open_bars,])
+duke_best_money_neutral_sd_ratio<-sd(intraday_best_money_neutral)/sd(intraday_duke)
+
+x1<-cumsum(intraday_duke)
+x2<-cumsum(intraday_best_money_neutral/duke_best_money_neutral_sd_ratio)
+x3<-cumsum(intraday_best_money_neutral)
+ylim<-c(min(c(x1,x2)),max(c(x1,x2)))
+
+
+
+@
+
+\newpage
+\section{Relevant spreads and indices: Money-neutral case}
+
+\vskip 5mm
+
+\noindent Identifying the index and index spreads with the highintra-day correlation 
+to a manager's position may help with understanding P\&L drivers. In addition, portfolio
+or manager-level overlays can be constructed using this information.
+
+\vskip 10mm
+
+\begin{center}
+\Sexpr{ntable(
+  relevant_spread_table_money_neutral,
+  add_rownames=FALSE,
+  title=paste0(
+    curly("\\bf Current portfolio")," : ",
+    "Spread with highest similarity to manager positions, position correlations (pct), betas (pct AUM)"
+  ), 
+  scale=0.75,
+  alternating=FALSE,
+  align=a1,
+  halign="c",
+  row_end="\\hline"
+)}
+\end{center}
+
+\begin{center}
+\begin{tabular}{m{8cm} m{8cm}}
+\hline
+\begin{center}
+\begin{tabular}{m{8cm}}
+ 10-day performance (\Sexpr{dot("red")}) of an equally-weighted portfolio comprising the 
+ top 5 most correlated {\bf money-neutral} spreads.  DUKE performance (\Sexpr{dot("blue")}) over 
+ the same period. The spread portfolio has been scaled to match DUKE's volatility. 
+ \\
+\Sexpr{ntable(
+  df=rbind(
+    data.table(
+      stat="DUKE-proxy 2w correlation (pct)",
+      value=round(100*cor(diff(x1),diff(x2)),digits=0)
+    ),
+    data.table(
+      stat="DUKE 2w beta to procy (bps)",
+      value=round(10000*safe_beta(diff(x1),diff(x3)),digits=0)
+    ),
+    data.table(
+      stat="2w vol reduction on shorting proxy (pct)",
+      value=round(100*(1-sd(diff(x1)-safe_beta(diff(x1),diff(x3))*diff(x3))/sd(diff(x1))),digits=0)
+    )
+  ),
+  add_rownames=FALSE,
+  alternating=FALSE
+)}
+\\
+\end{tabular}
+\end{center}
+&
+\Sexpr{make_plot(expression(
+  par(mai=c(0,0,0,0)),
+  plot(x1,type="l",lwd=3,col=rgb(0,0,1,0.5),ylim=ylim,axes=FALSE,xlab="",ylab=""),
+  lines(x2,lwd=3,col=rgb(1,0,0,0.5))
+),width="8cm",height="4cm",envir=environment())}
+\\
+\hline
+\end{tabular}
+\end{center}
+
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+
+pair_rank<-data.table(
+  pair=pairs,
+  recent_vol_value=apply(intraday_pair,2,sd),
+  long_term_vol_value=apply(pair_local_pnl,2,sd),
+  recent_cor_value=mapply(
+    safe_cor,
+    data.table(intraday_pair_longs),
+    data.table((-1)*intraday_pair_shorts)
+  ),
+  long_term_cor_value=mapply(safe_cor,data.table(pair_long_pnl),data.table(pair_short_pnl)),
+  recent_beta_value=mapply(
+    safe_beta,
+    data.table(intraday_pair_longs),
+    data.table((-1)*intraday_pair_shorts)
+  ),
+  long_term_beta_value=mapply(safe_beta,data.table(pair_long_pnl),data.table(pair_short_pnl))
+)[,
+  c("recent_hedge_efficiency","long_term_hedge_efficiency"):=list(
+    recent_hedge_efficiency=mapply(function(longs,shorts,beta){
+      if(beta<0.01)return(1)
+      sd_act<-sd(longs-shorts)
+      sd_theo<-sd(longs-beta*shorts)
+      if(sd_theo<1e-14)return(1)
+      sd_act/sd_theo
+    },longs=data.table(intraday_pair_longs),shorts=data.table((-1)*intraday_pair_shorts),beta=recent_beta_value),
+    long_term_hedge_efficiency=mapply(function(longs,shorts,beta){
+      if(beta<0.01)return(1)
+      sd_act<-sd(longs-shorts)
+      sd_theo<-sd(longs-beta*shorts)
+      if(sd_theo<1e-14)return(1)
+      sd_act/sd_theo
+    },longs=data.table(pair_long_pnl),shorts=data.table(pair_short_pnl),beta=long_term_beta_value)
+  )
+][,
+  c("recent_vol","long_term_vol","recent_cor","long_term_cor"):=list(
+    recent_vol=rank(-recent_vol_value),
+    long_term_vol=rank(-long_term_vol_value),
+    recent_cor=rank(-recent_cor_value),
+    long_term_cor=rank(-long_term_cor_value)
+  )
+][,
+  c("vol_diff","cor_diff"):=list(
+    vol_diff=recent_vol-long_term_vol,
+    cor_diff=recent_cor-long_term_cor
+  )
+]
+
+vol_change<-pair_rank[order(-abs(vol_diff))[1:10],pair]
+cor_change<-pair_rank[order(-abs(cor_diff))[1:10],pair]
+all_change<-pair_rank[order(-abs(cor_diff)+abs(vol_diff))[1:10],pair]
+
+vol_change_tbl<-data.table(
+  pair_vol=structure(
+    hdr=tbl(c("pair","vol change"),align="l"),
+    mapply(icon,vol_change,MoreArgs = list(width="2cm"))
+  ),
+  pair_vol_rank=structure(
+    hdr=tbl(c("vol","ranks"),align="l"),
+    mapply(function(p)ntable(rbind(
+      data.table(
+        stat="rank",
+        "2yr"=round(100*pair_rank[,.SD,keyby=pair][p,long_term_vol]/length(pairs),digits=0),
+        "2wk"=round(100*pair_rank[,.SD,keyby=pair][p,recent_vol]/length(pairs),digits=0)
+      ),
+      data.table(
+        stat="value",
+        "2yr"=round(1000000*pair_rank[,.SD,keyby=pair][p,long_term_vol_value],digits=0),
+        "2wk"=round(10000000*pair_rank[,.SD,keyby=pair][p,recent_vol_value],digits=0)
+      )
+    ),
+    add_rownames = FALSE,
+    alternating=FALSE,
+    align=c("l", "l@{\\raisebox{1mm}{\\tikz{\\draw[-latex] (0mm,0mm)--(5mm,0mm) ;}}}","@{}l")
+    ),vol_change)
+  ),
+  plot_vol=structure(
+    hdr="plot",
+    mapply(function(x){
+      make_plot(expression(
+        plot(
+          cumsum(intraday_pair[open_bars,x]),
+          axes=FALSE,
+          xlab="",
+          ylab="",
+          type="l",
+          lwd=10,
+          col=rgb(0,0,1,0.75)
+        )
+      ),width="3cm",height="2cm",envir=environment())
+    },vol_change)
+  )
+)
+cor_change_tbl<-data.table(
+  pair_cor=structure(
+    hdr=tbl(c("pair","cor change"),align="l"),
+    mapply(icon,cor_change,MoreArgs = list(width="2cm"))
+  ),
+  pair_cor_rank=structure(
+    hdr=tbl(c("cor","ranks"),align="l"),
+    mapply(function(p)ntable(rbind(
+      data.table(
+        stat="rank",
+        "2yr"=round(100*pair_rank[,.SD,keyby=pair][p,long_term_cor]/length(pairs),digits=0),
+        "2wk"=round(100*pair_rank[,.SD,keyby=pair][p,recent_cor]/length(pairs),digits=0)
+      ),
+      data.table(
+        stat="value",
+        "2yr"=round(100*pair_rank[,.SD,keyby=pair][p,long_term_cor_value],digits=0),
+        "2wk"=round(100*pair_rank[,.SD,keyby=pair][p,recent_cor_value],digits=0)
+      )
+    ),
+      add_rownames = FALSE,
+      alternating=FALSE,
+      align=c("l", "l@{\\raisebox{1mm}{\\tikz{\\draw[-latex] (0mm,0mm)--(5mm,0mm) ;}}}","@{}l")
+    ),cor_change)
+  ),
+  plot_cor=structure(
+    hdr="plot",
+    mapply(function(x){
+      make_plot(expression(
+        plot(
+          cumsum(intraday_pair[open_bars,x]),
+          axes=FALSE,
+          xlab="",
+          ylab="",
+          type="l",
+          lwd=10,
+          col=rgb(0,0,1,0.75)
+        )
+      ),width="3cm",height="2cm",envir=environment())
+    },cor_change)
+  )
+)
+
+
+
+
+@
+
+\newpage
+\section{Short-term vs long term volatility, correlation, hedge efficiency ranks}
+
+DUKE relies on diversification to reduce realized volatility. `Correlation breakdown' episodes
+can result in disproportionate increases in realized volatility. For DUKE, average realized daily 
+volatility is about \Sexpr{round(sd(local_pnl[,1])*10000,digits=1)} bps/day over the last 2 years. However 
+the most  volatile month realized \Sexpr{round(max(roll_sd(local_pnl[,1],30))*10000,digits=1)} bps/day.
+These plots show how recent market moves compare to long-term statistics. Pairs in of-diagonal quadrants
+are pairs with different short term and long term statistics. Pairs with unexpectedly high short term
+vol rank or unexpectedly low short term correlation rank are: \Sexpr{paste0(all_change,collapse=", ")}.
+
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+@
+
+\begin{center}
+\begin{tabular}{m{6cm} m{6cm} m{6cm}}
+\hline
+\rowcolor{gray!20}
+ & \multicolumn{1}{c}{Sector spreads} & \multicolumn{1}{c}{DUKE pairs} \\
+We compare volatility ranks based on 10-day, 10min bars (x-axis) and 2 year
+daily total returns (y-axis). Pairs in the lower right and upper left 
+quadrants are pairs with `unexpected' volatility ranks. Sector-pair volatilty
+ranks have a correlation of 
+\Sexpr{round(
+  100*cor(rank(sector_pairs$intraday_spread_vol),rank(sector_pairs$daily_spread_vol))
+,digits=1)}
+ whereas DUKE pairs have a volatility-rank correlation of 
+\Sexpr{round(
+  100*cor(rank(apply(intraday_pair,2,sd)),rank(apply(pair_local_pnl,2,sd)))
+,digits=1)}. Pairs with large change in volatility rank are: 
+\Sexpr{paste0(vol_change,collapse=", ")}.
+&
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+@
+\Sexpr{make_plot(expression(
+  plot(
+    x=rank(sector_pairs$intraday_spread_vol),
+    y=rank(sector_pairs$daily_spread_vol),
+    ylab="2 year, daily",
+    xlab="10 day, 10 min"
+  ),
+  abline(v=length(sector_pairs$intraday_spread_vol)/2,col="red"),
+  abline(h=length(sector_pairs$daily_spread_vol)/2,col="red")
+),width="6cm",height="6cm",envir=environment())}
+&
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+@
+\Sexpr{make_plot(expression(
+  plot(
+    x=rank(apply(intraday_pair,2,sd)),
+    y=rank(apply(pair_local_pnl,2,sd)),
+    ylab="2 year, daily",
+    xlab="10 day, 10 min",
+    pch=19,
+    col=pair_col[,.SD,keyby=name][colnames(intraday_pair),r_color]
+  ),
+  abline(v=ncol(intraday_pair)/2,col="red"),
+  abline(h=ncol(pair_local_pnl)/2,col="red")
+),width="6cm",height="6cm",envir=environment())}
+\\
+We compare long-short correlation ranks based on 10-day, 10min bars (x-axis) 
+and 2 year daily total returns (y-axis). Pairs in the lower right and 
+upper left quadrants are pairs with `unexpected' correlation ranks. These 
+`correlation breakdown' pairs could potentially be exposed to `emergent'
+factors. Intraday vs long-term sector-pair correlation ranks have a correlation of 
+\Sexpr{round(
+  100*cor(rank(sector_pairs$intraday_cor),rank(sector_pairs$daily_cor))
+,digits=1)}
+ whereas DUKE pairs have correlation-rank correlation of 
+\Sexpr{round(
+  100*cor(
+    rank(mapply(safe_cor,data.table(intraday_pair_longs),data.table((-1)*intraday_pair_shorts))),
+    rank(mapply(safe_cor,data.table(pair_long_pnl),data.table(pair_short_pnl)))
+  )
+,digits=1)}. Pairs with large changes in the short term correlation rank are: 
+\Sexpr{paste0(cor_change,collapse=", ")}.
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+@
+&
+\Sexpr{make_plot(expression(
+  plot(
+    x=rank(sector_pairs$intraday_cor),
+    y=rank(sector_pairs$daily_cor),
+    ylab="2 year, daily",
+    xlab="10 day, 10 min"
+  ),
+  abline(v=length(sector_pairs$intraday_cor)/2,col="red"),
+  abline(h=length(sector_pairs$daily_cor)/2,col="red")
+),width="6cm",height="6cm",envir=environment())}
+&
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+@
+\Sexpr{make_plot(expression(
+  plot(
+    x=rank(mapply(safe_cor,data.table(intraday_pair_longs),data.table((-1)*intraday_pair_shorts))),
+    y=rank(mapply(safe_cor,data.table(pair_long_pnl),data.table(pair_short_pnl))),
+    ylab="2 year, daily",
+    xlab="10 day, 10 min",
+    pch=19,
+    col=pair_col[,.SD,keyby=name][colnames(intraday_pair_longs),r_color]
+  ),
+  abline(v=ncol(intraday_pair_longs)/2,col="red"),
+  abline(h=ncol(pair_long_pnl)/2,col="red")
+),width="6cm",height="6cm",envir=environment())}
+\\
+\end{tabular}
+\end{center}
+
+\Sexpr{paste0(manager_col$latex_col_def,collapse="\n")}
+
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+@
+\begin{center}
+\begin{tabular}{m{6cm} m{6cm} m{6cm}}
+\hline
+\rowcolor{gray!20}
+ & \multicolumn{1}{c}{Hedge efficiency value} & \multicolumn{1}{c}{Hedge efficiency rank} \\
+ Hedge efficiency (ratio of actual volatility divided minimum achievable volatility) 
+ scatter-plot over a {\bf 2 year} (x-axis) and a {\bf 2 week} (y-axis) window.
+ Long-term and recent hedge efficiency scores have a correlation of
+ \Sexpr{round(100* cor(pair_rank$recent_hedge_efficiency,pair_rank$long_term_hedge_efficiency),digits=0)}.
+ Scatter-plot color coding:
+ \Sexpr{paste0(manager_col$name,"(",mapply(dot,manager_col$name),")",collapse=", ")}.
+ &
+ <<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+@
+\Sexpr{make_plot(expression(
+  plot(
+    y=pair_rank$recent_hedge_efficiency,
+    x=pair_rank$long_term_hedge_efficiency,
+    col=alpha(pair_col[,.SD,keyby=name][pair_rank$pair,r_color],0.5),
+    pch=19,
+    cex=2,
+    ylab="Recent",
+    xlab="Long-term"
+  )
+),width="6cm",height="6cm",envir=environment())}
+&
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+@
+\Sexpr{make_plot(expression(
+  plot(
+    y=rank(pair_rank$recent_hedge_efficiency),
+    x=rank(pair_rank$long_term_hedge_efficiency),
+    col=alpha(pair_col[,.SD,keyby=name][pair_rank$pair,r_color],0.33),
+    pch=19,
+    cex=2,
+    ylab="Recent",
+    xlab="Long-term"
+  )
+),width="6cm",height="6cm",envir=environment())}
+\\
+\end{tabular}
+\end{center}
+
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+reduced_hedge_efficiency_pairs<-pair_rank$pair[
+  pair_rank$recent_hedge_efficiency-pair_rank$long_term_hedge_efficiency>0.01
+]
+
+reduced_hedge_efficiency_pairs_matrix<-apply(df2matrix(
+  df=data.table(
+    text=reduced_hedge_efficiency_pairs,
+    x=round(100*pair_rank[,.SD,keyby=pair][reduced_hedge_efficiency_pairs,recent_hedge_efficiency]-100,digits=0),
+    y=round(100*pair_rank[,.SD,keyby=pair][reduced_hedge_efficiency_pairs,long_term_hedge_efficiency]-100,digits=0)
+  ),
+  col_slack=0,
+  row_slack=0
+),1:2,function(x){
+  if(nchar(x)<1)return("")
+  paste0(
+    "\\begin{minipage}{ 2cm }\n",
+    tbl(c(
+      ntable(df=rbind(
+        data.table(stat="2w excess",value=round(100*pair_rank[,.SD,keyby=pair][x,recent_hedge_efficiency]-100,digits=0)),
+        data.table(stat="2Y excess",value=round(100*pair_rank[,.SD,keyby=pair][x,long_term_hedge_efficiency]-100,digits=0))
+      ),alternating=FALSE,add_rownames =FALSE,add_header=FALSE,final_line="",scale=0.75,align=c("@{}l","l")),
+      icon(x,width="2cm",height="2cm")
+    ),sep=" \\\\[-3mm]",align="@{}l"),
+    "\n",
+    "\\end{minipage}"
+  )
+})
+
+
+@
+
+\newpage
+\section{Pairs which have experienced a decrease in hedge effectiveness over the last 2 weeks.}
+
+\vskip 5mm
+
+We compute the difference between actual pair volatility and minimum achievable volatility by varying 
+the size of the short leg of a pair. This excess is expressed as a percentage of actual pair volatility.
+The quantity computed this way is a measure of `hedge efficiency'. A hedge efficiency value of 0 is optimal. 
+
+
+\vskip 5mm
+
+\begin{center}
+\begin{tabular}{m{0.75cm} @{} c}
+\rotatebox{90}{ 
+  \raisebox{1mm}{\tikz{\draw (0mm,0mm)--(15mm,0mm) ;}}
+  Decreasing 2y `excess over optimal' volatility, percent 
+  \raisebox{1mm}{\tikz{\draw[-latex] (0mm,0mm)--(15mm,0mm) ;}} 
+}
+&
+\Sexpr{ntable(
+  df=data.table(reduced_hedge_efficiency_pairs_matrix),
+  add_rownames=FALSE,
+  add_header=FALSE,
+  title=NULL,
+  alternating=FALSE,
+  row_end="\\\\"
+)}
+\\
+\multicolumn{2}{c}{
+  \raisebox{1mm}{\tikz{\draw (0mm,0mm)--(15mm,0mm) ;}}
+  Increasing 2w `excess over optimal' volatility, percent
+  \raisebox{1mm}{\tikz{\draw[-latex] (0mm,0mm)--(15mm,0mm) ;}} 
+} 
+\\
+\end{tabular}
+\end{center}
+
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+increased_volatility_pairs<-pair_rank$pair[
+  pair_rank$recent_vol-pair_rank$long_term_vol>1
+]
+
+reduced_hedge_efficiency_pairs_matrix<-apply(df2matrix(
+  df=data.table(
+    text=increased_volatility_pairs,
+    x=pair_rank[,.SD,keyby=pair][increased_volatility_pairs,recent_vol],
+    y=pair_rank[,.SD,keyby=pair][increased_volatility_pairs,long_term_vol]
+  ),
+  col_slack=0,
+  row_slack=0
+),1:2,function(x){
+  if(nchar(x)<1)return("")
+  paste0(
+    "\\begin{minipage}{ 2cm }\n",
+    tbl(c(
+      ntable(df=rbind(
+        data.table(stat="2w rank",value=round(pair_rank[,.SD,keyby=pair][x,recent_vol],digits=0)),
+        data.table(stat="2Y rank",value=round(pair_rank[,.SD,keyby=pair][x,long_term_vol],digits=0))
+      ),alternating=FALSE,add_rownames =FALSE,add_header=FALSE,final_line="",scale=0.75,align=c("@{}l","l")),
+      icon(x,width="2cm",height="2cm")
+    ),sep=" \\\\[-3mm]",align="@{}l"),
+    "\n",
+    "\\end{minipage}"
+  )
+})
+
+@
+
+
+\newpage
+\section{Pairs fo which 2 week volatility rank is more than 2 year volatility rank}
+
+\vskip 5mm
+
+\begin{center}
+\begin{tabular}{m{0.75cm} @{} c}
+\rotatebox{90}{ 
+  \raisebox{1mm}{\tikz{\draw (0mm,0mm)--(15mm,0mm) ;}}
+  Decreasing 2y volatility rank 
+  \raisebox{1mm}{\tikz{\draw[-latex] (0mm,0mm)--(15mm,0mm) ;}} 
+}
+&
+\Sexpr{ntable(
+  df=data.table(reduced_hedge_efficiency_pairs_matrix),
+  add_rownames=FALSE,
+  add_header=FALSE,
+  title=NULL,
+  alternating=FALSE,
+  row_end="\\\\"
+)}
+\\
+\multicolumn{2}{c}{
+  \raisebox{1mm}{\tikz{\draw (0mm,0mm)--(15mm,0mm) ;}}
+  Increasing 2w volatility rank
+  \raisebox{1mm}{\tikz{\draw[-latex] (0mm,0mm)--(15mm,0mm) ;}} 
+} 
+\\
+\end{tabular}
+\end{center}
+
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+@
+
+
+
+\newpage
+\section{Pairs with large changes in volatility or correlation}
+
+\vskip 5mm
+
+\begin{center}
+\Sexpr{ntable(
+  df=data.table(vol_change_tbl,cor_change_tbl),
+  title="Pairs with large volatility, correlation changes. 1st rank = highest value",
+  alternating=FALSE,
+  add_rownames=FALSE,
+  align=c(
+    paste0("|m",curly("2cm")),"l",paste0("m",curly("3cm"),"|"),
+    paste0("m",curly("2cm")),"l",paste0("m",curly("3cm"),"|")
+  ),
+  halign="c",
+  final_line="\\hline"
+)}
+\end{center}
+
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+
+
+intraday_vol_rank<-do.call(rbind,mapply(
+  function(i){
+    rank(apply(intraday_pair[bar_intervals$day==i,],2,sd))
+  },
+  1:10,
+  SIMPLIFY=FALSE
+))
+
+
+daily_vol_rank<-do.call(rbind,mapply(
+  function(i){
+    bins<-findInterval(
+      1:nrow(pair_local_pnl),
+      seq(1,nrow(pair_local_pnl),length.out=11),
+      all.inside = TRUE,
+      rightmost.closed = TRUE
+    )
+    rank(apply(pair_local_pnl[bins==i,],2,sd))
+  },
+  1:10,
+  SIMPLIFY=FALSE
+))
+
+unstable_vol_rank<-tail(sort(apply(intraday_vol_rank,2,function(x)diff(range(x)))),5)
+unstable_vol_plot=mapply(function(x){
+  make_plot(expression(
+    plot(
+      cumsum(intraday_pair[open_bars,x]),
+      axes=FALSE,
+      xlab="",
+      ylab="",
+      type="l",
+      lwd=10,
+      col=rgb(0,0,1,0.75)
+    )
+  ),width="3cm",height="2cm",envir=environment())
+},names(unstable_vol_rank))
+unstable_vol_rank_plot=mapply(function(x){
+  make_plot(expression(
+    par(mai=c(0,0,0,0)),
+    plot(
+      intraday_vol_rank[,x],
+      axes=FALSE,
+      xlab="",
+      ylab="",
+      type="l",
+      lwd=10,
+      col=rgb(0,0,1,0.33),
+      ylim=c(1,length(pairs))
+    ),
+    text(
+      x=1:nrow(intraday_vol_rank),
+      y=intraday_vol_rank[,x],
+      labels=intraday_vol_rank[,x],
+      cex=4
+    )
+  ),width="3cm",height="2cm",envir=environment())
+},names(unstable_vol_rank))
+@
+
+\newpage
+\section{Pair volatility rank changes over last 10 days and last 2 years}
+
+\vskip 5mm 
+
+
+\begin{center}
+\begin{tabular}{m{10cm} m{6cm} }
+\hline
+\rowcolor{gray!20}
+\multicolumn{2}{c}{Pair volatility ranks} \\
+\Sexpr{make_plot(expression(
+  par(mai=c(0,0,0,0)),
+  matplot(
+    x=apply(daily_vol_rank,2,seq_along),
+    y=daily_vol_rank,
+    lty=1,
+    type="l",
+    col=sorted_ramp(daily_vol_rank[1,]), 
+    lwd=5,
+    axes=FALSE,
+    xlab="",
+    ylab=""
+  )
+),width="10cm",height="6cm",envir=environment())}
+&
+\Sexpr{ntable(
+  df=data.table(rbind(
+    data.table(stat="window, days",value=nrow(pair_local_pnl)),
+    data.table(stat="pair count",value=ncol(daily_vol_rank)),
+    data.table(stat="period count",value=nrow(daily_vol_rank)),
+    data.table(stat="mean sd",value=round(mean(apply(daily_vol_rank,2,sd)),digits=1)),
+    data.table(stat="max sd",value=round(max(apply(daily_vol_rank,2,sd)),digits=1)),
+    data.table(stat="min sd",value=round(min(apply(daily_vol_rank,2,sd)),digits=1)),
+    data.table(stat="mean range",value=round(mean(apply(daily_vol_rank,2,function(x)diff(range(x)))),digits=1)),
+    data.table(stat="max range",value=round(max(apply(daily_vol_rank,2,function(x)diff(range(x)))),digits=1)),
+    data.table(stat="min range",value=round(min(apply(daily_vol_rank,2,function(x)diff(range(x)))),digits=1))
+  )),
+  add_rownames=FALSE,
+  alternating=FALSE,
+  title="Long-term (2year, daily) volatility"
+)}
+\\
+\Sexpr{make_plot(expression(
+  par(mai=c(0,0,0,0)),
+  matplot(
+    x=apply(intraday_vol_rank,2,seq_along),
+    y=intraday_vol_rank,
+    lty=1,
+    type="l",
+    col=sorted_ramp(intraday_vol_rank[1,]),
+    lwd=5,
+    axes=FALSE,
+    xlab="",
+    ylab=""
+  )
+),width="10cm",height="6cm",envir=environment())}
+&
+\Sexpr{ntable(
+  df=data.table(rbind(
+    data.table(stat="window, days",value=max(bar_intervals$day)),
+    data.table(stat="pair count",value=ncol(intraday_vol_rank)),
+    data.table(stat="period count",value=nrow(intraday_vol_rank)),
+    data.table(stat="mean sd",value=round(mean(apply(intraday_vol_rank,2,sd)),digits=1)),
+    data.table(stat="max sd",value=round(max(apply(intraday_vol_rank,2,sd)),digits=1)),
+    data.table(stat="min sd",value=round(min(apply(intraday_vol_rank,2,sd)),digits=1)),
+    data.table(stat="mean range",value=round(mean(apply(intraday_vol_rank,2,function(x)diff(range(x)))),digits=1)),
+    data.table(stat="max range",value=round(max(apply(intraday_vol_rank,2,function(x)diff(range(x)))),digits=1)),
+    data.table(stat="min range",value=round(min(apply(intraday_vol_rank,2,function(x)diff(range(x)))),digits=1))
+  )),
+  add_rownames=FALSE,
+  alternating=FALSE,
+   title="Short-term (2week, 10min) volatility"
+)}
+\\
+\end{tabular}
+\end{center}
+
+\begin{center}
+\begin{tabular}{
+  \Sexpr{paste0(paste0("m",curly("0.75cm"))," ",paste0(rep(paste0("m",curly("3cm")),length(unstable_vol_rank)),collapse=" "))}
+}
+\hline
+\rowcolor{gray!5}
+\multicolumn{\Sexpr{length(unstable_vol_rank)+1}}{c}{
+  Top \Sexpr{length(unstable_vol_rank)} most volatility-unstable pairs over last 2 weeks
+} \\
+\rotatebox{90}{\bf Pair} &
+\Sexpr{paste0(mapply(icon,names(unstable_vol_rank),MoreArgs=list(width="3cm",height="4cm")),collapse=" & ")} \\
+\rotatebox{90}{\bf Price} &
+\Sexpr{paste0(unstable_vol_plot,collapse="&")} \\
+\rotatebox{90}{\bf Vol rank} &
+\Sexpr{paste0(unstable_vol_rank_plot,collapse="&")} \\
+\hline
+\end{tabular}
+\end{center}
+
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+
+
+intraday_cor_rank<-do.call(rbind,mapply(
+  function(i){
+    rank(mapply(
+      safe_cor,
+      data.table(intraday_pair_longs[bar_intervals$day==i,]),
+      (-1)*data.table(intraday_pair_shorts[bar_intervals$day==i,])
+    ))
+  },
+  1:10,
+  SIMPLIFY=FALSE
+))
+
+
+daily_cor_rank<-do.call(rbind,mapply(
+  function(i){
+    bins<-findInterval(
+      1:nrow(pair_local_pnl),
+      seq(1,nrow(pair_local_pnl),length.out=11),
+      all.inside = TRUE,
+      rightmost.closed = TRUE
+    )
+    rank(mapply(
+      safe_cor,
+      data.table(pair_long_pnl[bins==i,]),
+      data.table(pair_short_pnl[bins==i,])
+    ))
+  },
+  1:10,
+  SIMPLIFY=FALSE
+))
+
+unstable_cor_rank<-tail(sort(apply(intraday_cor_rank,2,function(x)diff(range(x)))),5)
+stable_cor_rank<-head(sort(apply(intraday_cor_rank,2,function(x)diff(range(x)))),5)
+
+unstable_cor_plot=mapply(function(x){
+  make_plot(expression(
+    z<-c(cumsum(intraday_pair_longs[open_bars,x]),cumsum(intraday_pair_shorts[open_bars,x])),
+    ylim<-c(min(z),max(z)),
+    par(mai=c(0,0,0,0)),
+    plot(
+      cumsum(intraday_pair_longs[open_bars,x]),
+      axes=FALSE,
+      xlab="",
+      ylab="",
+      type="l",
+      lwd=10,
+      col=rgb(0,1,0,0.75),
+      ylim=ylim
+    ),
+    lines(
+      x=seq_along(open_bars),
+      y=cumsum(intraday_pair_shorts[open_bars,x]),
+      lwd=10,
+      col=rgb(1,0,0,0.75)
+    ),
+    text(
+      x=length(open_bars)/2,
+      y=mean(ylim),
+      labels=round(100*cor(intraday_pair_longs[open_bars,x],intraday_pair_shorts[open_bars,x]),digits=0),
+      cex=7
+    )
+  ),width="3cm",height="2cm",envir=environment())
+},names(unstable_cor_rank))
+
+unstable_cor_rank_plot=mapply(function(x){
+  make_plot(expression(
+    par(mai=c(0,0,0,0)),
+    plot(
+      intraday_cor_rank[,x],
+      axes=FALSE,
+      xlab="",
+      ylab="",
+      type="l",
+      lwd=10,
+      col=rgb(0,0,1,0.33),
+      ylim=c(1,length(pairs))
+    ),
+    text(
+      x=1:nrow(intraday_cor_rank),
+      y=intraday_cor_rank[,x],
+      labels=intraday_cor_rank[,x],
+      cex=4
+    )
+  ),width="3cm",height="2cm",envir=environment())
+},names(unstable_cor_rank))
+
+@
+
+\newpage
+\section{Pair correlation rank changes over last 10 days}
+
+\vskip 5mm 
+
+\begin{center}
+\begin{tabular}{m{10cm} m{6cm} }
+\hline
+\rowcolor{gray!20}
+\multicolumn{2}{c}{Pair correlation (long to short leg) ranks} \\
+\Sexpr{make_plot(expression(
+  par(mai=c(0,0,0,0)),
+  matplot(
+    x=apply(daily_cor_rank,2,seq_along),
+    y=(-1)*daily_cor_rank,
+    lty=1,
+    type="l",
+    col=sorted_ramp(daily_cor_rank[1,]),
+    lwd=5,
+    axes=FALSE,
+    xlab="",
+    ylab=""
+  )
+),width="10cm",height="6cm",envir=environment())}
+&
+\Sexpr{ntable(
+  df=data.table(rbind(
+    data.table(stat="window, days",value=nrow(pair_local_pnl)),
+    data.table(stat="pair count",value=ncol(daily_cor_rank)),
+    data.table(stat="period count",value=nrow(daily_cor_rank)),
+    data.table(stat="mean sd",value=round(mean(apply(daily_cor_rank,2,sd)),digits=1)),
+    data.table(stat="max sd",value=round(max(apply(daily_cor_rank,2,sd)),digits=1)),
+    data.table(stat="min sd",value=round(min(apply(daily_cor_rank,2,sd)),digits=1)),
+    data.table(stat="mean range",value=round(mean(apply(daily_cor_rank,2,function(x)diff(range(x)))),digits=1)),
+    data.table(stat="max range",value=round(max(apply(daily_cor_rank,2,function(x)diff(range(x)))),digits=1)),
+    data.table(stat="min range",value=round(min(apply(daily_cor_rank,2,function(x)diff(range(x)))),digits=1))
+  )),
+  add_rownames=FALSE,
+  alternating=FALSE,
+  title="Long-term (2year, daily) correlation"
+)}
+\\
+\Sexpr{make_plot(expression(
+  par(mai=c(0,0,0,0)),
+  matplot(
+    x=apply(intraday_cor_rank,2,seq_along),
+    y=(-1)*intraday_cor_rank,
+    lty=1,
+    type="l",
+    col=sorted_ramp(intraday_cor_rank[1,]),
+    lwd=5,
+    axes=FALSE,
+    xlab="",
+    ylab=""
+  )
+),width="10cm",height="6cm",envir=environment())}
+&
+\Sexpr{ntable(
+  df=data.table(rbind(
+    data.table(stat="window, days",value=max(bar_intervals$day)),
+    data.table(stat="pair count",value=ncol(intraday_cor_rank)),
+    data.table(stat="period count",value=nrow(intraday_cor_rank)),
+    data.table(stat="mean sd",value=round(mean(apply(intraday_cor_rank,2,sd)),digits=1)),
+    data.table(stat="max sd",value=round(max(apply(intraday_cor_rank,2,sd)),digits=1)),
+    data.table(stat="min sd",value=round(min(apply(intraday_cor_rank,2,sd)),digits=1)),
+    data.table(stat="mean range",value=round(mean(apply(intraday_cor_rank,2,function(x)diff(range(x)))),digits=1)),
+    data.table(stat="max range",value=round(max(apply(intraday_cor_rank,2,function(x)diff(range(x)))),digits=1)),
+    data.table(stat="min range",value=round(min(apply(intraday_cor_rank,2,function(x)diff(range(x)))),digits=1))
+  )),
+  add_rownames=FALSE,
+  alternating=FALSE,
+  title="Short-term (2week, 10min) correlation"
+)}
+\\
+\end{tabular}
+\end{center}
+
+\begin{center}
+\begin{tabular}{\Sexpr{
+  paste0(
+    paste0("m",curly("0.75cm")),
+    " ",
+    paste0(rep(paste0("m",curly("3cm")),length(unstable_cor_rank)),collapse=" ")
+  )
+}}
+\hline
+\rowcolor{gray!5}
+\multicolumn{\Sexpr{length(unstable_cor_rank)+1}}{c}{
+  Top \Sexpr{length(unstable_cor_rank)} most correlation-unstable pairs over last 2 weeks
+} \\
+\rotatebox{90}{\bf Pair} &
+\Sexpr{paste0(mapply(icon,names(unstable_cor_rank),MoreArgs=list(width="3cm",height="4cm")),collapse=" & ")} \\
+\rotatebox{90}{\bf Long(\Sexpr{dot("green")}) vs Short(\Sexpr{dot("red")})} &
+\Sexpr{paste0(unstable_cor_plot,collapse="&")} \\
+\rotatebox{90}{\bf Cor rank} &
+\Sexpr{paste0(unstable_cor_rank_plot,collapse="&")} \\
+\hline
+\end{tabular}
+\end{center}
+
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+
+make_pm_page<-function(pm,ndx){
+pm_pnl<-rowSums(mc(intraday_pair,paste0("^",pm)))
+ndx_pnl<-rowSums(mc(intraday_perf,paste0("^",ndx)))
+
+paste0(
+"\\begin{center}",
+"\\begin{tabular}{m{9cm} m{9cm}}",
+"\\hline",
+"\\rowcolor{gray!20}",
+"\\multicolumn{2}{c}{",pm," vs ",ndx,"} \\\\",
+"\\multicolumn{1}{c}{",pm,"} & \\multicolumn{1}{c}{",ndx,"} \\\\",
+"\\rowcolor{white}",
+make_plot(
+  plot_intraday_pnl(pm=pm,intraday_pair=intraday_pair,ylab="pm")
+,width="9cm",height="9cm"),
+"&",
+make_plot(
+  plot_intraday_pnl(pm=ndx,intraday_pair=intraday_perf,ylab=ndx)
+,width="9cm",height="9cm"),
+"\\\\",
+make_plot(
+  plot(
+    pm_pnl[abs(pm_pnl)>0],
+    ndx_pnl[abs(pm_pnl)>0],
+    main=paste0(pm," vs ",ndx),
+    xlab=paste0(pm," move"),
+    ylab=paste0(ndx," move")
+  )
+,width="9cm",height="9cm"),
+"&",
+make_plot(
+  if(sd(ndx_pnl[abs(pm_pnl)>0])>0){
+    ccf(
+      pm_pnl[abs(pm_pnl)>0],
+      ndx_pnl[abs(pm_pnl)>0],
+      main=paste0(pm," vs ",ndx)
+    )
+  }else{
+    plot(c(0,1),c(0,1),type="n",axes=FALSE,xlab="",ylab="")
+  }
+,width="9cm",height="9cm"),
+"\\\\",
+"\\end{tabular}",
+"\\end{center}"
+)
+}
+
+@
+\newpage
+\section{Intraday DUKE vs benchmarks }
+
+\Sexpr{make_pm_page("*","MSEEMOMO Index")}
+
+
+
+\end{document}
+
