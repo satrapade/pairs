@@ -1,0 +1,278 @@
+
+\documentclass{article}
+
+\usepackage[portrait, headheight = 0cm, margin=0.25cm, top = 0.25cm, nofoot]{geometry} 
+\usepackage[export]{adjustbox} 
+\usepackage{graphicx}
+\usepackage[dvipsnames,table]{xcolor} % [dvipsnames,table] for setting colors \usepackage{amsmath} \usepackage{xfrac}
+\usepackage{xfrac}
+
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric}
+\usetikzlibrary{shapes.misc}
+\usetikzlibrary{external}
+\tikzexternalize
+
+\renewcommand{\familydefault}{\sfdefault} % sans serif
+
+\begin{document}
+
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+require(data.table)
+require(Hmisc)
+require(Rtsne)
+require(digest)
+require(stringi)
+require(readxl)
+require(scales)
+require(data.table)
+require(Matrix)
+require(Matrix.utils)
+require(clue)
+require(magick)
+append2log<-function(log_text,append=TRUE)
+{
+  cat(
+    paste0(stri_trim(gsub("##|-","",capture.output(timestamp())))," : ",log_text,"\n"),
+    file="N:/Depts/Share/UK Alpha Team/Analytics/Rscripts/workflow.log",
+    append=append
+  )
+}
+append2log("create_pair_icons.Rnw : source utility_functions, latext_helpers_v2")
+source("https://raw.githubusercontent.com/satrapade/utility/master/utility_functions.R")
+source("https://raw.githubusercontent.com/satrapade/latex_utils/master/latex_helpers_v2.R")
+
+data_directory<-"N:/Depts/Share/UK Alpha Team/Analytics/duke_summary"
+prefix<-""
+row_names<-TRUE
+data_loaded<-fread("N:/Depts/Share/UK Alpha Team/Analytics/market_data/data_loaded.csv")
+
+# pair-level data
+append2log("create_pair_icons.Rnw : load pair-level data")
+pair_exposure     <- load_matrix("N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_pair_exposure.csv",row_names=row_names)
+pair_days         <- load_matrix("N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_pair_days.csv",row_names=row_names)
+pair_local_pnl    <- load_matrix("N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_pair_local_pnl.csv",row_names=row_names)
+pair_long_pnl     <- load_matrix("N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_pair_long_pnl.csv",row_names=row_names)
+pair_short_pnl    <- load_matrix("N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_pair_short_pnl.csv",row_names=row_names)
+drop_one_pair_pnl <- load_matrix("N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_drop_one_pair_pnl.csv",row_names=row_names)
+
+# manager-level data
+append2log("create_pair_icons.Rnw : load manager-level data")
+manager_exposure     <- load_matrix("N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_manager_exposure.csv",row_names=row_names)
+manager_local_pnl    <- load_matrix("N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_manager_local_pnl.csv",row_names=row_names)
+drop_one_manager_pnl <- load_matrix("N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_drop_one_manager_pnl.csv",row_names=row_names)
+
+# fund-level data
+append2log("create_pair_icons.Rnw : load fund-level data")
+exposure        <- load_matrix("N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_exposure.csv",row_names=row_names)
+long_exposure   <- load_matrix("N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_long_exposure.csv",row_names=row_names)
+short_exposure  <- load_matrix("N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_short_exposure.csv",row_names=row_names)
+local_pnl       <- load_matrix("N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_local_pnl.csv",row_names=row_names)
+
+# color assigment
+append2log("create_pair_icons.Rnw : load color assigments")
+manager_col <- fread("N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/manager_col.csv")
+pair_col    <- fread("N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/pair_col.csv")
+
+
+#determine pairs, managers and pair-to-manager mapping
+append2log("create_pair_icons.Rnw : determine pairs, managers and pair-to-manager mapping")
+pairs<-sort(unique(colnames(pair_exposure)))
+managers<-sort(unique(colnames(manager_exposure)))
+manager_pairs<-structure(
+  diag(length(managers))[match(gsub("[0-9]+","",pairs),managers),],
+  dimnames=list(pairs,managers)
+)
+
+pm_color_code_key<-paste0("\\colorbox{",managers,"!20}{",managers,"}",collapse=",")
+
+#
+# pair icon elements
+#
+
+# tickers in long/short leg
+pair_leg<-function(
+  pair,
+  pair_exposure,
+  direction=1,
+  max_char=12
+){
+  i<-which(direction*pair_exposure[,pair]>0)
+  s1<-rownames(pair_exposure)[i]
+  s2<-gsub("( [A-Z]{2} Equity$)|( Index$)","",s1)
+  s3<-paste0(s2,collapse="-")
+  if(nchar(s3)>max_char){
+    s4<-paste0("{\\small ",stri_sub(s3,1,max_char),"}",cross("black",size="1ex",raise="-0.2ex"))
+  }else{
+    s4<-paste("{\\small ",s3,"}")
+  }
+  s4
+}
+
+# pair name color-coded with assigned pm color
+pair_with_pm_color<-function(pair)paste0("\\cellcolor{",pair2pm(pair),"!33}",pair)
+
+# pair sparline
+pair_sparkline<-function(
+  pair,
+  w=365,
+  pair_long_pnl=pair_long_pnl,
+  pair_short_pnl=pair_short_pnl
+){
+  long_pnl<-pair_long_pnl[,pair]
+  short_pnl<-pair_short_pnl[,pair]
+  long_px<-cumprod(c(0,tail(long_pnl,w))+1)
+  short_px<-cumprod(c(0,tail(short_pnl,w))+1)
+  rel_px<-rescale(long_px/short_px)
+  kpx<-kernapply(rel_px,kernel("daniell",as.integer(length(rel_px)/10)))
+  smooth_px<-kpx[seq(1,length(kpx),length.out=min(20,length(kpx)))]
+  res<-make_tikz_line(smooth_px,width=8,height=2,line_width=0.2,dot_size=0.5,units="mm",back_txt="")
+  paste0("\\fbox{",res,"}")
+}
+
+# recent pair price actions
+pair_price_action<-function(
+  pair,
+  pair_pnl,
+  w=21,
+  height=2,
+  width=30,
+  units="mm"
+){
+  pnl<-tail(pair_pnl[,pair],21)
+  txt<-make_tikz_price_action(pnl,width=width,height=height,units=units)
+  txt
+}
+
+# table with pair technical, positioning info
+pair_technicals<-function(
+  pair,
+  w=365,
+  pair_long_pnl=pair_long_pnl,
+  pair_short_pnl=pair_short_pnl,
+  pair_days=pair_days,
+  local_pnl=local_pnl,
+  drop_one_pair_pnl=drop_one_pair_pnl,
+  pair_exposure=pair_exposure
+){
+  long_pnl<-pair_long_pnl[,pair]
+  short_pnl<-pair_short_pnl[,pair]
+  long_px<-cumprod(c(0,long_pnl)+1)
+  short_px<-cumprod(c(0,short_pnl)+1)
+  
+  rel_px<-rescale(long_px/short_px)
+  rng_w<-function(w)min(100*(tail(rel_px,1)-min(tail(rel_px,w)))/diff(range(tail(rel_px,w))),99)
+  rsi_w<-function(w)min(round(tail(rsi(matrix(diff(rel_px),ncol=1),w),1),digits=0),99)
+  
+  days<-max(abs(pair_days[,pair]))
+  msd<-round(100*10000*(sd(local_pnl)-sd(drop_one_pair_pnl[,pair])),digits=1)
+  gross<-sum(abs(pair_exposure[,pair]))
+  
+  grid_text<-paste0(
+    "\\begin{tabular}{@{}l@{\\hskip 1pt}l@{\\hskip 1pt}l@{}}",
+    paste0("v",round(days,digits=1),collapse="")," & ",
+    paste0("r",ifelse(msd<0,paste0("(",msd,")"),paste0(msd)),collapse="")," & ",
+    paste0("g",round(10000*gross,digits=0),collapse=""),"\\\\",
+    paste0("{\\small\\sfrac{RSI}{3m}:",round(rsi_w(182),digits=1),collapse=""),"} & ",
+    paste0("{\\small\\sfrac{RSI}{1m}:",round(rsi_w(90),digits=1),collapse=""),"} & ",
+    paste0("{\\small\\sfrac{RSI}{2w}:",round(rsi_w(14),digits=1),collapse=""),"} \\\\ ",
+    paste0("{\\small12m:",abs(round(rng_w(360),digits=0)),collapse=""),"} & ",
+    paste0("{\\small6m:",abs(round(rng_w(182),digits=0)),collapse=""),"} & ",
+    paste0("{\\small1m:",abs(round(rng_w(30),digits=0)),collapse=""),"} \\\\ ",
+    pair_sparkline(pair,w=365,pair_long_pnl=pair_long_pnl,pair_short_pnl=pair_short_pnl),"&",
+    pair_sparkline(pair,w=182,pair_long_pnl=pair_long_pnl,pair_short_pnl=pair_short_pnl),"&",
+    pair_sparkline(pair,w=30,pair_long_pnl=pair_long_pnl,pair_short_pnl=pair_short_pnl),"\\\\",
+    "\\end{tabular}"
+  )
+  grid_text
+}
+
+pair_icon<-function(
+  pair,
+  pair_exposure,
+  pair_days,
+  pair_pnl,
+  pair_long_pnl,
+  pair_short_pnl,
+  drop_one_pair_pnl,
+  local_pnl
+){
+  icon_items<-c(
+    paste0("\\multicolumn{1}{@{}c@{}}{",pair_with_pm_color(pair=pair),"}"),
+    paste0("\\multicolumn{1}{@{}c@{}}{",pair_price_action(pair=pair,pair_pnl=pair_pnl,w=21,height=2,width = 30,units="mm"),"}"),
+    paste0("\\multicolumn{1}{@{}c@{}}{",pair_technicals(
+      pair=pair,
+      w=365,
+      pair_exposure=pair_exposure,
+      pair_days=pair_days,
+      pair_long_pnl=pair_long_pnl,
+      pair_short_pnl=pair_short_pnl,
+      drop_one_pair_pnl=drop_one_pair_pnl,
+      local_pnl=local_pnl
+    ),"}"),
+    pair_leg(pair=pair,pair_exposure=pair_exposure,direction=(1),max_char=12),
+    pair_leg(pair=pair,pair_exposure=pair_exposure,direction=(-1),max_char=12)
+  )
+  tbl(x=icon_items,sep=" \\\\ \n",align="@{}p{3.0cm}@{}")
+}
+
+append2log("create_pair_icons.Rnw : create latex icons")
+latex_icons<-mapply(pair_icon,pair=pairs,MoreArgs=list(
+  pair_exposure=pair_exposure,
+  pair_days=pair_days,
+  pair_pnl=pair_local_pnl,
+  pair_long_pnl=pair_long_pnl,
+  pair_short_pnl=pair_short_pnl,
+  drop_one_pair_pnl=drop_one_pair_pnl,
+  local_pnl=local_pnl
+),SIMPLIFY = FALSE)
+
+append2log("create_pair_icons.Rnw : create external latex commands")
+external_latex_icons<-mapply(
+  function(latex,file){
+    make_external_latex(latex=latex,filename=file)
+  },
+  latex=latex_icons,
+  #file=paste0("N:/Depts/Share/UK Alpha Team/Analytics/pair_icons/",pairs),
+  file=paste0(pairs),
+  SIMPLIFY=TRUE
+)
+
+@
+
+\Sexpr{paste(manager_col$latex_col_def,collapse="")}
+
+% pair icons wrapped inside a tikz picture for
+% capture and export
+\Sexpr{paste(external_latex_icons,collapse="\n")}
+
+\tikzsetnextfilename{ICONKEY}
+\tikz{\path (0,0) node[inner sep=0,outer sep=0]{
+  \begin{tabular}{m{4cm} m{15cm}}
+  \hline
+  \multicolumn{2}{c}{\bf Table key} \\
+  \hline
+  \Sexpr{latex_icons[[1]]} 
+  &
+  \begin{tabular}{l}
+  Pair id, color-coded by PM : \Sexpr{pm_color_code_key} \\
+  21 day's price action: 
+  (\Sexpr{triangle_up("green")}) up, 
+  (\Sexpr{triangle_dn("red")}) dn, 
+  (\Sexpr{cross("black",size="1ex",raise="0ex")}) flat  
+  \\
+  Size in ADV multiples / Marginal risk contribution in 100th's of daily bp volatility / Gross in bps \\
+  3 month RSI, 1 month RSI, 14 day RSI \\
+  Window lengths, last relative price range location $100*\frac{LAST-LOW}{HIGH-LOW}$ \\
+  Relative price plots \Sexpr{dot("red")} low, \Sexpr{dot("green")} high \\
+  Long tickers, first 10 letters.  Final \Sexpr{cross("black",size="1ex")} if list was clipped to 10 letters due to length. \\
+  Short tickers, first 10 letters.  Final \Sexpr{cross("black",size="1ex")} if list was clipped to 10 letters due to length. \\
+  \end{tabular} \\
+  \hline
+  \end{tabular}
+};}
+
+\end{document}
+
+
+
