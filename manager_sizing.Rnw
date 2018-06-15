@@ -1,0 +1,148 @@
+\documentclass{article}
+
+%\usepackage[portrait,headheight = 1cm,margin=1cm,top=1cm,bottom=1cm,nofoot]{geometry} 
+\usepackage[export]{adjustbox} 
+\usepackage{graphicx}
+\usepackage[dvipsnames,table]{xcolor} 
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric}
+\usetikzlibrary{shapes.misc}
+\usepackage{xfrac}
+\usepackage{hyperref}
+\usepackage{amsmath}
+
+\begin{document}
+
+
+\section{Target contribution calculation}
+
+This is a framework to help guide manager positioning in a direction
+that makes return objectives achievable. The relevant parameters are:
+
+\vskip 5mm 
+
+\begin{center}
+
+\begin{tabular}{l l l l}
+\hline
+\rowcolor{gray!20}
+Parameter & & Units & Driven by \\
+$T$ & Target return per manager & bps AUM & Policy \\
+$N$ & Maximum number of live pairs & 15 per PM & Policy \\
+$F$ & Position turnover per year & factor & PM \\
+$HR$ & Hit ratio & \% of pairs with positive outcome & PM \\
+$WLR$ & Win loss ratio & ratio of upside to downside & PM \\
+$U$ & Expected upside per position  & bps AUM & Position\\
+$D$ & Expected downside per position & bps AUM & Position\\
+$R$ & Average return per pair & bps AUM & Position\\
+$G$ & Average gain per pair  & bps AUM & Position \\
+$L$ & Average loss per pair  & bps AUM & Position \\
+\end{tabular}
+\end{center}
+
+\vskip 5mm
+
+Average pair gains ($G$) and losses ($L$) are linked to expected pair upside 
+($U$) and downside ($D$) via the hit ratio ($HR$). The average pair return ($R$) 
+is the difference between avarage pair gains and losses:
+
+\vskip 5mm
+
+\begin{align}
+G & = U \times HR & \text{Average gain vs Expected upside, hit ratio} \label{eq:1} \\
+L & = D \times (1-HR) & \text{Average loss vs Expected downside, hit ratio} \label{eq:2} \\
+R & = G - L & \text{Average pair return vs Average gain, loss} \label{eq:3}
+\end{align}
+
+
+\vskip 5mm
+
+The manager return ($T$) is then simply the average pair return ($R$) times the actual pair number
+($F \times N$):
+
+\begin{align}
+T & = F \times N \times R & \text{Manager return vs pair number, pair return} \label{eq:0}
+\end{align}
+
+\vskip 5mm
+
+Fund management sets $T$ to a specific level for a particular PM, which in turn 
+determines viable combinations of $F$ and $R$. 
+
+\vskip 5mm
+
+\begin{center}
+\fbox{\parbox{0.75\textwidth}{
+{\bf Example}: $T$ is set to \Sexpr{round(800/6,digits=0)} bps for a manager who implements 
+15 ideas per year ($F$ = 1). This implies a requirement for an average return of 
+\Sexpr{round(800/6/15,digits=0)} bps per pair if the target return is to be achieved.
+}}
+\end{center}
+
+\vskip 5mm
+
+A pair's average (or the average across pairs) return ($R$) is the difference between average 
+gains ($G$) and average losses ($L$). Therefore, to control the average pair return, we need 
+to control the average gain and the average loss. Combining equations \ref{eq:1}, \ref{eq:2} 
+and \ref{eq:3} with the definition of $WLR$ we get an expression linking average returns
+per pair with $HR$, $WLR$ and $U$.
+
+\vskip 5mm
+
+\begin{align}
+ R & = U \times HR - D \times (1-HR) & \text{Average pair return}  \label{eq:4} \\
+ WLR & = \frac{U}{D} & \text{Win loss ratio}  \label{eq:5}  \\
+ R & = U \times ( HR - \frac{1-HR}{WLR})  & \text{Average pair return}  \label{eq:6}
+\end{align}
+
+\vskip 5mm
+
+Equations \ref{eq:6} and \ref{eq:0} are equivalent to:
+
+\begin{align}
+ WLR & = \frac{1-HR}{HR - \frac{T}{F \times N \times U}}  & \text{Win loss ratio vs PM 
+ characteristics}  \label{eq:7}
+\end{align}
+
+\vskip 5mm
+
+This is important because the win loss ratio \underline{is mainly determined} by 
+portfolio construction and stop-loss policy, which \emph{is} under the manager's control. 
+The hit ratio is a function of skill and therefore \emph{is not} 
+under the manager's control. 
+
+\vskip 5mm
+
+In fact, every term on the right-hand-side of equation \ref{eq:7} \emph{is not} under the 
+manager's control, while the win loss ratio ($WLR$) is \emph{partially} determined by 
+portfolio construction and stop-loss policy.
+
+\vskip 5mm
+
+We can therefore use this derived win loss ratio ($WLR$) value to ascertain whether a 
+manager's portfolio construction and stop-loss approach is compatible with the fund's 
+overall objectives.
+
+\vskip 5mm
+
+In other words, this range of realistic win loss ratio ($WLR$) values can be used 
+by the manager to drive portfolio construction and to some extent positioning frequency 
+and idea selection.
+
+\newpage
+\section{Specific cases}
+
+\newpage
+\section{Conclusion}
+
+The inherent uncertainty of investment outcomes cannot, of course, be eliminated. This 
+framework is designed 
+to help managers make decisions which have at least some chance of achieving the funds 
+investment objectives.
+
+
+\end{document}
+
+
+
+
