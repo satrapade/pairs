@@ -1,4 +1,4 @@
-make_query<-function(
+function(
   ..., 
   query_string=paste(readLines(file),collapse="\n"),
   file="bucket_pnl.sql"
