@@ -1,6 +1,5 @@
 
-
---include{query_parameters.sql}--
+--include{N:/Depts/Share/UK Alpha Team/Analytics/Rscripts/query_parameters.sql}--
 
 --
 -- tables required to compute P&L by bucket and perform
@@ -492,5 +491,8 @@ SELECT
 INTO ttBUCKET_EXPOSURES 
 FROM  tT6
 ;
+
+
+
 
 
