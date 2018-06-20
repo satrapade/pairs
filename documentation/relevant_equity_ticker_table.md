@@ -1,0 +1,2 @@
+# relevant equity ticker table
+
