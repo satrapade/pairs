@@ -18,7 +18,7 @@ with this parameter:
 ``workflow.R`` then executes individual workflow steps.
 
 The  ``N:\Depts\Share\UK Alpha Team\Analytics\Rscripts`` directory contains 
-all workflow scripts.
+all workflow scripts:
 
 
 | File | Description | Documentation |
@@ -43,9 +43,10 @@ all workflow scripts.
 | ``intraday_fx.R`` |  fetch intraday price action for 30 currencies |[here](documentation/intraday_fx.md)|
 
 
-The  ``N:\Depts\Share\UK Alpha Team\Analytics\risk_reports`` directory contains 
-all knitr Rnw files used to generate reports.
 
+
+The  ``N:\Depts\Share\UK Alpha Team\Analytics\risk_reports`` directory contains 
+all knitr Rnw files used to generate reports:
 
 | File | Description | Documentation | Example |
 |----------|----------|----------|----------|
@@ -66,6 +67,31 @@ all knitr Rnw files used to generate reports.
 | ``tech_pair_report.Rnw``| search for trending technology pairs | here | here |
 | ``trailing_stop_report.Rnw``| trailing stop-loss report | here | here |
 | ``what_happened_last_week.Rnw``| what happened last week report | here | here |
+
+
+
+The prodiction database contains product and bucket history which is used to
+create the above reports.
+
+
+| Table                        | Description                         |
+|------------------------------|-------------------------------------|
+|ttBUCKET_EXPOSURES            | exposures by bucket                 |
+|ttBUCKET_PNL                  | pnl by bucket                       |
+|ttBUCKETS                     | relevant buckets                    |
+|ttBUID_MARKET_STATUS          | market status of relevant BUIDs     | 
+|ttCURRENT_ISIN_MARKET_STATUS  | market status of current ISINs      |
+|ttDATES                       | relevant dates (including weekends) |
+|ttEXPOSURE_SECURITIES         | relevant instrument table           |
+|ttHISTORICAL_BUCKET_EXPOSURES | exposures over time                 |
+|ttHISTORICAL_BUCKET_HOLDINGS  | holdings                            |
+|ttHISTORICAL_BUCKETS          | all buckets                         |
+|ttHISTORICAL_EQUITY_ISIN      | map historical to current ISINs     |
+|ttISIN_MARKET_STATUS          | old ISIN status                     |
+|ttTICKER_MARKET_STATUS        | ticker status                       |
+
+
+
 
 
 
