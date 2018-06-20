@@ -29,9 +29,7 @@ all workflow scripts:
 |----------|----------|----------|
 | ``workflow.R`` | the start script  |[here](documentation/workflow.md)|
 | ``workflow.log`` | results log |[here](documentation/workflow.md)|
-| ``query_parameters.sql`` | set query parameters |[here](documentation/query_parameters.md)|
 | ``relevant_equity_ticker_table.sql`` | construct date, ticker, bucket tables |[here](documentation/relevant_equity_ticker_table.md)|
-| ``create_temp_tables.sql`` |  create tables |[here](documentation/create_temp_tables.md)|
 | ``initialize_scrape_db.R`` |  make sure the sheet scrape DB exists |[here](documentation/initialize_scrape_db.md)|
 | ``perform_sheet_scrape_to_db.R`` |  scrape latest sheet |[here](documentation/perform_sheet_scrape_to_db.md)|
 | ``create_cix_uploads.R`` |  create ``BLOOMBERG`` CIX formuli |[here](documentation/create_cix_uploads.md)|
@@ -76,24 +74,26 @@ all knitr Rnw files used to generate reports:
 ----
 
 The production database contains product and bucket history which is used to
-create the above reports.
+create the above reports. some amount of pre-processing is done
+on the SQL server, which results in the following intermediate tables.
+The SQL scripts used to create these tables are in the ``sql`` folder.
 
 
-| Table                        | Description                         |
-|------------------------------|-------------------------------------|
-|ttBUCKET_EXPOSURES            | exposures by bucket                 |
-|ttBUCKET_PNL                  | pnl by bucket                       |
-|ttBUCKETS                     | relevant buckets                    |
-|ttBUID_MARKET_STATUS          | market status of relevant BUIDs     | 
-|ttCURRENT_ISIN_MARKET_STATUS  | market status of current ISINs      |
-|ttDATES                       | relevant dates (including weekends) |
-|ttEXPOSURE_SECURITIES         | relevant instrument table           |
-|ttHISTORICAL_BUCKET_EXPOSURES | exposures over time                 |
-|ttHISTORICAL_BUCKET_HOLDINGS  | holdings                            |
-|ttHISTORICAL_BUCKETS          | all buckets                         |
-|ttHISTORICAL_EQUITY_ISIN      | map historical to current ISINs     |
-|ttISIN_MARKET_STATUS          | old ISIN status                     |
-|ttTICKER_MARKET_STATUS        | ticker status                       |
+| Table                        | Description                         | Script         |
+|------------------------------|-------------------------------------|----------------|
+|ttBUCKET_EXPOSURES            | exposures by bucket                 | [create_ttDATES.sql](sql/create_ttDATES.sql) |
+|ttBUCKET_PNL                  | pnl by bucket                       | [create_ttDATES.sql](sql/create_ttDATES.sql) |
+|ttBUCKETS                     | relevant buckets                    | [create_ttDATES.sql](sql/create_ttDATES.sql) |
+|ttBUID_MARKET_STATUS          | market status of relevant BUIDs     | [create_ttDATES.sql](sql/create_ttDATES.sql) |
+|ttCURRENT_ISIN_MARKET_STATUS  | market status of current ISINs      | [create_ttDATES.sql](sql/create_ttDATES.sql) |
+|ttDATES                       | relevant dates (including weekends) | [create_ttDATES.sql](sql/create_ttDATES.sql) |
+|ttEXPOSURE_SECURITIES         | relevant instrument table           | [create_ttDATES.sql](sql/create_ttDATES.sql) |
+|ttHISTORICAL_BUCKET_EXPOSURES | exposures over time                 | [create_ttDATES.sql](sql/create_ttDATES.sql) |
+|ttHISTORICAL_BUCKET_HOLDINGS  | holdings                            | [create_ttDATES.sql](sql/create_ttDATES.sql) |
+|ttHISTORICAL_BUCKETS          | all buckets                         | [create_ttDATES.sql](sql/create_ttDATES.sql) |
+|ttHISTORICAL_EQUITY_ISIN      | map historical to current ISINs     | [create_ttDATES.sql](sql/create_ttDATES.sql) |
+|ttISIN_MARKET_STATUS          | old ISIN status                     | [create_ttDATES.sql](sql/create_ttDATES.sql) |
+|ttTICKER_MARKET_STATUS        | ticker status                       | [create_ttDATES.sql](sql/create_ttDATES.sql) |
 
 
 
