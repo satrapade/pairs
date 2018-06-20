@@ -1,21 +1,18 @@
 # pair_reporting
 data, workflows for pair performance reporting
 
-| Resource | Description |
+Scripts and results are in th ``N:\Depts\Share\UK Alpha Team\Analytics`` directory.
+
+The  ``N:\Depts\Share\UK Alpha Team\Analytics\Rscripts`` directory contains workflow
+
+"C:\Program Files\R\R-3.4.3\bin\Rscript.exe"
+-e source('N:/Depts/Share/UK\x20Alpha\x20Team/Analytics/Rscripts/workflow.R')
+
+| File | Description |
 |----------|----------|
-| Fund performance database | data on LUKE and DUKE |
+| ``workflow.R`` | this is  |
 | BLOOMBERG | security price and static |
-|----------|----------|
+|| results directory |
 
-
-
-
-|``N:\Depts\Share\UK Alpha Team\Analytics``| results directory |
-
-
-| Screenshot | Description |
-|------|------|
-| ![image](https://user-images.githubusercontent.com/1358190/41533125-9659bdae-72f1-11e8-8a8a-05a5ed71e499.png) | A Python implementation of "Space Invaders" |
-|![image](https://user-images.githubusercontent.com/1358190/41593475-19f378f0-73b8-11e8-81d7-0971872dbe28.png) | Snakes |
 
 
