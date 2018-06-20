@@ -10,7 +10,8 @@
 |  data_source_id | only lines with  ``DataSourceId`` equal to this are selected | 2 |  
 
 
-the ``make_query`` function takes an SQL query containing pre-processor directives and expands
+
+the [make_query](utility/make_query.R) function takes an SQL query containing pre-processor directives and expands
 the directives into concrete values. The resulting text is a valid SQL query that is passed to
 the database.
 
