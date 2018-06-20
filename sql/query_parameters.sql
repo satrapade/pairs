@@ -32,4 +32,3 @@
 -- --R{if(!exists('sql_tail'))no_text(    sql_tail<-paste0("SELECT * FROM ",output_table)     )}--
 --
 
-
