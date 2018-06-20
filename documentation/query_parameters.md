@@ -11,9 +11,9 @@
 
 
 
-the [make_query](utility/make_query.R) function takes an SQL query containing pre-processor directives and expands
-the directives into concrete values. The resulting text is a valid SQL query that is passed to
-the database.
+the [make_query](https://raw.githubusercontent.com/satrapade/utility/master/make_query.R) function takes 
+an SQL query containing pre-processor directives and expands the directives into concrete values. 
+The resulting text is a valid SQL query that is passed to the database.
 
 Example call:
 
