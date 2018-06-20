@@ -17,6 +17,8 @@ with this parameter:
 
 ``workflow.R`` then executes individual workflow steps.
 
+----
+
 The  ``N:\Depts\Share\UK Alpha Team\Analytics\Rscripts`` directory contains 
 all workflow scripts:
 
@@ -43,7 +45,7 @@ all workflow scripts:
 | ``intraday_fx.R`` |  fetch intraday price action for 30 currencies |[here](documentation/intraday_fx.md)|
 
 
-
+----
 
 The  ``N:\Depts\Share\UK Alpha Team\Analytics\risk_reports`` directory contains 
 all knitr Rnw files used to generate reports:
@@ -69,8 +71,9 @@ all knitr Rnw files used to generate reports:
 | ``what_happened_last_week.Rnw``| what happened last week report | here | here |
 
 
+----
 
-The prodiction database contains product and bucket history which is used to
+The production database contains product and bucket history which is used to
 create the above reports.
 
 
