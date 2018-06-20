@@ -1,6 +1,7 @@
 #
 # workflow configuration file
 #
+#
 
 database_product_id="7"
 database_source_id="1"
