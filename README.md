@@ -1,6 +1,7 @@
 # pair_reporting
 data, workflows for pair performance reporting
 
+| Resource | Description |
 |----------|----------|
 | Fund performance database | data on LUKE and DUKE |
 | BLOOMBERG | security price and static |
