@@ -28,7 +28,7 @@ make_query(
 
 The ``.sql`` file with macros looks like this:
 
-```
+```SQL
 WHERE tHistoricalBucketHolding.ProductId = --R{product_id}--
 AND   tHistoricalBucketHolding.DataSourceId = --R{position_data_source_id}--
 AND   tHistoricalBucketHolding.HistoricalDate >= --R{start_date}-- +' 12:00:00.0000000'
