@@ -48,23 +48,23 @@ all knitr Rnw files used to generate reports.
 
 
 | File | Description | Documentation | Example |
-| ``bank_pair_report.Rnw`` | search for trending bank pairs | | |
-| ``custom_ABC_report.Rnw`` | analysis of ABC's pairs | | |
-| ``custom_AC_report.Rnw`` | analysis of ABC's pairs | | |
-| ``custom_DH_report.Rnw`` | analysis of ABC's pairs | | |
-| ``custom_GJ_report.Rnw`` | analysis of ABC's pairs | | |
-| ``custom_JR_report.Rnw`` | analysis of ABC's pairs | | |
-| ``custom_MC_report.Rnw`` | analysis of ABC's pairs | | |
-| ``fx_trend_report.Rnw`` | search for trending FX pairs| | |
-| ``market_data_status.Rnw`` | market data fetch | | |
-| ``pair_risk_contribution.Rnw`` | pair risk contribution | | |
-| ``portfolio_summary.Rnw`` | portfolio summary statistics | | |
-| ``risk_plots.Rnw`` | risk plot | | |
-| ``scrape_status.Rnw`` | sheet scrape status | | |
-| ``sheet_scrape_report.Rnw`` | sheet scrape report | | |
-| ``tech_pair_report.Rnw``| search for trending technology pairs | | |
-| ``trailing_stop_report.Rnw``| trailing stop-loss report | | |
-| ``what_happened_last_week.Rnw``| what happened last week report| | |
+| ``bank_pair_report.Rnw`` | search for trending bank pairs | here | here |
+| ``custom_ABC_report.Rnw`` | analysis of ABC's pairs | here | here |
+| ``custom_AC_report.Rnw`` | analysis of ABC's pairs | here | here |
+| ``custom_DH_report.Rnw`` | analysis of ABC's pairs | here | here |
+| ``custom_GJ_report.Rnw`` | analysis of ABC's pairs | here | here |
+| ``custom_JR_report.Rnw`` | analysis of ABC's pairs | here | here |
+| ``custom_MC_report.Rnw`` | analysis of ABC's pairs | here | here |
+| ``fx_trend_report.Rnw`` | search for trending FX pairs| here | here |
+| ``market_data_status.Rnw`` | market data fetch | here | here |
+| ``pair_risk_contribution.Rnw`` | pair risk contribution | here | here |
+| ``portfolio_summary.Rnw`` | portfolio summary statistics | here | here |
+| ``risk_plots.Rnw`` | risk plot | here | here |
+| ``scrape_status.Rnw`` | sheet scrape status | here | here |
+| ``sheet_scrape_report.Rnw`` | sheet scrape report | here | here |
+| ``tech_pair_report.Rnw``| search for trending technology pairs | here | here |
+| ``trailing_stop_report.Rnw``| trailing stop-loss report | here | here |
+| ``what_happened_last_week.Rnw``| what happened last week report| here | here |
 
 
 
