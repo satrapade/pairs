@@ -15,6 +15,9 @@ equity_ticker_table<-query(db=db,the_query)
 
 ```
 
+Te result will be something like this:
+
+
 |security_id|security_name|security_ticker|security_buid|security_isin|security_sedol|security_cusip|date|
 |------|------|------|------|------|------|------|------|
 |21166|SVENSKA CELLULOSA AB B SHS COMMON STOCK NPV|SCAB|EQ0011574100003000|SE0000112724|B1VVGZ5|NA|2012-07-23|
