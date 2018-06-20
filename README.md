@@ -43,5 +43,28 @@ all workflow scripts.
 | ``intraday_fx.R`` |  fetch intraday price action for 30 currencies |[here](documentation/intraday_fx.md)|
 
 
+The  ``N:\Depts\Share\UK Alpha Team\Analytics\risk_reports`` directory contains 
+all knitr Rnw files used to generate reports.
+
+
+| File | Description | Documentation | Example |
+| ``bank_pair_report.Rnw`` ||||
+| ``custom_ABC_report.Rnw`` ||||
+| ``custom_AC_report.Rnw`` ||||
+| ``custom_DH_report.Rnw`` ||||
+| ``custom_GJ_report.Rnw`` ||||
+| ``custom_JR_report.Rnw`` ||||
+| ``custom_MC_report.Rnw`` ||||
+| ``fx_trend_report.Rnw`` ||||
+| ``market_data_status.Rnw`` ||||
+| ``pair_risk_contribution.Rnw`` ||||
+| ``portfolio_summary.Rnw`` ||||
+| ``risk_plots.Rnw`` ||||
+| ``scrape_status.Rnw`` ||||
+| ``sheet_scrape_report.Rnw`` ||||
+| ``tech_pair_report.Rnw||||
+| ``trailing_stop_report.Rnw||||
+| ``what_happened_last_week.Rnw||||
+
 
 
