@@ -79,19 +79,6 @@ manager_pairs<-structure(
   dimnames=list(pairs,managers)
 )
 
-keys<-fread("N:/Depts/Share/UK Alpha Team/Analytics/pair_icons/keys.csv")
-images<-fread("N:/Depts/Share/UK Alpha Team/Analytics/pair_icons/images.csv")
-
-icon<-function(icon_name,icon_table=images,height="2cm",width="3cm"){
-  icon_table[
-    ,
-    .SD,
-    keyby=name
-  ][
-    icon_name,
-    paste0("\\includegraphics[height=",height,",width=",width,",valign=T]{",file,"}")
-  ]
-}
 
 #
 # intraday data
