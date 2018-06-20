@@ -1,0 +1,114 @@
+%
+% scrape status
+%
+
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+# required packages
+require(Hmisc)
+require(Rtsne)
+require(digest)
+require(stringi)
+require(readxl)
+require(scales)
+require(data.table)
+require(Matrix)
+require(Matrix.utils)
+require(clue)
+require(magick)
+
+source("https://raw.githubusercontent.com/satrapade/utility/master/utility_functions.R")
+source("https://raw.githubusercontent.com/satrapade/latex_utils/master/latex_helpers_v2.R")
+
+
+x<-list.files(path="N:/Depts/Share/UK Alpha Team/Analytics/risk_reports/figure",pattern="*.pdf",full.names=TRUE)
+if(length(x)>0)file.remove(x)
+
+#the_date<-"2015-09-25"
+#the_file<-make_sheet_name(the_date)
+
+scrape_details<-local({
+  dets<-fread("N:/Depts/Share/UK Alpha Team/Analytics/sheet_scrape/scrape_details.csv")
+  structure(as.list(dets$values),.Names=dets$names)
+})
+
+#
+# fetch sheet ranges
+#
+the_duke_position_range<-fread("N:/Depts/Share/UK Alpha Team/Analytics/sheet_scrape/duke_position_range.csv")
+the_luke_position_range<-fread("N:/Depts/Share/UK Alpha Team/Analytics/sheet_scrape/luke_position_range.csv")
+the_duke_unwind_range<-fread("N:/Depts/Share/UK Alpha Team/Analytics/sheet_scrape/duke_unwind_range.csv")
+the_luke_unwind_range<-fread("N:/Depts/Share/UK Alpha Team/Analytics/sheet_scrape/luke_unwind_range.csv")
+the_duke_position<-fread("N:/Depts/Share/UK Alpha Team/Analytics/sheet_scrape/duke_position.csv")
+the_duke_unwinds<-fread("N:/Depts/Share/UK Alpha Team/Analytics/sheet_scrape/duke_unwinds.csv")
+the_luke_position<-fread("N:/Depts/Share/UK Alpha Team/Analytics/sheet_scrape/luke_position.csv")
+the_luke_unwinds<-fread("N:/Depts/Share/UK Alpha Team/Analytics/sheet_scrape/luke_unwinds.csv")
+
+
+@
+
+\documentclass{article}
+
+\usepackage[portrait, headheight = 0cm, margin=0.25cm, top = 0.25cm, nofoot]{geometry} 
+\usepackage[export]{adjustbox} 
+\usepackage{graphicx}
+\usepackage[space]{grffile}
+\usepackage[dvipsnames,table]{xcolor} % [dvipsnames,table] for setting colors \usepackage{amsmath} \usepackage{xfrac}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric}
+\usetikzlibrary{shapes.misc}
+%\usetikzlibrary{external}
+%\tikzexternalize % activate!
+%\usepackage{sparklines}
+\usepackage{xfrac}
+
+\DeclareRobustCommand\Tstrut{\rule{0pt}{2.6ex}}         % = `top' strut
+\DeclareRobustCommand\Bstrut{\rule[-0.9ex]{0pt}{0pt}}   % = `bottom' strut
+\renewcommand{\familydefault}{\sfdefault}
+
+\begin{document}
+
+
+\section*{LUKE, DUKE scrape as of \Sexpr{latexTranslate(as.character(Sys.time()))}}
+
+\begin{center}
+\begin{tabular}{l l}
+\hline
+Report working directory: & {\tt \Sexpr{latexTranslate(getwd())}} \\
+EXCEL file & {\tt \Sexpr{latexTranslate(scrape_details$duke_filename)}} \\
+EXCEL type & {\tt \Sexpr{latexTranslate(scrape_details$duke_filetype)}} \\
+\hline
+DUKE summary sheet & {\tt \Sexpr{latexTranslate(scrape_details$duke_summary_sheet)}} \\
+DUKE AUM & {\tt \Sexpr{comma(as.numeric(scrape_details$duke_aum),digits=0)}} \\
+DUKE position sheet & {\tt \Sexpr{latexTranslate(scrape_details$duke_position_sheet)}} \\
+DUKE open managers & {\tt \Sexpr{paste0(sort(unique(the_duke_position$manager)),collapse=",")}} \\
+DUKE position sheet rows & {\tt \Sexpr{paste0(range(as.integer(the_duke_position$sheet_row)),collapse="-")}} \\
+DUKE live tickers & {\tt \Sexpr{length(setdiff(unique(the_duke_position$ticker),""))}} \\
+DUKE unwinds sheet & {\tt \Sexpr{latexTranslate(scrape_details$duke_unwind_sheet)}} \\
+DUKE closed managers & {\tt \Sexpr{paste0(sort(unique(the_duke_unwinds$manager)),collapse=",")}} \\
+DUKE unwind sheet rows & {\tt \Sexpr{
+  paste0(range(the_duke_unwinds$sheet_row),collapse="-")
+}} \\
+DUKE unwound tickers & {\tt \Sexpr{length(setdiff(unique(the_duke_unwinds$ticker),""))}} \\
+DUKE position digest & {\tt \Sexpr{digest(the_duke_position)}} \\
+DUKE unwinds digest & {\tt \Sexpr{digest(the_duke_unwinds)}} \\
+\hline
+LUKE summary sheet & {\tt \Sexpr{latexTranslate(scrape_details$luke_summary_sheet)}} \\
+LUKE AUM & {\tt \Sexpr{comma(as.numeric(scrape_details$luke_aum),digits=0)}} \\
+LUKE position sheet & {\tt \Sexpr{latexTranslate(scrape_details$luke_position_sheet)}} \\
+LUKE open managers & {\tt \Sexpr{paste0(sort(unique(the_luke_position$manager)),collapse=",")}} \\
+LUKE position sheet rows & {\tt \Sexpr{paste0(range(as.integer(the_luke_position$sheet_row)),collapse="-")}} \\
+LUKE live tickers & {\tt \Sexpr{length(setdiff(unique(the_luke_position$ticker),""))}} \\
+LUKE unwinds sheet & {\tt \Sexpr{latexTranslate(scrape_details$luke_unwind_sheet)}} \\
+LUKE closed managers & {\tt \Sexpr{paste0(sort(unique(the_luke_unwinds$manager)),collapse=",")}} \\
+LUKE unwind sheet rows & {\tt \Sexpr{
+  paste0(range(the_luke_unwinds$sheet_row),collapse="-")
+}} \\
+LUKE unwound tickers & {\tt \Sexpr{length(setdiff(unique(the_luke_unwinds$ticker),""))}} \\
+LUKE position digest & {\tt \Sexpr{digest(the_luke_position)}} \\
+LUKE unwinds digest & {\tt \Sexpr{digest(the_luke_unwinds)}} \\
+\hline
+\end{tabular}
+\end{center}
+
+\end{document}
+

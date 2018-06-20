@@ -1,0 +1,1014 @@
+\documentclass{article}
+
+
+
+\usepackage[portrait, headheight = 0cm, margin=0.25cm, top = 0.25cm, nofoot]{geometry} 
+\usepackage[export]{adjustbox} 
+\usepackage{graphicx}
+\usepackage[dvipsnames,table]{xcolor} % [dvipsnames,table] for setting colors \usepackage{amsmath} \usepackage{xfrac}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric}
+\usetikzlibrary{shapes.misc}
+%\usetikzlibrary{external}
+%\tikzexternalize % activate!
+%\usepackage{sparklines}
+\usepackage{xfrac}
+\usepackage[space]{grffile}
+
+\DeclareRobustCommand\Tstrut{\rule{0pt}{2.6ex}}         % = `top' strut
+\DeclareRobustCommand\Bstrut{\rule[-0.9ex]{0pt}{0pt}}   % = `bottom' strut
+\renewcommand{\familydefault}{\sfdefault}
+
+\begin{document}
+
+<<,cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+# this chunk is common to all child documents
+require(Hmisc)
+require(stringi)
+library(digest)
+library(scales)
+library(data.table)
+library(Matrix)
+library(Matrix.utils)
+library(clue)
+library(magick)
+library(readxl)
+library(Rtsne)
+
+
+library(blpapi)
+conn <- new(BlpApiConnection)
+source("https://raw.githubusercontent.com/satrapade/latex_utils/master/latex_helpers_v2.R")
+source("https://raw.githubusercontent.com/satrapade/utility/master/utility_functions.R")
+source("https://raw.githubusercontent.com/satrapade/utility/master/sheet_bbg_functions.R")
+source("https://raw.githubusercontent.com/satrapade/utility/master/sheet_utility_functions.R")
+selected_sheet<-"DUKE"
+x<-list.files(path="N:/Depts/Share/UK Alpha Team/Analytics/risk_reports/figure",pattern="*.pdf",full.names=TRUE)
+if(length(x)>0)file.remove(x)
+
+
+
+plot_tsne_grid<-function(fn,tsne,pictures){
+  s<-(floor(sqrt(length(pictures)))+1)^2
+  k<-sqrt(s)
+  m<-diag(k)
+  gx<-as.vector(col(m))
+  gy<-as.vector(row(m))
+  tx<-rescale(tsne$Y[,1],range(gx))
+  ty<-rescale(tsne$Y[,2],range(gy))
+  tsnex<-matrix(tx,ncol=1)[,rep(1,length(gx))]
+  tsney<-matrix(ty,ncol=1)[,rep(1,length(gy))]
+  gridx<-matrix(gx,nrow=1)[rep(1,length(tx)),]
+  gridy<-matrix(gy,nrow=1)[rep(1,length(ty)),]
+  dx<-(tsnex-gridx)^2
+  dy<-(tsney-gridy)^2
+  d<-dx+dy
+  t2g <- solve_LSAP(d)
+  par(mai=c(0,0,0,0))
+  plot(gx,gy,col="white",axes=FALSE,xlab="",ylab="",main="")
+  for(i in seq_along(pictures))rasterImage(
+    image=pictures[[i]][[fn]],
+    xleft=gx[t2g[i]]-0.49,
+    ybottom=gy[t2g[i]]-0.49,
+    xright=gx[t2g[i]]+0.49,
+    ytop=gy[t2g[i]]+0.49,
+    interpolate=TRUE
+  )
+  abline(
+    h=setdiff(unique(gx),range(gx)[1])-0.5,
+    v=setdiff(unique(gy),range(gy)[1])-0.5,
+    col=rgb(0.5,0.5,0.5,0.5)
+  )
+}
+
+#  
+
+scrape_details<-local({
+  dets<-fread("N:/Depts/Share/UK Alpha Team/Analytics/sheet_scrape/scrape_details.csv")
+  structure(as.list(dets$values),.Names=dets$names)
+})
+
+
+the_duke_position<-fread("N:/Depts/Share/UK Alpha Team/Analytics/sheet_scrape/duke_position.csv")
+the_duke_portfolio<-fread("N:/Depts/Share/UK Alpha Team/Analytics/sheet_scrape/duke_portfolio.csv")
+the_duke_AUM<-as.numeric(scrape_details$duke_aum)
+the_duke_date<-scrape_details$date
+
+the_luke_position<-fread("N:/Depts/Share/UK Alpha Team/Analytics/sheet_scrape/luke_position.csv")
+the_luke_portfolio<-fread("N:/Depts/Share/UK Alpha Team/Analytics/sheet_scrape/luke_portfolio.csv")
+the_luke_AUM<-as.numeric(scrape_details$luke_aum)
+the_luke_date<-scrape_details$date
+
+data_loaded<-fread("N:/Depts/Share/UK Alpha Team/Analytics/market_data/data_loaded.csv")
+
+the_date<-scrape_details$date
+the_file<-scrape_details$duke_filename
+the_type<-scrape_details$duke_filetype
+the_position<-the_duke_position
+AUM<-as.numeric(scrape_details$duke_aum)
+
+the_portfolio<-the_duke_portfolio
+
+for(i in 1:nrow(data_loaded)){
+    if(data_loaded$class[i]!="matrix")next;
+    assign(data_loaded$name[i],load_matrix(data_loaded$fn[i],row_names = TRUE))
+}
+rm("i")
+ 
+portfolio_30d_volume<-apply(tail(portfolio_gbp_volume,30),2,function(x){
+    mean(nz(x))
+})
+  
+data_directory<-"N:/Depts/Share/UK Alpha Team/Analytics/duke_summary"
+prefix<-"duke_"
+row_names<-TRUE
+
+# pair-level data
+luke_pair_exposure     <- load_matrix(paste0(data_directory,"/",prefix,"pair_exposure.csv"),row_names=row_names)
+luke_pair_days         <- load_matrix(paste0(data_directory,"/",prefix,"pair_days.csv"),row_names=row_names)
+luke_pair_local_pnl    <- load_matrix(paste0(data_directory,"/",prefix,"pair_local_pnl.csv"),row_names=row_names)
+luke_pair_long_pnl     <- load_matrix(paste0(data_directory,"/",prefix,"pair_long_pnl.csv"),row_names=row_names)
+luke_pair_short_pnl    <- load_matrix(paste0(data_directory,"/",prefix,"pair_short_pnl.csv"),row_names=row_names)
+luke_drop_one_pair_pnl <- load_matrix(paste0(data_directory,"/",prefix,"drop_one_pair_pnl.csv"),row_names=row_names)
+
+# manager-level data
+luke_manager_exposure          <- load_matrix(paste0(data_directory,"/",prefix,"manager_exposure.csv"),row_names=row_names)
+luke_manager_local_pnl         <- load_matrix(paste0(data_directory,"/",prefix,"manager_local_pnl.csv"),row_names=row_names)
+luke_drop_one_manager_pnl      <- load_matrix(paste0(data_directory,"/",prefix,"drop_one_manager_pnl.csv"),row_names=row_names)
+luke_manager_drop_one_pair_pnl <- load_matrix(paste0(data_directory,"/",prefix,"manager_drop_one_pair_pnl.csv"),row_names=row_names)
+
+# fund-level data
+luke_exposure        <- load_matrix(paste0(data_directory,"/",prefix,"exposure.csv"),row_names=row_names)
+luke_long_exposure   <- load_matrix(paste0(data_directory,"/",prefix,"long_exposure.csv"),row_names=row_names)
+luke_short_exposure  <- load_matrix(paste0(data_directory,"/",prefix,"short_exposure.csv"),row_names=row_names)
+luke_local_pnl       <- load_matrix(paste0(data_directory,"/",prefix,"local_pnl.csv"),row_names=row_names)
+
+# color assigment
+manager_col <- fread("N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/manager_col.csv")
+pair_col    <- fread("N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/pair_col.csv")
+
+#determine pairs, managers and pair-to-manager mapping
+pairs<-sort(unique(colnames(luke_pair_exposure)))
+managers<-sort(unique(colnames(luke_manager_exposure)))
+manager_pairs<-structure(
+  diag(length(managers))[match(gsub("[0-9]+","",pairs),managers),],
+  dimnames=list(pairs,managers)
+)
+
+
+drop_one_pair_exposure<-mapply(function(n){
+  i<-match(n,colnames(luke_pair_exposure))
+  portfolio_local_tret%*%t(t(apply(luke_pair_exposure[,-i],1,sum)))
+},colnames(luke_pair_exposure),SIMPLIFY=FALSE)
+
+drop_one_manager_exposure<-mapply(function(n){
+  i<-match(n,colnames(luke_manager_exposure))
+  portfolio_local_tret%*%t(t(apply(luke_manager_exposure[,-i],1,sum)))
+},colnames(luke_manager_exposure),SIMPLIFY=FALSE)
+
+
+luke_local_pnl<-as.matrix(portfolio_local_tret%*%t(t(apply(luke_pair_exposure,1,sum))))
+pair_local_pnl<-as.matrix(portfolio_local_tret%*%luke_pair_exposure)
+manager_local_pnl<-as.matrix(portfolio_local_tret%*%luke_manager_exposure)
+
+
+luke_gbp_pnl<-as.matrix(portfolio_gbp_tret%*%t(t(apply(luke_pair_exposure,1,sum))))
+pair_gbp_pnl<-as.matrix(portfolio_gbp_tret%*%luke_pair_exposure)
+manager_gbp_pnl<-as.matrix(portfolio_gbp_tret%*%luke_manager_exposure)
+
+marginal_pair_sd<-sort(sd(luke_local_pnl)-mapply(sd,drop_one_pair_exposure))
+marginal_manager_sd<-sort(sd(luke_local_pnl)-mapply(sd,drop_one_manager_exposure))
+
+pair2pm<-function(o){
+  x<-NULL
+  if(is.character(o))x<-o
+  if(is.null(x)&!is.null(names(o)))x<-names(o)
+  if(is.null(x)&!is.null(colnames(o)))x<-colnames(o)
+  if(is.null(x))x<-as.character(o)
+  gsub("[0-9]{1,3}$","",x)
+}
+
+pair_pms<-gsub("[0-9]{1,3}$","",colnames(pair_local_pnl))
+all_pms<-sort(unique(pair_pms))
+pm_col<-structure(rainbow(length(all_pms),alpha=0.5),.Names=all_pms)
+
+#
+weights_for_target_vol<-function(pnl_matrix,target_vol=4){
+  strat_sd<-apply(pnl_matrix,2,sd)
+  rp_weights<-structure(
+    diag(ifelse(strat_sd>0,mean(strat_sd)/strat_sd,0)),
+    dimnames=list(colnames(pnl_matrix),colnames(pnl_matrix))
+  )
+  rp_pnl_matrix<-pnl_matrix%*%rp_weights
+  ratio<-target_vol/pnl_stats(rowSums(rp_pnl_matrix))["vol"]
+  res<-diag(ratio*rp_weights)
+  attributes(res)$pnl<-ratio*rp_pnl_matrix
+  res
+}
+
+factor_for_four_vol<-weights_for_target_vol(manager_local_pnl,4)
+
+pair_f4v<-weights_for_target_vol(pair_local_pnl,4)
+
+manager_col<-assign_color(colnames(manager_local_pnl),col_alpha=1)[,.SD,keyby=item]
+pair_col<-assign_color(colnames(pair_local_pnl),col_alpha=1)[,.SD,keyby=item]
+
+@
+
+% define colors for managers
+\Sexpr{paste(manager_col$latex_col_def,collapse="")}
+\Sexpr{paste(pair_col$latex_col_def,collapse="")}
+
+
+\newpage
+\section{\Sexpr{the_date} \Sexpr{selected_sheet} Managers}
+
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+x0<-apply(abs(luke_manager_exposure),2,sum)
+i<-order(x0)
+x1<-round(10000*x0[i],digits=0)
+x2<-apply(abs(luke_pair_days),2,max)
+x3<-gsub("[0-9]{1,4}$","",colnames(luke_pair_days))
+x4<-rev(sort(round(mapply(mean,split(x2,x3)),digits=0)))
+x5<-10000*apply(manager_local_pnl,2,sd)
+x6<-10000*apply(pair_local_pnl,2,sd)
+x7<-mapply(sum,split(x6,pair2pm(x6)))
+@
+%
+% manager gross exposure plot
+% actual vs target, decorated
+% with pct, adv, dev and div stats
+%
+\begin{center}
+\begin{tabular}{c}
+\Sexpr{the_date} \Sexpr{selected_sheet} manager actual vs required gross for 4\% volatility \\
+\Sexpr{make_plot(expression(
+  par(mai=c(0.85,0.5,0.1,0.1)),
+  plot(
+    x1,
+    ylab="",
+    xlab="Rank of manager gross, lowest rank is smallest gross",
+    main="",
+    col=pm_col[names(x1)],
+    pch=19,
+    cex=5,
+    cex.lab=0.66,
+    ylim=c(-1000,1.2*max(x1*factor_for_four_vol[names(x1)])),
+    xlim=c(0,length(x1)+1)
+  ),
+  points(
+    x=seq_along(x1),
+    y=x1*factor_for_four_vol[names(x1)],
+    col=pm_col[names(x1)],
+    pch=15,
+    cex=5
+  ),
+  text(
+    x=seq_along(x1),
+    y=x1,
+    labels=paste(
+      names(x1),
+      "\npct:",round(x1/100,digits=0),
+      "\nadv:",x4[names(x1)],
+      "\ndev:",round(x5,digits=1)[names(x1)],
+      "\ndiv:",round((x7[names(x1)])/(x5[names(x1)]),digits=1)
+    ),
+    cex=0.75,
+    col="black"
+  ),
+  text(
+    x=seq_along(x1),
+    y=x1*factor_for_four_vol[names(x1)],
+    labels=ifelse(
+      factor_for_four_vol[names(x1)]<1.2,
+      "",
+      paste(
+        names(x1),
+        "\npct:",round(x1*factor_for_four_vol[names(x1)]/100,digits=0),
+        "\nadv:",round(x4[names(x1)]*factor_for_four_vol[names(x1)],digits=1),
+        "\ndev:",round(x5[names(x1)]*factor_for_four_vol[names(x1)],digits=1)
+      )
+    ),
+    cex=0.75,
+    col="black"
+  ),
+  par(mai=c(1.02,0.82,0.82,0.42))
+),width="20cm",height="20cm")}
+\end{tabular}
+\end{center}
+
+\newpage
+\section{\Sexpr{the_date} \Sexpr{selected_sheet} Manager risk}
+%
+% manager risk plot
+%
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+x0<-apply(manager_local_pnl,2,sd)
+i<-order(x0)
+x1<-10000*x0[i]
+x2<-attributes(weights_for_target_vol(manager_local_pnl,4))$pnl
+x3<-apply(x2,2,sd)
+@
+\begin{center}
+\Sexpr{make_plot(expression(
+  plot(
+    x=seq_along(x1),
+    y=x1,
+    ylab="Standard deviation of manager daily P&L, basis points",
+    xlab="Rank of manager P&L stdev, lowest rank is smallest stdev",
+    main="Manager risk",
+    col=pm_col[names(x1)],
+    pch=19,
+    cex=5,
+    ylim=c(0,1.5*10000*max(x3))
+  ),
+  abline(h=10000*max(x3),col=rgb(1,0,0,0.5),lwd=18),
+  text(
+    x=ncol(manager_local_pnl)/2,
+    y=10000*max(x3),
+    labels="Risk required to achieve a 4 per cent portfolio volatility",
+    cex=1.2
+  ),
+  abline(h=10000*max(x3)/2,col=rgb(1,0,0,0.5),lwd=18),
+  text(
+    x=length(x1)/2,
+    y=10000*max(x3)/2,
+    labels="Risk required to achieve a 2 per cent portfolio volatility",
+    cex=1.2
+  ),
+  text(
+    x=seq_along(x1),
+    y=x1,
+    labels=names(x1),
+    cex=1,
+    col="black"
+  )
+),width="20cm",height="20cm")}
+\end{center}
+
+
+\newpage
+\section{\Sexpr{the_date} \Sexpr{selected_sheet} Manager risk contributions}
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+n<-colnames(manager_local_pnl)
+x0<-pnl_stats(rowSums(manager_local_pnl))
+x1excl<-structure(
+    t(apply(manager_local_pnl%*%(1-diag(ncol(manager_local_pnl))),2,pnl_stats)),
+    dimnames=list(colnames(manager_local_pnl),names(x0))
+)
+x1only<-structure(
+    t(apply(manager_local_pnl,2,pnl_stats)),
+    dimnames=list(colnames(manager_local_pnl),names(x0))
+)
+x2<-(rowSums(cor(manager_local_pnl)-diag(ncol(manager_local_pnl)))/(ncol(manager_local_pnl)-1))[n]
+x3<-table(pair2pm(colnames(pair_local_pnl)))
+
+x4<-apply(abs(luke_manager_exposure),2,sum)[n]
+
+x5<-split(colnames(luke_pair_days),pair2pm(luke_pair_days))
+x6<-mapply(function(p)abs(luke_pair_days[,p,drop=FALSE]),x5,SIMPLIFY=FALSE)
+
+nz_fun<-function(fun)function(x)fun(nz(x))
+
+x7<-cor(apply(pair_local_pnl,2,roll_mean,7))
+x8<-mapply(function(pm){
+  i<-which(pair2pm(colnames(x7)) %in% pm)
+  mean(x7[i,i][which(row(diag(i))>col(diag(i)),arr.ind = TRUE)])
+},n)[n]
+
+x9only<-structure(
+    t(apply(pair_local_pnl,2,pnl_stats)),
+    dimnames=list(colnames(pair_local_pnl),names(x0))
+)
+x10<-mapply(function(pm){
+  i<-which(pair2pm(rownames(x9only)) %in% pm)
+  sum(x9only[i,"vol"])
+},n)[n]
+
+x11<-mapply(function(p){
+  the_pair<-cbind(long=pmax(p,0),short=pmax(-p,0))
+  if(!all(colSums(the_pair)>0))return(0)
+  pair_perf<-portfolio_local_tret%*%the_pair
+  cor(pair_perf)[1,2]
+},data.table(luke_pair_exposure))
+x12<-mapply(mean,split(x11,pair2pm(x11)))[n]
+
+
+x13<-cbind(rowSums(pmax(luke_pair_exposure,0)),rowSums(pmax(-luke_pair_exposure,0)))
+x14<-portfolio_local_tret%*%x13
+
+manager_risk1<-data.table(
+  manager=structure(
+    paste0("\\cellcolor{",colnames(manager_local_pnl),"!20}",colnames(manager_local_pnl)),
+    hdr="Manager"
+  ),
+  pairs=structure(as.integer(x3[colnames(manager_local_pnl)]),hdr=tbl(c("Pair","\\#"),align="l")),
+  gross=structure(round(100*x4[n],digits=1),hdr=tbl(c("gross"),align="l")),
+  volsum=structure(x10,hdr=tbl(c("$\\Sigma$","$\\sigma$"),align="l")),
+  volonly=structure(x1only[,"vol"],hdr=tbl(c("S","$\\sigma$"),align="l")),
+  volcontrib=structure(
+    round(x0["vol"]-x1excl[,"vol"],digits=2),hdr=tbl(c("M","$\\sigma$"),align="l")
+  ),
+  ddonly=structure(x1only[,"dd"],hdr=tbl(c("S","draw"),align="c")),
+  ddcontrib=structure(
+    round(x0["dd"]-x1excl[,"dd"],digits=2),hdr=tbl(c("M","draw"),align="l")
+  ),
+  cor_across=structure(round(100*x2,digits=1),hdr=tbl(c("cross","PM","$\\rho$"),align="l")),
+  cor_inside=structure(round(100*x8,digits=1),hdr=tbl(c("PM","pair","$\\rho$"),align="l")),
+  cor_LS_mean=structure(
+    round(100*mapply(mean,split(x11,pair2pm(x11)))[n],digits=1),
+    hdr=tbl(c("L/S","$\\rho$","mean"),align="l")
+  ),
+  cor_LS_median=structure(
+    round(100*mapply(median,split(x11,pair2pm(x11)))[n],digits=1),
+    hdr=tbl(c("L/S","$\\rho$","median"),align="l")
+  ),
+  cor_LS_min=structure(
+    round(100*mapply(min,split(x11,pair2pm(x11)))[n],digits=1),
+    hdr=tbl(c("L/S","$\\rho$","min"),align="l")
+  )
+)[rev(order(volonly)),.(
+  manager=do.call(structure,c(list(c(manager,"ALL")),attributes(manager))),
+  pairs=do.call(structure,c(list(c(pairs,sum(pairs))),attributes(pairs))),
+  gross=do.call(structure,c(list(c(gross,sum(gross))),attributes(gross))),
+  volsum=do.call(structure,c(list(c(volsum,sum(volsum))),attributes(volsum))),
+  volonly=do.call(structure,c(list(c(volonly,sum(volonly))),attributes(volonly))),
+  volcontrib=do.call(structure,c(list(c(volcontrib,sum(volcontrib))),attributes(volcontrib))),
+  ddonly=do.call(structure,c(list(c(ddonly,sum(ddonly))),attributes(ddonly))),
+  ddcontrib=do.call(structure,c(list(c(ddcontrib,sum(ddcontrib))),attributes(ddcontrib))),
+  cor_across=do.call(structure,c(list(c(cor_across,round(mean(cor_across),digits=1))),attributes(cor_across))),
+  cor_inside=do.call(structure,c(list(c(cor_inside,round(mean(cor_inside),digits=1))),attributes(cor_inside))),
+  cor_LS_mean=do.call(structure,c(list(c(cor_LS_mean,round(mean(cor_LS_mean),digits=1))),attributes(cor_LS_mean))),
+  cor_LS_median=do.call(structure,c(list(c(cor_LS_median,round(mean(cor_LS_median),digits=1))),attributes(cor_LS_median))),
+  cor_LS_min=do.call(structure,c(list(c(cor_LS_min,round(mean(cor_LS_min),digits=1))),attributes(cor_LS_min)))
+)]
+
+
+x6max<-mapply(function(m)apply(m,2,max),x6[n],SIMPLIFY=FALSE)
+
+manager_risk2<-data.table(
+  manager=structure(
+    paste0("\\cellcolor{",n,"!20}",n),
+    hdr="Manager"
+  ),
+  pairs=structure(as.integer(x3[colnames(manager_local_pnl)]),hdr=tbl(c("Pair","count"),align="l")),
+  max_adv=structure(round(mapply(max,x6[n]),digits=1),hdr=tbl(c("max","days"),align="l")),
+  mean_adv=structure(round(mapply(nz_fun(mean),x6[n]),digits=1),hdr=tbl(c("avg","days"),align="l")),
+  median_adv=structure(round(mapply(nz_fun(median),x6[n]),digits=1),hdr=tbl(c("mid","days"),align="l")),
+  below1_adv=structure(mapply(function(m)sum(m>0&m<1),x6max[n]),hdr=tbl(c("0-1","days"),align="l")),
+  above1_adv=structure(mapply(function(m)sum(m>1),x6max[n]),hdr=tbl(c("1+","days"),align="l")),
+  above2_adv=structure(mapply(function(m)sum(m>2),x6max[n]),hdr=tbl(c("2+","days"),align="l")),
+  above3_adv=structure(mapply(function(m)sum(m>3),x6max[n]),hdr=tbl(c("3+","days"),align="l")),
+  above5_adv=structure(mapply(function(m)sum(m>5),x6max[n]),hdr=tbl(c("5+","days"),align="l")),
+  above10_adv=structure(mapply(function(m)sum(m>10),x6max[n]),hdr=tbl(c("10+","days"),align="l")),
+  above20_adv=structure(mapply(function(m)sum(m>20),x6max[n]),hdr=tbl(c("20+","days"),align="l"))
+)[rev(order(mean_adv)),]
+
+mr1_latex<-ntable(
+  df=manager_risk1,
+  add_rownames=FALSE,
+  title=paste(
+    "Current",
+    selected_sheet,
+    "manager volatility, drawdown contributions: {\\bf $\\Sigma$}um, {\\bf S}tandalone, {\\bf M}arginal"
+   ),
+  align="l",
+  halign="c"
+)
+
+@
+
+% define colors for managers
+\Sexpr{paste(manager_col$latex_col_def,collapse="")}
+
+\begin{center}
+\Sexpr{mr1_latex}
+\end{center}
+
+\vskip 5mm
+
+\begin{center}
+\Sexpr{ntable(
+  df=manager_risk2,
+  add_rownames=FALSE,
+  title=paste("Current",selected_sheet,"manager liquidity risk"),
+  align="l",
+  halign="c"
+)}
+\end{center}
+\newpage
+\section{\Sexpr{the_date} \Sexpr{selected_sheet} Manager correlations}
+%
+% manager correlation histogram
+%
+\begin{center}
+\Sexpr{make_plot(
+  hist(
+    cor(manager_local_pnl)[
+      which(row(diag(ncol(manager_local_pnl)))>col(diag(ncol(manager_local_pnl))),arr.ind = TRUE)
+    ],
+    breaks=10,
+    main="Histogram of daily manager P&L correlation",
+    ylab="Manager pair count",
+    xlab="Correlation"
+  )
+,width="20cm",height="20cm")}
+\end{center}
+
+\newpage
+\section{\Sexpr{the_date} \Sexpr{selected_sheet} Manager factor exposures}
+
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+
+split_plot<-function(
+  x,
+  f,
+  factor_state_fun=sign,
+  state_col=rainbow(length(all_states),alpha=0.5),
+  cex=2
+){
+  
+  all_states<-sort(unique(factor_state_fun(f)))
+  #state_col<-rainbow(length(all_states),alpha=0.5)
+  states<-match(factor_state_fun(f),all_states)
+  the_split<-data.table(
+    state=states,
+    value=x,
+    factor=f,
+    x=do.call(c,split(seq_along(states),states)),
+    y=do.call(c,mapply(cumsum,split(x,states),SIMPLIFY=FALSE)),
+    col=do.call(c,split(state_col[states],states))
+  )
+  par(mai=c(0.1,0.1,0.1,0.1))
+  plot(
+    x=the_split$x,
+    y=the_split$y,
+    col=the_split$col,
+    pch=19,
+    cex=cex,
+    axes=FALSE,
+    xlab="",
+    ylab=""
+  )
+  par(mai=c(1.02,0.82,0.82,0.42))
+  the_split
+}
+
+
+pms<-colnames(manager_local_pnl)
+fs<-c(
+  "SMX Index","UKX Index","MCX Index",
+  "SXXP Index",
+  "MSEEMOMO Index","MSEEGRW Index","MSEEVAL Index",
+  "USO US Equity","EEM US Equity","TLT US Equity",
+  "COINXBE SS Equity"
+)
+pic_w<-paste0(round(18/(length(pms)+1),digits=1),"cm")
+pic_h<-paste0(round(21/length(fs),digits=1),"cm")
+split_pics<-data.table(
+    factors=sub("( Index$)|( Equity$)","",fs),
+    t(structure(outer(pms,fs,FUN=Vectorize(function(pm,fac){
+      res<-make_plot(
+        x0<-split_plot(
+          manager_local_pnl[,pm],
+          factor_local_tret[,fac],
+          state_col=c(rgb(1,0,0,0.5),rgb(0.2,0.2,0.2,0.5),rgb(0,1,0,0.5))
+        ),
+        width=pic_w,
+        height=pic_h
+      )
+      res
+    })),dimnames=list(pms,gsub(" Index$","",fs))))
+)
+split_align=paste0("m{",pic_w,"}")
+@
+
+\begin{center}
+\Sexpr{ntable(
+  df=split_pics,
+  add_rownames=FALSE,
+  align=split_align,
+  halign="c"
+)}
+\end{center}
+\newpage
+\section{\Sexpr{the_date} \Sexpr{selected_sheet} Pairs}
+
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+x0<-10000*apply(abs(luke_pair_exposure),2,sum)
+x1<-sort(x0)
+x2<-rev(sort(round(mapply(sum,split(x1,pair2pm(x1))),digits=0)))
+x3<-paste0(names(x2),"  ",x2)
+x4<-pmin(x1*pair_f4v[names(x1)],500)
+@
+\begin{center}
+\Sexpr{make_plot(expression(
+  ylim<-c(-100,1.2*max(c(x1,x4))),
+  xlim<-c(0,length(x1)+1),
+  plot(
+    y=round(x1,digits=1),
+    x=seq_along(x1),
+    ylab="Gross, basis points",
+    xlab="Rank of pair gross (smallest gross has smallest rank)",
+    main="",
+    col=pm_col[pair2pm(x1)],
+    pch=19,
+    cex=2,
+    ylim=ylim,
+    xlim=xlim
+  ),
+  points(
+    x=seq_along(x4),
+    y=x4,
+    col=pm_col[pair2pm(x4)],
+    pch=15,
+    cex=2
+  )
+),width="20cm",height="20cm")}
+\end{center}
+
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+x0<-apply(abs(luke_pair_days),2,max)
+x1<-gsub("[0-9]{1,4}$","",colnames(luke_pair_days))
+x2<-rev(sort(round(mapply(mean,split(x0,x1)),digits=1)))
+x3<-paste0(names(x2),"  ",x2)
+@
+\begin{center}
+\Sexpr{make_plot(expression(
+  plot(
+    pmin(round(sort(x0),digits=1),5),
+    ylab="Days of volume to achieve gross on least liquid leg",
+    xlab="Rank of pair position in days of ADV (smallest gross has smallest rank)",
+    main=paste(selected_sheet,"pair position as multiple of ADV"),
+    col=pm_col[pair2pm(sort(x0))],
+    pch=19,
+    cex=2
+  ),
+  legend(
+    x=length(x0)*0.05,
+    y=max(pmin(x0,5))*0.95,
+    legend=x3,
+    fill=pm_col[names(x2)]
+  )
+),width="20cm",height="20cm")}
+\end{center}
+
+
+%
+%
+%
+\begin{center}
+\Sexpr{make_plot(
+  plot(
+    sort(apply(pair_local_pnl,2,sd)),
+    ylab="stdev of pair daily P&L",
+    xlab="Pair",
+    main="Pair risk",
+    col=pm_col[pair2pm(sort(apply(pair_local_pnl,2,sd)))],
+    pch=19,
+    cex=2
+  )
+,width="20cm",height="20cm")}
+\end{center}
+
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+x0<-10000*apply(abs(luke_pair_exposure),2,sum)
+pair_local_pnl_sd<-apply(pair_local_pnl,2,sd)
+x1<-ifelse(pair_local_pnl_sd>0,10000*pair_local_pnl_sd,0)
+x2<-ifelse(x0>0,x1/x0,0)
+@
+
+\begin{center}
+\Sexpr{make_plot(expression(
+  plot(
+    x=x0,
+    y=x1,
+    ylab="stdev of pair daily P&L, bps of AUM",
+    xlab="gross, bps of AUM",
+    main="Pair risk vs pair gross.",
+    col=pm_col[pair2pm(x0)],
+    pch=19,
+    cex=3,
+    xlim=c(0,max(x0)),
+    ylim=c(0,max(x1))
+  ),
+  abline(a=0,b=mean(x2),col="red"),
+  legend(
+    x=min(x0)+diff(range(x0))*0.0,
+    y=min(x1)+diff(range(x1))*0.95,
+    legend=paste0(
+      "#",mapply(length,split(names(x0),pair2pm(x0)))," ",
+      unique(pair2pm(x0))," ",
+      round(1000*mapply(mean,split(x1/x0,pair2pm(x0))),digits=1)
+    ),
+    fill=pm_col[unique(pair2pm(x0))]
+  )
+),width="20cm",height="20cm")}
+\end{center}
+
+
+
+\begin{center}
+\Sexpr{make_plot(
+  plot(
+    marginal_pair_sd,
+    ylab="marginal pair sddev",
+    xlab="Pair",
+    col=pm_col[pair2pm(marginal_pair_sd)],
+    pch=19,
+    cex=2
+  )
+,width="20cm",height="20cm")}
+\end{center}
+
+
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+p_cor_h1<-expression(local({
+  i<-which(apply(pair_local_pnl,2,sd)>0)
+  hist(
+    cor(pair_local_pnl[,i])[
+      which(row(diag(ncol(pair_local_pnl[,i])))>col(diag(ncol(pair_local_pnl[,i]))),arr.ind = TRUE)
+    ],
+    breaks=100,
+    main="Histogram of daily pair P&L correlation",
+    ylab="Pair count",
+    xlab="Correlation"
+  )
+}))
+@
+\begin{center}
+\Sexpr{make_plot(p_cor_h1,width="20cm",height="20cm")}
+\end{center}
+
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+
+force_flag=TRUE
+
+make_factor_split<-function(
+  x,
+  f,
+  factor_state_fun=sign,
+  state_col=rainbow(length(all_states),alpha=0.5)
+){
+  all_states<-sort(unique(factor_state_fun(f)))
+  states<-match(factor_state_fun(f),all_states)
+  the_split<-data.table(
+    state=states,
+    value=x,
+    factor=f,
+    x=do.call(c,split(seq_along(states),states)),
+    y=do.call(c,mapply(cumsum,split(x,states),SIMPLIFY=FALSE)),
+    col=do.call(c,split(state_col[states],states))
+  )
+  the_split
+}
+
+
+pictures<-mapply(function(pair){
+  list(
+    price=plot2matrix(
+          y=cumsum(pair),
+          x=seq_along(pair),
+          col=rep("blue",length(pair))
+    ),
+    ukx_split=local({
+      fs<-make_factor_split(
+        pair,
+        factor_local_tret[,"UKX Index"],
+        state_col=c("red",rgb(0.5,0.5,0.5),"green")
+      )
+      plot2matrix(x=fs$x,y=fs$y,col=fs$col)
+    }),
+    mcx_split=local({
+      fs<-make_factor_split(
+        pair,
+        factor_local_tret[,"MCX Index"],
+        state_col=c("red",rgb(0.5,0.5,0.5),"green")
+      )
+      plot2matrix(x=fs$x,y=fs$y,col=fs$col)
+    }),
+    smx_split=local({
+      fs<-make_factor_split(
+        pair,
+        factor_local_tret[,"SMX Index"],
+        state_col=c("red",rgb(0.5,0.5,0.5),"green")
+      )
+      plot2matrix(x=fs$x,y=fs$y,col=fs$col)
+    }),
+    mseemomo_split=local({
+      fs<-make_factor_split(
+        pair,
+        factor_local_tret[,"MSEEMOMO Index"],
+        state_col=c("red",rgb(0.5,0.5,0.5),"green")
+      )
+      plot2matrix(x=fs$x,y=fs$y,col=fs$col)
+    }),
+    mseeval_split=local({
+      fs<-make_factor_split(
+        pair,
+        factor_local_tret[,"MSEEVAL Index"],
+        state_col=c("red",rgb(0.5,0.5,0.5),"green")
+      )
+      plot2matrix(x=fs$x,y=fs$y,col=fs$col)
+    }),
+    mseegrw_split=local({
+      fs<-make_factor_split(
+        pair,
+        factor_local_tret[,"MSEEGRW Index"],
+        state_col=c("red",rgb(0.5,0.5,0.5),"green")
+      )
+      plot2matrix(x=fs$x,y=fs$y,col=fs$col)
+    }),
+    uso_split=local({
+      fs<-make_factor_split(
+        pair,
+        factor_local_tret[,"USO US Equity"],
+        state_col=c("red",rgb(0.5,0.5,0.5),"green")
+      )
+      plot2matrix(x=fs$x,y=fs$y,col=fs$col)
+    }),
+    tlt_split=local({
+      fs<-make_factor_split(
+        pair,
+        factor_local_tret[,"TLT US Equity"],
+        state_col=c("red",rgb(0.5,0.5,0.5),"green")
+      )
+      plot2matrix(x=fs$x,y=fs$y,col=fs$col)
+    }),
+    msstersi_split=local({
+      fs<-make_factor_split(
+        pair,
+        factor_local_tret[,"MSSTERSI Index"],
+        state_col=c("red",rgb(0.5,0.5,0.5),"green")
+      )
+      plot2matrix(x=fs$x,y=fs$y,col=fs$col)
+    }),
+    coinxbe_split=local({
+      fs<-make_factor_split(
+        pair,
+        factor_local_tret[,"COINXBE SS Equity"],
+        state_col=c("red",rgb(0.5,0.5,0.5),"green")
+      )
+      plot2matrix(x=fs$x,y=fs$y,col=fs$col)
+    }),
+    duke_split=local({
+      fs<-make_factor_split(
+        pair,
+        rowSums(pair_local_pnl),
+        state_col=c("red",rgb(0.5,0.5,0.5),"green")
+      )
+      plot2matrix(x=fs$x,y=fs$y,col=fs$col)
+    })
+  )
+},
+pair=data.table(pair_local_pnl),
+SIMPLIFY=FALSE
+)
+
+features<-mapply(function(p){
+  t(mapply(function(x)as.vector(col2rgb(x[[p]])),pictures))
+},Reduce(union,mapply(names,pictures,SIMPLIFY=FALSE)),SIMPLIFY=FALSE)
+
+tsne<-mapply(function(f){
+  Rtsne(
+    f,
+    perplexity=20,
+    pca=TRUE,
+    stop_lying_iter=10,
+    max_iter=1000,
+    check_duplicates=FALSE
+  )
+},features,SIMPLIFY=FALSE)
+
+
+plot_tsne<-function(
+  fn,
+  tsne,
+  pictures,
+  text_col="red",
+  text_cex=0.75,
+  text_fun=function(x)gsub("_","\n",x)
+){
+  k<-sqrt(floor(sqrt(nrow(tsne$Y))+1)^2)
+  m<-diag(k)
+  gx<-as.vector(col(m))
+  gy<-as.vector(row(m))
+  tx<-rescale(tsne$Y[,1],range(gx))
+  ty<-rescale(tsne$Y[,2],range(gy))
+  tsnex<-matrix(tx,ncol=1)[,rep(1,length(gx))]
+  tsney<-matrix(ty,ncol=1)[,rep(1,length(gx))]
+  gridx<-matrix(gx,nrow=1)[rep(1,length(tx)),]
+  gridy<-matrix(gy,nrow=1)[rep(1,length(tx)),]
+  dx<-(tsnex-gridx)^2
+  dy<-(tsney-gridy)^2
+  d<-dx+dy
+  t2g <- solve_LSAP(d)
+  par(mai=c(0,0,0,0))
+  plot(
+    x=c(0.75,gx,ncol(m)+0.25),
+    y=c(0.75,gy,nrow(m)+.25),
+    col="white",
+    axes=FALSE,
+    xlab="",
+    ylab="",
+    main=""
+  )
+  for(i in seq_along(pictures))rasterImage(
+    image=pictures[[i]][[fn]],
+    xleft=gx[t2g[i]]-0.49,
+    ybottom=gy[t2g[i]]-0.49,
+    xright=gx[t2g[i]]+0.49,
+    ytop=gy[t2g[i]]+0.49,
+    interpolate=TRUE
+  )
+  abline(
+    h=setdiff(unique(gx),range(gx)[1])-0.5,
+    v=setdiff(unique(gy),range(gy)[1])-0.5,
+    col=rgb(0.5,0.5,0.5,1)
+  )
+  if(!is.null(text_col))text(
+    x=gx[t2g]-0.49,
+    y=gy[t2g]+0.49,
+    labels=text_fun(names(pictures)),
+    cex=text_cex,
+    col=text_col,
+    adj=c(0,1)
+  )
+}
+
+make_tsne_latex_table<-function(title,fn,tsne,pictures,text_col="blue")paste0(
+  "\\begin{center}\n",
+  "\\begin{tabular}{ m{1cm} | m{19cm} |}\n",
+  "\\hline\n",
+  "\\rotatebox{90}{\\bf ",
+  tbl(title)
+  ,"} & \n",
+  make_plot(
+    plot_tsne(fn,tsne[[fn]],pictures,text_col=text_col),
+    width="19cm",
+    height="19cm",
+    envir=environment()
+  ),
+  "\\\\ \n",
+  "\\hline\n",
+  "\\end{tabular}\n",
+  "\\end{center}\n",
+  collapse=""
+)
+
+all_feature_tables<-paste(mapply(function(f,tsne,pictures){
+  make_tsne_latex_table(
+    title=latexTranslate(f),
+    fn=f,
+    tsne=tsne,
+    pictures=pictures,
+    text_col="black")
+},names(tsne),MoreArgs = list(tsne=tsne,pictures=pictures)),collapse="\n")
+
+
+
+all_pictures<-mapply(
+  function(i){
+    parts<-strsplit(i,"_",fixed=TRUE)[[1]]
+    list(all=pictures[[c(parts[1],paste0(tail(parts,-1),collapse="_"))]])
+  },
+  kronecker(
+    names(pictures),
+    Reduce(union,mapply(names,pictures,SIMPLIFY=FALSE)),
+    FUN=function(x,y)paste(x,y,sep="_")
+  ),
+  SIMPLIFY=FALSE
+)
+all_features<-do.call(rbind,mapply(function(x)as.vector(col2rgb(x$all)),all_pictures,SIMPLIFY = FALSE))
+all_tsne<-Rtsne(
+    all_features,
+    perplexity=20,
+    pca=TRUE,
+    stop_lying_iter=10,
+    max_iter=1000,
+    check_duplicates=FALSE
+)
+
+@
+
+\newpage
+\section{\Sexpr{the_date} \Sexpr{selected_sheet} Pair layout}
+
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+@
+
+\Sexpr{all_feature_tables}
+
+
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+@
+
+\newpage
+\section{\Sexpr{the_date} \Sexpr{selected_sheet} everything}
+
+\begin{center}
+\Sexpr{make_plot(plot_tsne("all",all_tsne,all_pictures,text_cex=0.2,text_col="black"),width="20cm",height="20cm")}
+\end{center}
+
+
+\end{document}

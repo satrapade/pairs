@@ -1,0 +1,740 @@
+%
+% scrape status
+%
+
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+# required packages
+require(Hmisc)
+require(digest)
+require(stringi)
+require(readxl)
+require(scales)
+require(data.table)
+require(Matrix)
+require(Matrix.utils)
+require(clue)
+require(Rtsne)
+
+source(
+  "https://raw.githubusercontent.com/satrapade/utility/master/utility_functions.R"
+)
+source(
+  "https://raw.githubusercontent.com/satrapade/latex_utils/master/latex_helpers_v2.R"
+)
+
+x<-list.files(
+  path="N:/Depts/Share/UK Alpha Team/Analytics/risk_reports/figure",
+  pattern="*.pdf",
+  full.names=TRUE
+)
+if(length(x)>0)file.remove(x)
+
+#
+# daily data
+#
+
+data_loaded<-fread("N:/Depts/Share/UK Alpha Team/Analytics/market_data/data_loaded.csv")
+  for(i in 1:nrow(data_loaded)){
+    if(data_loaded$class[i]!="matrix")next;
+    assign(data_loaded$name[i],load_matrix(data_loaded$fn[i],row_names = TRUE))
+}
+rm("i")
+
+#
+# daily data
+#
+
+data_directory<-"N:/Depts/Share/UK Alpha Team/Analytics/duke_summary"
+prefix<-"duke_"
+row_names<-TRUE
+# pair-level data
+pair_exposure     <- load_matrix(paste0(data_directory,"/",prefix,"pair_exposure.csv"),row_names=row_names)
+pair_days         <- load_matrix(paste0(data_directory,"/",prefix,"pair_days.csv"),row_names=row_names)
+pair_local_pnl    <- load_matrix(paste0(data_directory,"/",prefix,"pair_local_pnl.csv"),row_names=row_names)
+pair_long_pnl     <- load_matrix(paste0(data_directory,"/",prefix,"pair_long_pnl.csv"),row_names=row_names)
+pair_short_pnl    <- load_matrix(paste0(data_directory,"/",prefix,"pair_short_pnl.csv"),row_names=row_names)
+drop_one_pair_pnl <- load_matrix(paste0(data_directory,"/",prefix,"drop_one_pair_pnl.csv"),row_names=row_names)
+
+# manager-level data
+manager_exposure          <- load_matrix(paste0(data_directory,"/",prefix,"manager_exposure.csv"),row_names=row_names)
+manager_local_pnl         <- load_matrix(paste0(data_directory,"/",prefix,"manager_local_pnl.csv"),row_names=row_names)
+drop_one_manager_pnl      <- load_matrix(paste0(data_directory,"/",prefix,"drop_one_manager_pnl.csv"),row_names=row_names)
+manager_drop_one_pair_pnl <- load_matrix(paste0(data_directory,"/",prefix,"manager_drop_one_pair_pnl.csv"),row_names=row_names)
+
+# fund-level data
+exposure        <- load_matrix(paste0(data_directory,"/",prefix,"exposure.csv"),row_names=row_names)
+long_exposure   <- load_matrix(paste0(data_directory,"/",prefix,"long_exposure.csv"),row_names=row_names)
+short_exposure  <- load_matrix(paste0(data_directory,"/",prefix,"short_exposure.csv"),row_names=row_names)
+local_pnl       <- load_matrix(paste0(data_directory,"/",prefix,"local_pnl.csv"),row_names=row_names)
+
+# color assigment
+manager_col <- fread("N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/manager_col.csv")
+pair_col    <- fread("N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/pair_col.csv")
+
+#determine pairs, managers and pair-to-manager mapping
+pairs<-sort(unique(colnames(pair_exposure)))
+managers<-sort(unique(colnames(manager_exposure)))
+manager_pairs<-structure(
+  diag(length(managers))[match(gsub("[0-9]+","",pairs),managers),],
+  dimnames=list(pairs,managers)
+)
+
+keys<-fread("N:/Depts/Share/UK Alpha Team/Analytics/pair_icons/keys.csv")
+images<-fread("N:/Depts/Share/UK Alpha Team/Analytics/pair_icons/images.csv")
+
+icon<-function(icon_name,icon_table=images,height="2cm",width="3cm"){
+  icon_table[
+    ,
+    .SD,
+    keyby=name
+  ][
+    icon_name,
+    paste0("\\includegraphics[height=",height,",width=",width,",valign=T]{",file,"}")
+  ]
+}
+
+#
+# intraday data
+#
+
+intraday<-fread("N:/Depts/Share/UK Alpha Team/Analytics/market_data/intraday.csv")
+intraday_perf<-as.matrix(fread("N:/Depts/Share/UK Alpha Team/Analytics/market_data/intraday_perf.csv"))
+bar_intervals<-fread("N:/Depts/Share/UK Alpha Team/Analytics/market_data/bar_intervals.csv")
+intraday_pair<-as.matrix(fread("N:/Depts/Share/UK Alpha Team/Analytics/market_data/intraday_pair.csv"))
+intraday_pair_longs<-as.matrix(fread("N:/Depts/Share/UK Alpha Team/Analytics/market_data/intraday_pair_longs.csv"))
+intraday_pair_shorts<-as.matrix(fread("N:/Depts/Share/UK Alpha Team/Analytics/market_data/intraday_pair_shorts.csv"))
+
+last_bar<-tail(which(bar_intervals$day==max(bar_intervals$day)),1)
+first_bar<-head(which(bar_intervals$day==max(bar_intervals$day)),1)
+
+row_size2universe<-function(x,u){
+  m<-matrix(0,nrow=length(u),ncol=ncol(x),dimnames=list(u,colnames(x)))
+  i<-match(rownames(x),u)
+  j<-match(colnames(x),colnames(m))
+  m[i,j]<-as.matrix(x)
+  m
+}
+
+mc<-function(x,p="*",rows=1:nrow(x),cols=which(grepl(p,colnames(x))))x[rows,cols,drop=FALSE]
+
+make_pair<-function(
+  w,
+  intraday_perf=get("intraday_perf",envir=.GlobalEnv)
+){
+  new_pair<-matrix(
+    0,
+    nrow=ncol(intraday_perf),
+    ncol=1,
+    dimnames=list(colnames(intraday_perf),NULL)
+  )
+  res<-do.call(rbind,mapply(function(n,w){
+    i<-which(grepl(paste0("^",n),rownames(new_pair)))
+    j<-rep(1,length(i))
+    ij<-structure(
+      cbind(i,j,rep(w,length(i))),
+      dimnames=list(rownames(new_pair)[i],c("i","j","w"))
+    )
+    ij
+  },n=names(w),w=w,SIMPLIFY=FALSE))
+  new_pair[res[,c(1,2)]]<-res[,3]
+  pnl<-structure(
+    intraday_perf%*%new_pair,
+    dimnames=list(rownames(intraday_perf),"new_pair")
+  )
+  structure(pnl,.Names=attributes(intraday_perf)$datetime)
+}
+
+
+pair_exposure<-local({
+  res<-load_matrix(
+    "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_pair_exposure.csv",
+    row_names=TRUE
+  )
+  res[rownames(res) %in% colnames(intraday_perf),]
+})
+
+manager_exposure<-local({
+  res<-load_matrix(
+    "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_manager_exposure.csv",
+    row_names=TRUE
+  )
+  res[rownames(res) %in% colnames(intraday_perf),]
+})
+
+
+plot_intraday_pnl<-function(
+  pm="*",
+  intraday_pair=get("intraday_pair",envir=.GlobalEnv),
+  bar_intervals=get("bar_intervals",envir=.GlobalEnv),
+  now=max(intraday$times),
+  ndx=grepl(paste0("^",pm),colnames(intraday_pair)),
+  bars=which(bar_intervals$day>0),
+  ylab="P&L (bps)",
+  do_plot=TRUE
+){
+  pnl<-10000*rowSums(intraday_pair[bars,ndx,drop=FALSE])
+  cumpnl<-cumsum(pnl)
+  if(!do_plot)return(structure(pnl,.Names=attributes(intraday_pair)$datetime))
+  plot(
+    0,
+    type="n",
+    xlim=c(1,length(pnl)),
+    ylim=c(min(cumpnl),max(cumpnl)),
+    axes=FALSE,
+    main=paste(pm,":",round(sum(pnl),digits=0)),
+    ylab=ylab,
+    xlab=paste("period ending",now)
+  )
+  lines(cumpnl,lwd=3,col=rgb(0,0,1,0.33))
+  day_edge<-which(abs(diff(bar_intervals$day[bars]))>0)+1
+  if(length(day_edge)>0)abline(v=day_edge,col=rgb(1,0,0,0.25))
+  day_name<-stri_sub(weekdays(as.Date(bar_intervals$date[bars])),1,3)
+  if(length(day_edge)>0){
+    day_loc<-day_edge-c(day_edge[1]/2,diff(day_edge)/2)
+    axis(1,at=day_loc,labels=day_name[day_loc])
+  }else{
+    axis(1,at=length(bars)/2,labels = day_name[1])
+  }
+  axis(2)
+  #structure(pnl,.Names=attributes(intraday_pair)$datetime)
+}
+
+the_pairs<-colnames(mc(pair_exposure,"MC[0-9]+"))
+the_manager<-unique(gsub("[0-9]+$","",the_pairs))
+  
+days_in_data<-sort(unique(bar_intervals$date[bar_intervals$day>0]))
+
+summary_table<-data.table(
+  pair=the_pairs,
+  all=structure(
+    format=quote(sign_color(n_fmt(round(this,digits=1)),this)),
+    mapply(function(p){
+      pnls<-100000*colSums(mc(intraday_pair,paste0("^",p)))
+      sum(pnls)
+    },p=the_pairs)
+  ),
+  longs=structure(
+    format=quote(sign_color(n_fmt(round(this,digits=1)),this)),
+    mapply(function(p){
+      pnls<-100000*colSums(mc(intraday_pair_longs,paste0("^",p)))
+      sum(pnls)
+    },p=the_pairs)
+  ),
+  shorts=structure(
+    format=quote(sign_color(n_fmt(round(this,digits=1)),this)),
+    mapply(function(p){
+      pnls<-100000*colSums(mc(intraday_pair_shorts,paste0("^",p)))
+      sum(pnls)
+    },p=the_pairs)
+  ),
+  do.call(data.table,mapply(function(i)structure(
+    format=quote(sign_color(n_fmt(round(this,digits=1)),this)),
+    hdr=bquote(stri_sub(.(i),6,-1)),
+    mapply(function(p){
+      the_day<-i
+      ndx<-bar_intervals$date==the_day
+      pnls<-100000*colSums(mc(intraday_pair,paste0("^",p))[ndx,,drop=FALSE])
+      sum(pnls)
+    },p=the_pairs)
+  ),days_in_data,SIMPLIFY=FALSE))
+)
+
+
+
+backtest_plot_table<-data.table(
+  pair=structure(
+    hdr="{\\bf Pair}",
+    the_pairs
+  ),
+  constituents=structure(
+    hdr="{\\bf Exposure}",
+    format=quote(paste0("{\\tt ",this,"}")),
+    data.table(mapply(
+      do.call,
+      what=list(
+        pair=function(ndx)colnames(pair_exposure)[ndx[,2]],
+        ticker=function(ndx)gsub(
+          "( Equity)|( Index)","",
+          rownames(pair_exposure)[ndx[,1]]
+        ),
+        full_ticker=function(ndx)rownames(pair_exposure)[ndx[,1]]
+      ),
+      MoreArgs = list(
+        args=list(which(abs(pair_exposure[,the_pairs])>0,arr.ind = TRUE))
+      )
+    ))[,.(constituent=paste0(
+        mapply(function(s)ifelse(sign(sum(pair_exposure[s,the_pairs]))>0,"+","-"),full_ticker),
+        ticker,
+        collapse="\\newline "
+    )),keyby=pair]$constituent
+  ),
+  do.call(data.table,mapply(function(i)structure(
+    hdr=tbl(
+        c(
+          stri_sub(weekdays(as.Date(i)),1,3),
+          stri_sub(i,6,-1)
+        ),
+        align="@{}c@{}"
+    ),
+    mapply(function(p){
+      the_day<-i
+      if(is.na(the_day))return(0)
+      ndx<-bar_intervals$date==the_day & bar_intervals$day>0
+      if(sum(ndx)<1){
+        res<-make_plot(expression({
+          plot(NA,type="n",xlab="",ylab="",xlim=c(0,1),ylim=c(0,1),axes=FALSE)
+          text(0.5,0.5,labels="No data",cex=5)
+        }),width="2cm",height="2cm")
+        return(res)
+      }
+      pnls<-cumsum(10000*rowSums(mc(intraday_pair,paste0("^",p))[ndx,,drop=FALSE]))
+      all_pnls<-cumsum(10000*rowSums(mc(intraday_pair,paste0("^",p))))
+      day_pnl<-round(10*tail(pnls,1),digits=1)
+      ylim<-c(min(pnls),max(pnls))
+      make_plot(expression({
+        par(mai=c(0,0,0,0))
+        plot(pnls,type="l",xlab="",ylab="",axes=FALSE,lwd=30,col=rgb(0,0,1,0.33),ylim=ylim)
+        abline(h=0,col="red")
+        text(
+          x=length(pnls)/2,
+          y=mean(ylim),
+          labels=ifelse(day_pnl>0,paste0("+",day_pnl),paste0("-",abs(day_pnl))),
+          col=ifelse(day_pnl>0,rgb(0,0.5,0),rgb(0.5,0,0)),
+          font=2,
+          cex=10
+        )
+      }),width="2cm",height="2cm",envir=environment())
+    },p=the_pairs)
+  ),days_in_data,SIMPLIFY=FALSE))
+)
+
+
+#
+# earnings announcement
+#
+
+require(data.table)
+exposure_ticker<-rownames(pair_exposure)[which(rowSums(abs(pair_exposure[,the_pairs,drop=FALSE]))>0)]
+exposure_ticker_class<-ticker_class(exposure_ticker)
+exposure_equity_ticker<-exposure_ticker[exposure_ticker_class=="equity|nomatch"]
+exposure_index_ticker<-exposure_ticker[exposure_ticker_class=="index|nomatch"]
+
+require(Rblpapi)
+rcon<-Rblpapi::blpConnect()
+
+res<-mapply(function(s){
+    res<-data.table(Rblpapi::bds(s,"EARN_ANN_DT_TIME_HIST_WITH_EPS"))
+    colnames(res)<-make.names(colnames(res))
+    res$Ticker<-rep(s,nrow(res))
+    res
+},exposure_equity_ticker,SIMPLIFY=FALSE)
+
+exposure_earnings<-do.call(rbind,c(res,list(fill=TRUE)))[,c(
+  "Ticker","Announcement.Date","Announcement.Time","Comparable.EPS","Earnings.EPS","Estimate.EPS","Year.Period"),
+]
+
+exposure_upcoming_announcements<-exposure_earnings[Announcement.Date>Sys.Date(),.(
+  Date=as.character(min(Announcement.Date),format="%Y-%m-%d"),
+  Period=Year.Period[which.min(Announcement.Date)],
+  Estimate=round(Estimate.EPS[which.min(Announcement.Date)],digits=2)
+),keyby="Ticker"][order(Date),.SD][,
+  c("Pairs","Exposure"):=list(
+    Pairs=mapply(function(s){
+      i<-which(abs(pair_exposure[s,,drop=FALSE])>0)
+      if(length(i)<1)return("")
+      paste0(colnames(pair_exposure)[i],collapse=",")
+    },Ticker),
+    Exposure=mapply(function(s){
+      round(sum(pair_exposure[s,]*10000),digits=0)
+    },Ticker)
+  )
+]
+
+
+@
+
+
+\documentclass{article}
+
+\usepackage[portrait, headheight = 0cm, margin=0.25cm, top = 0.25cm, nofoot]{geometry} 
+\usepackage[export]{adjustbox} 
+\usepackage{graphicx}
+\usepackage[space]{grffile}
+\usepackage[dvipsnames,table]{xcolor} % [dvipsnames,table] for setting colors \usepackage{amsmath} \usepackage{xfrac}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric}
+\usetikzlibrary{shapes.misc}
+\usetikzlibrary{arrows}
+\usepackage{xfrac}
+
+\DeclareRobustCommand\Tstrut{\rule{0pt}{2.6ex}}         % = `top' strut
+\DeclareRobustCommand\Bstrut{\rule[-0.9ex]{0pt}{0pt}}   % = `bottom' strut
+\renewcommand{\familydefault}{\sfdefault}
+
+\begin{document}
+
+\section{Contents}
+
+\vskip 5mm
+
+Report timestamp: \Sexpr{latexTranslate(as.character(Sys.time()))}
+
+\vskip 5mm
+
+\noindent This report contains summary analytics and an event calendar for \Sexpr{the_manager}'s pairs.
+
+\vskip 5mm
+
+\noindent The purpose of this analysis is to help future positioning, not to evaluate 
+past decisions. This is more like a {\bf backtest} rather than a performance 
+attribution.
+
+\vskip 5mm
+
+\noindent Current position information is obtained by scraping the latest saved 
+portfolio sheet.
+
+\newpage 
+\section{Upcoming earnings announcements for \Sexpr{the_manager}'s portfolio holdings}
+
+\vskip 5mm
+
+\begin{center}
+\Sexpr{ntable(
+ df=exposure_upcoming_announcements,
+ title="Upcoming earnings announcements"
+)}
+\end{center}
+
+
+\newpage 
+\section{\Sexpr{the_manager}: Performance of \underline{current} portfolio holdings, (\sfrac{1}{10}th of a basis point)}
+
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+a1<-c("m{1cm}","m{2cm}",rep("@{}|@{}m{2cm}",ncol(backtest_plot_table)-1))
+@
+\begin{center}
+\Sexpr{ntable(
+  backtest_plot_table,
+  add_rownames=FALSE,
+  title="Intra-day performance by pair, total. Unit: Tenth of a basis point ", 
+  scale=0.75-max(length(the_pairs)-15,0)*0.05,
+  alternating=FALSE,
+  align=a1,
+  halign="c",
+  row_end="\\hline\\\\[-4mm]"
+)}
+\end{center}
+
+\newpage 
+\vskip 5mm
+
+
+\begin{center}
+\Sexpr{ntable(
+  summary_table,
+  add_rownames=FALSE,
+  title=paste(
+    "14 day intra-day backtest summary, up to", 
+    max(bar_intervals$date),
+    " Unit: Tenth of a basis point"
+  ),
+  scale=1.0
+)}
+\end{center}
+
+
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+
+backtest_long_vs_short_px_table<-data.table(
+  pm=structure(hdr="{\\bf PM}",paste0("{\\bf ",the_pairs,"}")),
+  constituents=structure(
+    hdr="{\\bf Exposure}",
+    format=quote(paste0("{\\tt ",this,"}")),
+    data.table(mapply(
+      do.call,
+      what=list(
+        pair=function(ndx)colnames(pair_exposure)[ndx[,2]],
+        ticker=function(ndx)gsub(
+          "( Equity)|( Index)","",
+          rownames(pair_exposure)[ndx[,1]]
+        ),
+        full_ticker=function(ndx)rownames(pair_exposure)[ndx[,1]]
+      ),
+      MoreArgs = list(
+        args=list(which(abs(pair_exposure[,the_pairs])>0,arr.ind = TRUE))
+      )
+    ))[,.(constituent=paste0(
+        mapply(function(s)ifelse(sign(sum(pair_exposure[s,the_pairs]))>0,"+","-"),full_ticker),
+        ticker,
+        collapse="\\newline "
+    )),keyby=pair]$constituent
+  ),
+  do.call(data.table,mapply(function(i)structure(
+    hdr=tbl(
+        c(
+          stri_sub(weekdays(as.Date(i)),1,3),
+          stri_sub(i,6,-1)
+        ),
+        align="@{}c@{}"
+    ),
+    mapply(function(p){
+      the_day<-i
+      if(is.na(the_day))return(0)
+      ndx<-bar_intervals$date==the_day & bar_intervals$day>0
+      if(sum(ndx)<1){
+        res<-make_plot(expression({
+          plot(NA,type="n",xlab="",ylab="",xlim=c(0,1),ylim=c(0,1),axes=FALSE)
+          text(0.5,0.5,labels="No data",cex=5)
+        }),width="2cm",height="2cm")
+        return(res)
+      }
+      long_pnls<-cumsum(rowSums(mc(intraday_pair_longs,paste0("^",p))[ndx,,drop=FALSE]))
+      short_pnls<-cumsum(rowSums(mc(intraday_pair_shorts,paste0("^",p))[ndx,,drop=FALSE]))
+      final_long<-round(100000*tail(long_pnls,1),digits=0)
+      final_long_text<-ifelse(sign(final_long)>0,paste0("+",final_long),final_long)
+      final_short<-round(100000*tail(short_pnls,1),digits=0)
+      final_short_text<-ifelse(sign(final_short)>0,paste0("+",final_short),final_short)
+      ylim<-c(min(c(long_pnls,short_pnls)),max(c(long_pnls,short_pnls)))
+      make_plot(expression({
+        par(mai=c(0,0,0,0))
+        plot(
+          x=c(1,sum(ndx)),
+          y=ylim,
+          type="n",
+          xlab="",
+          ylab="",
+          axes=FALSE
+        )
+        lines(
+          x=seq_along(short_pnls),
+          y=short_pnls,
+          lwd=20,
+          col=rgb(1,0,0,0.5)
+        )
+        lines(
+          x=seq_along(long_pnls),
+          y=long_pnls,          
+          lwd=20,
+          col=rgb(0,1,0,0.5)
+        )
+        text(
+          x=sum(ndx)/2,
+          y=mean(ylim),
+          labels=paste0("L:",final_long_text,"\n","S:",final_short_text),
+          col="black",
+          font=2,
+          cex=8
+        )
+      }),width="2cm",height="2cm",envir=environment())
+    },p=the_pairs)
+  ),days_in_data,SIMPLIFY=FALSE))
+)
+
+a1<-c("m{1cm}","m{2cm}",rep("@{}|@{}m{2cm}",ncol(backtest_long_vs_short_px_table)-1))
+
+@
+\newpage
+\section{\Sexpr{the_manager}: Long, short leg performance, values shown in \sfrac{1}{10}th of a basis point}
+
+
+\begin{center}
+\Sexpr{ntable(
+  backtest_long_vs_short_px_table,
+  add_rownames=FALSE,
+  title=paste0(
+    "Long leg (",dot("green"),") vs short leg (",dot("red"),"),",
+    "legend is long, short P\\&L  L:(long P\\&L), S:(short P\\&L), all in tenth's of a basis point"
+  ), 
+  scale=0.75-max(length(the_pairs)-15,0)*0.05,
+  alternating=FALSE,
+  align=a1,
+  halign="c",
+  row_end="\\hline\\\\[-4mm]"
+)}
+\end{center}
+
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+
+backtest_long_vs_short_table<-data.table(
+  pm=structure(hdr="{\\bf PM}",paste0("{\\bf ",the_pairs,"}")),
+  constituents=structure(
+    hdr="{\\bf Exposure}",
+    format=quote(paste0("{\\tt ",this,"}")),
+    data.table(mapply(
+      do.call,
+      what=list(
+        pair=function(ndx)colnames(pair_exposure)[ndx[,2]],
+        ticker=function(ndx)gsub(
+          "( Equity)|( Index)","",
+          rownames(pair_exposure)[ndx[,1]]
+        ),
+        full_ticker=function(ndx)rownames(pair_exposure)[ndx[,1]]
+      ),
+      MoreArgs = list(
+        args=list(which(abs(pair_exposure[,the_pairs])>0,arr.ind = TRUE))
+      )
+    ))[,.(constituent=paste0(
+        mapply(function(s)ifelse(sign(sum(pair_exposure[s,the_pairs]))>0,"+","-"),full_ticker),
+        ticker,
+        collapse="\\newline "
+    )),keyby=pair]$constituent
+  ),
+  do.call(data.table,mapply(function(i)structure(
+    hdr=tbl(
+        c(
+          stri_sub(weekdays(as.Date(i)),1,3),
+          stri_sub(i,6,-1)
+        ),
+        align="@{}c@{}"
+    ),
+    mapply(function(p){
+      the_day<-i
+      if(is.na(the_day))return(0)
+      ndx<-bar_intervals$date==the_day & bar_intervals$day>0
+      if(sum(ndx)<1){
+        res<-make_plot(expression({
+          plot(NA,type="n",xlab="",ylab="",xlim=c(0,1),ylim=c(0,1),axes=FALSE)
+          text(0.5,0.5,labels="No data",cex=5)
+        }),width="2cm",height="2cm")
+        return(res)
+      }
+      long_pnls<-cumsum(rowSums(mc(intraday_pair_longs,paste0("^",p))[ndx,,drop=FALSE]))
+      short_pnls<-cumsum(rowSums(mc(intraday_pair_shorts,paste0("^",p))[ndx,,drop=FALSE]))
+      xlim<-c(min(long_pnls),max(long_pnls))
+      ylim<-c(min(short_pnls),max(short_pnls))
+      ls_cor<-cor(long_pnls,short_pnls)
+      cs<-abs(ls_cor)
+      rr<-colorRamp(c("white","red"))
+      gr<-colorRamp(c("white","green"))
+      ls_col<-ifelse(
+        ls_cor<0,
+        alpha(rgb(gr(cs)/255),0.33),
+        alpha(rgb(rr(cs)/255),0.33)
+      )
+      make_plot(expression({
+        par(mai=c(0,0,0,0))
+        plot(
+          x=xlim,
+          y=ylim,
+          type="n",
+          xlab="",
+          ylab="",
+          axes=FALSE
+        )
+        rect(xlim[1],ylim[1],xlim[2],ylim[2],col=ls_col,border=NA)
+        lines(
+          x=long_pnls,
+          y=short_pnls,
+          lwd=20,
+          col=rgb(0,0,1,0.5)
+        )
+        text(
+          x=mean(range(long_pnls)),
+          y=mean(range(short_pnls)),
+          labels=round(100*ls_cor,digits=1),
+          col="black",
+          font=2,
+          cex=8
+        )
+      }),width="2cm",height="2cm",envir=environment())
+    },p=the_pairs)
+  ),days_in_data,SIMPLIFY=FALSE))
+)
+
+a1<-c("m{1cm}","m{2cm}",rep("@{}|@{}m{2cm}",ncol(backtest_long_vs_short_table)-1))
+
+@
+\newpage
+\section{\Sexpr{the_manager}: Long vs short leg cummulative P\&L}
+
+\begin{center}
+\Sexpr{ntable(
+  backtest_long_vs_short_table,
+  add_rownames=FALSE,
+  title=paste0(
+    "Long leg (x axis) vs short leg (y axis), ",
+    "color-coded by sign of correlation ", 
+    "(",dot("green"),") negative",
+    "(",dot("red"),") positive"
+  ),
+  scale=0.75-max(length(the_pairs)-15,0)*0.05,
+  alternating=FALSE,
+  align=a1,
+  halign="c",
+  row_end="\\hline\\\\[-4mm]"
+)}
+\end{center}
+
+
+
+
+
+
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+
+drawdown<-function(x)max(cummax(cumsum(x))-cumsum(x))
+
+risk_return_pairs_matrix<-apply(df2matrix(
+  df=data.table(
+    text=the_pairs,
+    x=apply(intraday_pair[,the_pairs],2,sum),
+    y=apply(intraday_pair[,the_pairs],2,drawdown)
+  ),
+  col_slack=0,
+  row_slack=0
+),1:2,function(x){
+  if(nchar(x)<1)return("")
+  paste0(
+    "\\begin{minipage}{ 3.5cm }\n",
+    tbl(c(
+      ntable(df=rbind(
+        data.table(stat="sum",value=round(100000*sum(intraday_pair[,x]),digits=0)),
+        data.table(stat="draw",value=round(100000*drawdown(intraday_pair[,x]),digits=0))
+      ),alternating=FALSE,add_rownames =FALSE,add_header=FALSE,final_line="",scale=0.75,align=c("@{}l","l")),
+      icon(x,width="3.5cm",height="3.5cm")
+    ),sep=" \\\\[-3mm]",align="@{}l"),
+    "\n",
+    "\\end{minipage}"
+  )
+})
+
+
+@
+
+\newpage
+\section{\Sexpr{the_manager}: Pair drawdown vs return over the last 2 weeks.}
+
+\vskip 15mm
+
+\begin{center}
+\begin{tabular}{m{0.75cm} @{} c}
+\rotatebox{90}{ 
+  \raisebox{1mm}{\tikz{\draw (0mm,0mm)--(15mm,0mm) ;}}
+  Drawdown (Units: tenth of basis point)
+  \raisebox{1mm}{\tikz{\draw[-latex] (0mm,0mm)--(15mm,0mm) ;}} 
+}
+&
+\Sexpr{ntable(
+  df=data.table(risk_return_pairs_matrix),
+  add_rownames=FALSE,
+  add_header=FALSE,
+  title=NULL,
+  alternating=FALSE,
+  row_end="\\\\"
+)}
+\\
+\multicolumn{2}{c}{
+  \raisebox{1mm}{\tikz{\draw (0mm,0mm)--(15mm,0mm) ;}}
+  Return (Units: tenth of basis point)
+  \raisebox{1mm}{\tikz{\draw[-latex] (0mm,0mm)--(15mm,0mm) ;}} 
+} 
+\\
+\end{tabular}
+\end{center}
+
+
+
+
+\end{document}
+

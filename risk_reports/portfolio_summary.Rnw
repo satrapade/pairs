@@ -1,0 +1,392 @@
+%
+% portfolio summary report
+%
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+# required packages
+require(Hmisc)
+require(Rtsne)
+require(digest)
+require(stringi)
+require(readxl)
+require(scales)
+require(data.table)
+require(Matrix)
+require(Matrix.utils)
+require(clue)
+require(magick)
+
+source("https://raw.githubusercontent.com/satrapade/latex_utils/master/utility_functions.R")
+source("https://raw.githubusercontent.com/satrapade/latex_utils/master/latex_helpers_v2.R")
+source("https://raw.githubusercontent.com/satrapade/utility/master/sheet_scraping_functions.R")
+source("https://raw.githubusercontent.com/satrapade/latex_utils/master/sheet_utility_functions.R")
+
+x<-list.files(path="N:/Depts/Share/UK Alpha Team/Analytics/risk_reports/figure",pattern="*.pdf",full.names=TRUE)
+if(length(x)>0)file.remove(x)
+
+scrape_details<-local({
+  dets<-fread("N:/Depts/Share/UK Alpha Team/Analytics/sheet_scrape/scrape_details.csv")
+  structure(as.list(dets$values),.Names=dets$names)
+})
+
+data_loaded<-fread("N:/Depts/Share/UK Alpha Team/Analytics/market_data/data_loaded.csv")
+
+data_directory<-"N:/Depts/Share/UK Alpha Team/Analytics/duke_summary"
+prefix<-"duke_"
+row_names<-TRUE
+
+# pair-level data
+pair_exposure     <- load_matrix(paste0(data_directory,"/",prefix,"pair_exposure.csv"),row_names=row_names)
+pair_days         <- load_matrix(paste0(data_directory,"/",prefix,"pair_days.csv"),row_names=row_names)
+pair_local_pnl    <- load_matrix(paste0(data_directory,"/",prefix,"pair_local_pnl.csv"),row_names=row_names)
+pair_long_pnl     <- load_matrix(paste0(data_directory,"/",prefix,"pair_long_pnl.csv"),row_names=row_names)
+pair_short_pnl    <- load_matrix(paste0(data_directory,"/",prefix,"pair_short_pnl.csv"),row_names=row_names)
+drop_one_pair_pnl <- load_matrix(paste0(data_directory,"/",prefix,"drop_one_pair_pnl.csv"),row_names=row_names)
+
+# manager-level data
+manager_exposure          <- load_matrix(paste0(data_directory,"/",prefix,"manager_exposure.csv"),row_names=row_names)
+manager_local_pnl         <- load_matrix(paste0(data_directory,"/",prefix,"manager_local_pnl.csv"),row_names=row_names)
+drop_one_manager_pnl      <- load_matrix(paste0(data_directory,"/",prefix,"drop_one_manager_pnl.csv"),row_names=row_names)
+manager_drop_one_pair_pnl <- load_matrix(paste0(data_directory,"/",prefix,"manager_drop_one_pair_pnl.csv"),row_names=row_names)
+
+# fund-level data
+exposure        <- load_matrix(paste0(data_directory,"/",prefix,"exposure.csv"),row_names=row_names)
+long_exposure   <- load_matrix(paste0(data_directory,"/",prefix,"long_exposure.csv"),row_names=row_names)
+short_exposure  <- load_matrix(paste0(data_directory,"/",prefix,"short_exposure.csv"),row_names=row_names)
+local_pnl       <- load_matrix(paste0(data_directory,"/",prefix,"local_pnl.csv"),row_names=row_names)
+
+# color assigment
+manager_col <- fread("N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/manager_col.csv")
+pair_col    <- fread("N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/pair_col.csv")
+
+#determine pairs, managers and pair-to-manager mapping
+pairs<-sort(unique(colnames(pair_exposure)))
+managers<-sort(unique(colnames(manager_exposure)))
+manager_pairs<-structure(
+  diag(length(managers))[match(gsub("[0-9]+","",pairs),managers),],
+  dimnames=list(pairs,managers)
+)
+
+the_duke_position<-fread("N:/Depts/Share/UK Alpha Team/Analytics/sheet_scrape/duke_position.csv")
+the_duke_portfolio<-fread("N:/Depts/Share/UK Alpha Team/Analytics/sheet_scrape/duke_portfolio.csv")
+the_duke_AUM<-as.numeric(scrape_details$duke_aum)
+the_duke_date<-scrape_details$date
+
+the_luke_position<-fread("N:/Depts/Share/UK Alpha Team/Analytics/sheet_scrape/luke_position.csv")
+the_luke_portfolio<-fread("N:/Depts/Share/UK Alpha Team/Analytics/sheet_scrape/luke_portfolio.csv")
+the_luke_AUM<-as.numeric(scrape_details$luke_aum)
+the_luke_date<-scrape_details$date
+
+for(i in 1:nrow(data_loaded)){
+    if(data_loaded$class[i]!="matrix")next;
+    assign(data_loaded$name[i],load_matrix(data_loaded$fn[i],row_names = TRUE))
+}
+rm("i")
+ 
+portfolio_30d_volume<-apply(tail(portfolio_gbp_volume,30),2,function(x){
+    mean(nz(x))
+})
+  
+the_luke_portfolio$days_volume<-abs(the_luke_portfolio$Exposure/portfolio_30d_volume[the_luke_portfolio$Ticker])
+the_duke_portfolio$days_volume<-abs(the_duke_portfolio$Exposure/portfolio_30d_volume[the_duke_portfolio$Ticker])
+
+row_size2universe<-function(x,u){
+  m<-matrix(0,nrow=length(u),ncol=ncol(x),dimnames=list(u,colnames(x)))
+  i<-match(rownames(x),u)
+  j<-match(colnames(x),colnames(m))
+  m[i,j]<-as.matrix(x)
+  m
+}
+
+e1<-new.env()
+
+#
+# portfolio summary calculations
+#
+res<-eval(expression({
+
+  luke_pair_exposure<-as.matrix(rename_colnames(
+    row_size2universe(dMcast(the_luke_portfolio,Ticker~Pair,value.var="Exposure"),colnames(portfolio_local_tret))/the_luke_AUM,
+    "^Pair",
+    ""
+  ))
+  duke_pair_exposure<-as.matrix(rename_colnames(
+    row_size2universe(dMcast(the_duke_portfolio,Ticker~Pair,value.var="Exposure"),colnames(portfolio_local_tret))/the_duke_AUM,
+    "^Pair",
+    ""
+  ))
+  
+  
+  luke_pair_days<-as.matrix(rename_colnames(
+    row_size2universe(dMcast(the_luke_portfolio,Ticker~Pair,value.var="days_volume"),colnames(portfolio_local_tret)),
+    "^Pair",
+    ""
+  ))
+  
+  duke_pair_days<-as.matrix(rename_colnames(
+    row_size2universe(dMcast(the_duke_portfolio,Ticker~Pair,value.var="days_volume"),colnames(portfolio_local_tret)),
+    "^Pair",
+    ""
+  ))
+  
+  luke_manager_exposure<-as.matrix(rename_colnames(
+    row_size2universe(dMcast(the_luke_portfolio,Ticker~Manager,value.var="Exposure"),colnames(portfolio_local_tret))/the_luke_AUM,
+    "^Manager",
+    ""
+  ))
+  
+  duke_manager_exposure<-as.matrix(rename_colnames(
+    row_size2universe(dMcast(the_duke_portfolio,Ticker~Manager,value.var="Exposure"),colnames(portfolio_local_tret))/the_duke_AUM,
+    "^Manager",
+    ""
+  ))
+  
+  luke_exposure <- luke_manager_exposure%*%matrix(1,ncol=1,nrow=ncol(luke_manager_exposure))
+  luke_long_exposure <- pmax(luke_manager_exposure,0)%*%matrix(1,ncol=1,nrow=ncol(luke_manager_exposure))
+  luke_short_exposure <- pmax(-luke_manager_exposure,0)%*%matrix(1,ncol=1,nrow=ncol(luke_manager_exposure))
+  
+  duke_exposure<-duke_manager_exposure%*%matrix(1,ncol=1,nrow=ncol(duke_manager_exposure))
+  duke_long_exposure <- pmax(duke_manager_exposure,0)%*%matrix(1,ncol=1,nrow=ncol(duke_manager_exposure))
+  duke_short_exposure <- pmax(-duke_manager_exposure,0)%*%matrix(1,ncol=1,nrow=ncol(duke_manager_exposure))
+  
+  
+  
+  duke_drop_one_pair_pnl<-portfolio_local_tret%*%(duke_pair_exposure%*%(1-diag(ncol(duke_pair_exposure))))
+  luke_drop_one_pair_pnl<-portfolio_local_tret%*%(luke_pair_exposure%*%(1-diag(ncol(luke_pair_exposure))))
+  
+  duke_drop_one_manager_pnl<-portfolio_local_tret%*%(duke_manager_exposure%*%(1-diag(ncol(duke_manager_exposure))))
+  luke_drop_one_manager_pnl<-portfolio_local_tret%*%(luke_manager_exposure%*%(1-diag(ncol(luke_manager_exposure))))
+  
+  luke_local_pnl<-portfolio_local_tret%*%(luke_pair_exposure%*%matrix(1,ncol=1,nrow=ncol(luke_pair_exposure)))
+  duke_local_pnl<-portfolio_local_tret%*%(duke_pair_exposure%*%matrix(1,ncol=1,nrow=ncol(duke_pair_exposure)))
+  
+  luke_pair_local_pnl<-portfolio_local_tret%*%luke_pair_exposure
+  luke_pair_long_pnl<-portfolio_local_tret%*%pmax(luke_pair_exposure,0)
+  luke_pair_short_pnl<-portfolio_local_tret%*%pmax(-luke_pair_exposure,0)
+  
+  duke_pair_local_pnl<-portfolio_local_tret%*%duke_pair_exposure
+  duke_pair_long_pnl<-portfolio_local_tret%*%pmax(duke_pair_exposure,0)
+  duke_pair_short_pnl<-portfolio_local_tret%*%pmax(-duke_pair_exposure,0)
+  
+  luke_manager_local_pnl<-portfolio_local_tret%*%luke_manager_exposure
+  duke_manager_local_pnl<-portfolio_local_tret%*%duke_manager_exposure
+  
+  luke_manager_drop_one_pair_pnl<-structure(
+    luke_manager_local_pnl[,pair2pm(colnames(luke_pair_local_pnl))]-luke_pair_local_pnl,
+    dimnames=dimnames(luke_pair_local_pnl)
+  )
+  duke_manager_drop_one_pair_pnl<-structure(
+    duke_manager_local_pnl[,pair2pm(colnames(duke_pair_local_pnl))]-duke_pair_local_pnl,
+    dimnames=dimnames(duke_pair_local_pnl)
+  )
+  
+  luke_gbp_pnl<-as.matrix(portfolio_gbp_tret%*%t(t(apply(luke_pair_exposure,1,sum))))
+  luke_pair_gbp_pnl<-as.matrix(portfolio_gbp_tret%*%luke_pair_exposure)
+  luke_manager_gbp_pnl<-as.matrix(portfolio_gbp_tret%*%luke_manager_exposure)
+  
+  manager_col<-assign_color(colnames(e1$luke_manager_local_pnl),col_alpha=1)[,.SD,keyby=item]
+  pair_col<-assign_color(colnames(e1$luke_pair_local_pnl),col_alpha=1)[,.SD,keyby=item]
+
+
+}),envir=e1)
+
+
+new_vars<-ls(envir=e1)
+
+data_loaded<-data.table(
+  name=ls(e1),
+  latex_name=latexTranslate(ls(e1)),
+  class=mapply(function(v)class(e1[[v]])[1],ls(e1)),
+  rows=ifelse(mapply(function(v)class(e1[[v]]),ls(e1))=="matrix",mapply(function(v)nrow(e1[[v]]),ls(e1)),0),
+  cols=ifelse(mapply(function(v)class(e1[[v]]),ls(e1))=="matrix",mapply(function(v)ncol(e1[[v]]),ls(e1)),0),
+  na_count=mapply(function(v)sum(is.na(e1[[v]])),ls(e1)),
+  filename=gsub("\\\\","/",mapply(normalizePath,paste0(ls(e1),".csv"),MoreArgs=list(winslash="/",mustWork=FALSE))),
+  saved=rep(FALSE,length(ls(e1))),
+  timestamp=rep(as.character(Sys.time()),length(ls(e1)))
+)
+
+
+luke_marginal_pair_sd<-sd(e1$luke_local_pnl)-apply(e1$luke_drop_one_pair_pnl,2,sd)
+luke_marginal_manager_sd<-sd(e1$luke_local_pnl)-apply(e1$luke_drop_one_manager_pnl,2,sd)
+
+
+pair_pms<-gsub("[0-9]{1,3}$","",colnames(e1$luke_pair_local_pnl))
+all_pms<-sort(unique(pair_pms))
+pm_col<-structure(rainbow(length(all_pms),alpha=0.5),.Names=all_pms)
+
+
+factor_for_four_vol<-weights_for_target_vol(e1$luke_manager_local_pnl,4)
+
+pair_f4v<-weights_for_target_vol(e1$luke_pair_local_pnl,4)
+
+#manager_col<-assign_color(colnames(e1$luke_manager_local_pnl),col_alpha=1)[,.SD,keyby=item]
+#pair_col<-assign_color(colnames(e1$luke_pair_local_pnl),col_alpha=1)[,.SD,keyby=item]
+
+
+random_long_short<-function(exposure,samples=100){
+  longs<-sum(exposure>0)
+  shorts<-sum(exposure<0)
+  flats<-sum(exposure==0)
+  source<-c(rep(1,longs),rep(-1,shorts),rep(0,flats))
+  signs<-do.call(
+    cbind,
+    mapply(
+      function(i)source[sample(seq_along(exposure),length(exposure))],
+      1:samples,
+      SIMPLIFY=FALSE
+    )
+  )
+  res<-matrix(abs(exposure),ncol=1)[,rep(1,samples)]*signs
+  res
+}
+
+x1<-cbind(e1$luke_long_exposure,e1$luke_short_exposure)
+x2<-portfolio_local_tret%*%x1
+
+exposure<-e1$luke_pair_exposure%*%matrix(1,ncol=1,nrow=ncol(e1$luke_pair_exposure))
+x3<-portfolio_local_tret%*%e1$luke_exposure
+x4<-random_long_short(e1$luke_exposure,10000)
+x5<-portfolio_local_tret%*%x4
+x6<-portfolio_local_tret%*%pmax(x4,0)
+x7<-portfolio_local_tret%*%pmax(-x4,0)
+x8<-apply(x5,2,sharpe)
+x9<-mapply(cor,data.table(x6),data.table(x7))
+@
+
+
+
+\documentclass{article}
+
+\usepackage[portrait, headheight = 0cm, margin=0.25cm, top = 0.25cm, nofoot]{geometry} 
+\usepackage[export]{adjustbox} 
+\usepackage{graphicx}
+\usepackage[space]{grffile}
+\usepackage[dvipsnames,table]{xcolor} % [dvipsnames,table] for setting colors \usepackage{amsmath} \usepackage{xfrac}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric}
+\usetikzlibrary{shapes.misc}
+%\usetikzlibrary{external}
+%\tikzexternalize % activate!
+%\usepackage{sparklines}
+\usepackage{xfrac}
+
+\DeclareRobustCommand\Tstrut{\rule{0pt}{2.6ex}}         % = `top' strut
+\DeclareRobustCommand\Bstrut{\rule[-0.9ex]{0pt}{0pt}}   % = `bottom' strut
+\renewcommand{\familydefault}{\sfdefault}
+
+\begin{document}
+
+\section*{LUKE, DUKE portfolio summary \Sexpr{latexTranslate(as.character(Sys.time()))}}
+
+\begin{center}
+\begin{tabular}{l c c c}
+\rowcolor{gray!20}
+\multicolumn{4}{c}{\Sexpr{the_duke_date} LUKE, DUKE portfolio statistics} \\
+\hline
+  & All & Longs & Shorts \\
+Position count & 
+\Sexpr{nrow(x1)} & 
+\Sexpr{sum(x1[,1]>0)} & 
+\Sexpr{sum(x1[,2]>0)} \\
+Gross exposure & 
+\Sexpr{round(100*sum(x1),digits=0)}\% & 
+\Sexpr{round(100*sum(x1[,1]),digits=0)}\% & 
+\Sexpr{round(100*sum(x1[,2]),digits=0)}\% \\
+Average exposure &
+\Sexpr{round(10000*mean(nz(x1)),digits=0)} bps & 
+\Sexpr{round(10000*mean(nz(x1[,1])),digits=0)} bps & 
+\Sexpr{round(10000*mean(nz(x1[,2])),digits=0)}bps \\
+Largest exposure &
+\Sexpr{round(10000*max(x1),digits=0)} bps & 
+\Sexpr{round(10000*max(x1[,1]),digits=0)} bps & 
+\Sexpr{round(10000*max(x1[,2]),digits=0)} bps \\
+\Sexpr{paste(
+  c("Correlation All vs & ","Correlation Longs vs & ","Correlation Shorts vs & "),
+  apply(round(100*cor(cbind(rowSums(e1$luke_pair_local_pnl),x2)),digits=0),1,function(r)paste(r,collapse=" & ")),
+  collapse="\\\\ \n "
+)} \\
+\end{tabular}
+\end{center}
+
+
+\begin{center}
+\begin{tabular}{m{6cm} m{6cm} m{6cm}}
+\hline
+\rowcolor{gray!20}
+\multicolumn{1}{c}{All positions} & \multicolumn{1}{c}{Long positions} & \multicolumn{1}{c}{Short Positions} \\
+\hline
+\Sexpr{ntable(data.table(as.matrix(t(pnl_stats(x2[,1]-x2[,2])))),add_rownames=FALSE)} &
+\Sexpr{ntable(data.table(as.matrix(t(pnl_stats(x2[,1])))),add_rownames=FALSE)} &
+\Sexpr{ntable(data.table(as.matrix(t(pnl_stats(x2[,2])))),add_rownames=FALSE)} \\
+\Sexpr{make_plot(pnl_plot(x2[,1]-x2[,2],main="",ylab="All"),width="6cm",height="6cm")} &
+\Sexpr{make_plot(pnl_plot(x2[,1],main="",ylab="Longs"),width="6cm",height="6cm")} &
+\Sexpr{make_plot(pnl_plot(x2[,2],main="",ylab="Shorts"),width="6cm",height="6cm")} \\
+\Sexpr{make_plot(expression(
+  hist(x8,breaks=100,main="Randomized exposure samples",xlab="Sharpe ratio"),
+  abline(v=sharpe(x3),col="red")
+),width="6cm",height="6cm")} &
+\Sexpr{make_plot(expression(
+  hist(
+    x9,
+    breaks=100,
+    main="Randomized exposure samples",
+    xlab="Correlation of long vs short portfolios"
+  ),
+  abline(v=cor(x2[,1],x2[,2]),col="red")
+),width="6cm",height="6cm")} &
+\Sexpr{make_plot(expression(
+  plot(x=x9,y=x8,main="Randomized exposure samples",xlab="Correlation",ylab="Sharpe"),
+  abline(v=cor(x2[,1],x2[,2]),col="red"),
+  abline(h=sharpe(x3),col="red")
+),width="6cm",height="6cm")} \\
+\end{tabular}
+\end{center}
+
+\newpage
+
+\noindent If we assume a target volatility of 4 vs an expected volatility of \Sexpr{pnl_stats(e1$luke_local_pnl)["vol"]},
+we will need to adjust manager and position sizes approriately.
+
+\begin{center}
+\Sexpr{ntable(
+  df=data.table(t(round(weights_for_target_vol(e1$luke_manager_local_pnl,4),digits=1))),
+  title="Scaling required to achieve a 4 pct vol"
+)}
+\end{center}
+
+\begin{center}
+\Sexpr{make_plot(
+  pnl_plot(rowSums(attributes(weights_for_target_vol(e1$luke_manager_local_pnl,4))$pnl))
+,width="10cm",height="10cm")}
+\end{center}
+
+
+
+\newpage
+
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+ha1<-"@{}l"
+@
+
+\begin{center}
+\Sexpr{ntable(
+  df=data_loaded[,.(
+    latex_name,
+    class,
+    rows,
+    cols,
+    structure(hdr=tbl(c("NA","\\#"),align=ha1),na_count),
+    filename=structure(
+      hdr=tbl(latexTranslate(strsplit(gsub(paste0(name[1],".csv"),"",filename[1]),"/")[[1]]),align=ha1),
+      latexTranslate(paste0(name,".csv"))
+    ),
+    saved,
+    timestamp
+  )],
+  title="portfolio\\_summary\\_data\\_set.csv",
+  add_rownames=FALSE,
+  scale=0.66
+)}
+\end{center}
+
+\end{document}
+

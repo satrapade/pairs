@@ -1,0 +1,346 @@
+%
+% scrape status
+%
+
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+# required packages
+require(Hmisc)
+require(digest)
+require(stringi)
+require(readxl)
+require(scales)
+require(data.table)
+require(Matrix)
+require(Matrix.utils)
+require(clue)
+append2log<-function(log_text,append=TRUE)
+{
+  cat(
+    paste0(stri_trim(gsub("##|-","",capture.output(timestamp())))," : ",log_text,"\n"),
+    file="N:/Depts/Share/UK Alpha Team/Analytics/Rscripts/workflow.log",
+    append=append
+  )
+}
+
+
+source(
+  "https://raw.githubusercontent.com/satrapade/utility/master/utility_functions.R"
+)
+source(
+  "https://raw.githubusercontent.com/satrapade/latex_utils/master/latex_helpers_v2.R"
+)
+
+x<-list.files(
+  path="N:/Depts/Share/UK Alpha Team/Analytics/risk_reports/figure",
+  pattern="*.pdf",
+  full.names=TRUE
+)
+if(length(x)>0)file.remove(x)
+
+#
+# daily data
+#
+
+data_loaded<-fread("N:/Depts/Share/UK Alpha Team/Analytics/market_data/data_loaded.csv")
+  for(i in 1:nrow(data_loaded)){
+    if(data_loaded$class[i]!="matrix")next;
+    assign(data_loaded$name[i],load_matrix(data_loaded$fn[i],row_names = TRUE))
+}
+rm("i")
+
+#
+# daily data
+#
+
+data_directory<-"N:/Depts/Share/UK Alpha Team/Analytics/duke_summary"
+prefix<-"duke_"
+row_names<-TRUE
+# pair-level data
+pair_exposure     <- load_matrix(paste0(data_directory,"/",prefix,"pair_exposure.csv"),row_names=row_names)
+pair_days         <- load_matrix(paste0(data_directory,"/",prefix,"pair_days.csv"),row_names=row_names)
+pair_local_pnl    <- load_matrix(paste0(data_directory,"/",prefix,"pair_local_pnl.csv"),row_names=row_names)
+pair_long_pnl     <- load_matrix(paste0(data_directory,"/",prefix,"pair_long_pnl.csv"),row_names=row_names)
+pair_short_pnl    <- load_matrix(paste0(data_directory,"/",prefix,"pair_short_pnl.csv"),row_names=row_names)
+drop_one_pair_pnl <- load_matrix(paste0(data_directory,"/",prefix,"drop_one_pair_pnl.csv"),row_names=row_names)
+
+# manager-level data
+manager_exposure          <- load_matrix(paste0(data_directory,"/",prefix,"manager_exposure.csv"),row_names=row_names)
+manager_local_pnl         <- load_matrix(paste0(data_directory,"/",prefix,"manager_local_pnl.csv"),row_names=row_names)
+drop_one_manager_pnl      <- load_matrix(paste0(data_directory,"/",prefix,"drop_one_manager_pnl.csv"),row_names=row_names)
+manager_drop_one_pair_pnl <- load_matrix(paste0(data_directory,"/",prefix,"manager_drop_one_pair_pnl.csv"),row_names=row_names)
+
+# fund-level data
+exposure        <- load_matrix(paste0(data_directory,"/",prefix,"exposure.csv"),row_names=row_names)
+long_exposure   <- load_matrix(paste0(data_directory,"/",prefix,"long_exposure.csv"),row_names=row_names)
+short_exposure  <- load_matrix(paste0(data_directory,"/",prefix,"short_exposure.csv"),row_names=row_names)
+local_pnl       <- load_matrix(paste0(data_directory,"/",prefix,"local_pnl.csv"),row_names=row_names)
+
+# color assigment
+manager_col <- fread("N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/manager_col.csv")
+pair_col    <- fread("N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/pair_col.csv")
+
+#determine pairs, managers and pair-to-manager mapping
+pairs<-sort(unique(colnames(pair_exposure)))
+managers<-sort(unique(colnames(manager_exposure)))
+manager_pairs<-structure(
+  diag(length(managers))[match(gsub("[0-9]+","",pairs),managers),],
+  dimnames=list(pairs,managers)
+)
+
+keys<-fread("N:/Depts/Share/UK Alpha Team/Analytics/pair_icons/keys.csv")
+images<-fread("N:/Depts/Share/UK Alpha Team/Analytics/pair_icons/images.csv")
+
+icon<-function(icon_name,icon_table=images,height="2cm",width="3cm"){
+  icon_table[,.SD,keyby=name][icon_name,paste0("\\includegraphics[height=",height,",width=",width,",valign=T]{",file,"}")]
+}
+
+#
+# intraday data
+#
+
+intraday<-fread("N:/Depts/Share/UK Alpha Team/Analytics/market_data/intraday.csv")
+intraday_perf<-as.matrix(fread("N:/Depts/Share/UK Alpha Team/Analytics/market_data/intraday_perf.csv"))
+bar_intervals<-fread("N:/Depts/Share/UK Alpha Team/Analytics/market_data/bar_intervals.csv")
+intraday_pair<-as.matrix(fread("N:/Depts/Share/UK Alpha Team/Analytics/market_data/intraday_pair.csv"))
+intraday_pair_longs<-as.matrix(fread("N:/Depts/Share/UK Alpha Team/Analytics/market_data/intraday_pair_longs.csv"))
+intraday_pair_shorts<-as.matrix(fread("N:/Depts/Share/UK Alpha Team/Analytics/market_data/intraday_pair_shorts.csv"))
+
+last_bar<-tail(which(bar_intervals$day==max(bar_intervals$day)),1)
+first_bar<-head(which(bar_intervals$day==max(bar_intervals$day)),1)
+
+row_size2universe<-function(x,u){
+  m<-matrix(0,nrow=length(u),ncol=ncol(x),dimnames=list(u,colnames(x)))
+  i<-match(rownames(x),u)
+  j<-match(colnames(x),colnames(m))
+  m[i,j]<-as.matrix(x)
+  m
+}
+
+mc<-function(x,p="*",rows=1:nrow(x),cols=which(grepl(p,colnames(x))))x[rows,cols,drop=FALSE]
+
+make_pair<-function(
+  w,
+  intraday_perf=get("intraday_perf",envir=.GlobalEnv)
+){
+  new_pair<-matrix(
+    0,
+    nrow=ncol(intraday_perf),
+    ncol=1,
+    dimnames=list(colnames(intraday_perf),NULL)
+  )
+  res<-do.call(rbind,mapply(function(n,w){
+    i<-which(grepl(paste0("^",n),rownames(new_pair)))
+    j<-rep(1,length(i))
+    ij<-structure(
+      cbind(i,j,rep(w,length(i))),
+      dimnames=list(rownames(new_pair)[i],c("i","j","w"))
+    )
+    ij
+  },n=names(w),w=w,SIMPLIFY=FALSE))
+  new_pair[res[,c(1,2)]]<-res[,3]
+  pnl<-structure(
+    intraday_perf%*%new_pair,
+    dimnames=list(rownames(intraday_perf),"new_pair")
+  )
+  structure(pnl,.Names=attributes(intraday_perf)$datetime)
+}
+
+
+pair_exposure<-local({
+  res<-load_matrix(
+    "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_pair_exposure.csv",
+    row_names=TRUE
+  )
+  res[rownames(res) %in% colnames(intraday_perf),]
+})
+
+manager_exposure<-local({
+  res<-load_matrix(
+    "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_manager_exposure.csv",
+    row_names=TRUE
+  )
+  res[rownames(res) %in% colnames(intraday_perf),]
+})
+
+
+
+  
+days_in_data<-sort(unique(bar_intervals$date[bar_intervals$day>0]))
+
+
+actual_pair_pnl<-load_matrix(
+  "N:/Depts/Share/UK Alpha Team/Analytics/sheet_scrape/actual_pair_pnl.csv",
+  row_names=TRUE
+)
+
+
+the_pairs<-intersect(colnames(pair_exposure),colnames(actual_pair_pnl))
+the_manager<-unique(gsub("[0-9]+$","",the_pairs))
+
+high_watermark<-apply(actual_pair_pnl[,the_pairs],2,max)
+current_pnl<-drop(tail(actual_pair_pnl[,the_pairs],1))
+
+current_draw<-high_watermark-current_pnl
+
+draw_table<-data.table(
+    icon=structure(
+      hdr="Pair",
+      mapply(icon,names(current_draw),MoreArgs=list(height="2.25cm",width="2.5cm"))
+    ),
+    stats=structure(
+      hdr="stats",
+      mapply(
+        function(x,y)paste0(
+          " \\begin{tabular}{l l}  ",
+          " draw & ",x,"\\\\ ",
+          " pnl & ",y,"\\\\  ",
+          " \\end{tabular} "
+        ),
+        x=paste0(comma(round(current_draw,digits=1))),
+        y=paste0(comma(round(current_pnl,digits=1)))
+      )
+    ),
+    draw=round(current_draw,digits=1)
+)[order(draw,decreasing = TRUE)][,.(icon,stats)]
+
+
+@
+
+
+\documentclass{article}
+
+\usepackage[portrait, headheight = 0cm, margin=0.25cm, top = 0.25cm, nofoot]{geometry} 
+\usepackage[export]{adjustbox} 
+\usepackage{graphicx}
+\usepackage[space]{grffile}
+\usepackage[dvipsnames,table]{xcolor} % [dvipsnames,table] for setting colors \usepackage{amsmath} \usepackage{xfrac}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric}
+\usetikzlibrary{shapes.misc}
+\usetikzlibrary{arrows}
+\usepackage{xfrac}
+
+\DeclareRobustCommand\Tstrut{\rule{0pt}{2.6ex}}         % = `top' strut
+\DeclareRobustCommand\Bstrut{\rule[-0.9ex]{0pt}{0pt}}   % = `bottom' strut
+\renewcommand{\familydefault}{\sfdefault}
+
+\begin{document}
+
+\section{Contents}
+
+\vskip 5mm
+
+Report timestamp: \Sexpr{latexTranslate(as.character(Sys.time()))}
+
+\vskip 5mm
+
+\noindent This report containts a summary of actual pair performance.  
+
+\vskip 5mm
+
+\noindent The purpose of this analysis to help the implementation of 
+a stop-loss policy. This analysis is not intended to guide positioning.
+
+
+\vskip 5mm
+
+\noindent Historical position information is obtained by scraping saved
+historical sheets. Because the current sheet is manually copied to the 
+historical sheet folder on a daily basis, we cannot guarantee the accuracy 
+of these results. Errors in sheet layout or missed workflow steps will 
+cause inaccuracies in this report.
+
+\newpage 
+\section{Pairs ranked by drawdown as of \Sexpr{latexTranslate(as.character(Sys.time()))}}
+
+\begin{center}
+\begin{tabular}{c c c}
+\Sexpr{ntable(
+  df=draw_table[1:10],
+  title="DUKE drawdown rank 1-10 ",
+  add_rownames=FALSE,
+  align=c(paste0("m",curly("2.5cm")),paste0("m",curly("2cm"))),
+  halign=c("c","c"),
+  alternating=FALSE
+)}
+&
+\Sexpr{ntable(
+  df=draw_table[11:20],
+  title="DUKE drawdown rank 11-20 ",
+  add_rownames=FALSE,
+  align=c(paste0("m",curly("2.5cm")),paste0("m",curly("2cm"))),
+  halign=c("c","c"),
+  alternating=FALSE
+)}
+&
+\Sexpr{ntable(
+  df=draw_table[21:30],
+  title="DUKE drawdown rank 21-30 ",
+  add_rownames=FALSE,
+  align=c(paste0("m",curly("2.5cm")),paste0("m",curly("2cm"))),
+  halign=c("c","c"),
+  alternating=FALSE
+)}
+\\
+\end{tabular}
+\end{center}
+
+\newpage 
+\section{ Live DUKE pair performance}
+
+\vskip 5mm 
+
+\noindent Performance of live pairs {\bf only}. Trades relating to pairs are included, these
+performances should closely match figures reported by the performance attribution team. The
+pairs shown in this figure would be subject to any stop-loss policy.
+
+
+\begin{center}
+\Sexpr{make_plot(expression(
+    matplot(
+      x=apply(actual_pair_pnl[,the_pairs],2,seq_along),
+      y=actual_pair_pnl[,the_pairs],
+      type="l",
+      lty=1,
+      lwd=2,
+      ylab="pair pnl (bps)",
+      xlab="",
+      col=ifelse(
+        current_pnl>0,
+        rgb(0,1,0,0.33),
+        rgb(1,0,0,0.33)
+      ),
+      xaxt="n"
+    ),
+    dates<-as.character(as.Date(rownames(actual_pair_pnl),format="%Y-%m-%d"),format="%Y-%b-%d"),
+    at<-seq(1,nrow(actual_pair_pnl),length.out = 7),
+    labels<-gsub("-","\n",dates),
+    axis(1,at=at,labels=labels[at],line=NA,padj=0.75,xlab="",cex.axis=1)
+  ),
+  width="20cm",
+  height="20cm",
+  envir=environment()
+)}
+\end{center}
+
+
+\newpage 
+\section{ Recent DUKE performance}
+
+\vskip 5mm 
+
+\noindent Total DUKE performance, including unwound pairs. This ficure should closely track
+reported performance.
+
+\begin{center}
+\Sexpr{make_plot(
+  plot_with_dates(cumprod(diff(tail(rowSums(actual_pair_pnl),100))/10000+1),divisor=0.001),
+  width="20cm",
+  height="20cm"
+)}
+\end{center}
+
+
+
+\end{document}
+

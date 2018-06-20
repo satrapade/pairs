@@ -1,0 +1,155 @@
+%
+% scrape status
+%
+
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+# required packages
+require(Hmisc)
+require(Rtsne)
+require(digest)
+require(stringi)
+require(readxl)
+require(scales)
+require(data.table)
+require(Matrix)
+require(Matrix.utils)
+require(clue)
+require(magick)
+
+#library(blpapi)
+#conn <- new(BlpApiConnection)
+#source(paste0(PROJECT_DIRECTORY,"eq_ptf_sheet_utility_functions.R"))
+#source(paste0(PROJECT_DIRECTORY,"eq_ptf_sheet_bbg_functions.R"))
+#source(paste0(PROJECT_DIRECTORY,"latex_helpers_v2.R"))
+source("https://raw.githubusercontent.com/satrapade/utility/master/utility_functions.R")
+source("https://raw.githubusercontent.com/satrapade/latex_utils/master/latex_helpers_v2.R")
+source("https://raw.githubusercontent.com/satrapade/utility/master/eq_excel_scraping_functions.R")
+
+
+x<-list.files(path="N:/Depts/Share/UK Alpha Team/Analytics/risk_reports/figure",pattern="*.pdf",full.names=TRUE)
+if(length(x)>0)file.remove(x)
+
+scrape_details<-local({
+  dets<-fread("N:/Depts/Share/UK Alpha Team/Analytics/sheet_scrape/scrape_details.csv")
+  structure(as.list(dets$values),.Names=dets$names)
+})
+
+the_duke_position<-fread("N:/Depts/Share/UK Alpha Team/Analytics/sheet_scrape/duke_position.csv")
+the_duke_portfolio<-fread("N:/Depts/Share/UK Alpha Team/Analytics/sheet_scrape/duke_portfolio.csv")
+the_duke_AUM<-as.numeric(scrape_details$duke_aum)
+the_duke_date<-scrape_details$date
+
+the_luke_position<-fread("N:/Depts/Share/UK Alpha Team/Analytics/sheet_scrape/luke_position.csv")
+the_luke_portfolio<-fread("N:/Depts/Share/UK Alpha Team/Analytics/sheet_scrape/luke_portfolio.csv")
+the_luke_AUM<-as.numeric(scrape_details$luke_aum)
+the_luke_date<-scrape_details$date
+
+data_loaded<-fread("N:/Depts/Share/UK Alpha Team/Analytics/market_data/data_loaded.csv")
+
+
+e1<-new.env()
+
+res<-eval(expression({
+  
+  for(i in 1:nrow(data_loaded)){
+    if(data_loaded$class[i]!="matrix")next;
+    assign(data_loaded$name[i],load_matrix(data_loaded$fn[i],row_names = TRUE))
+  }
+  rm("i")
+ 
+  portfolio_30d_volume<-apply(tail(portfolio_gbp_volume,30),2,function(x){
+    mean(nz(x))
+  })
+
+}),envir=e1)
+
+
+new_vars<-ls(envir=e1)
+
+the_luke_portfolio$days_volume<-abs(the_luke_portfolio$Exposure/e1$portfolio_30d_volume[the_luke_portfolio$Ticker])
+the_duke_portfolio$days_volume<-abs(the_duke_portfolio$Exposure/e1$portfolio_30d_volume[the_duke_portfolio$Ticker])
+
+all_tickers<-data.table(
+  ticker=setdiff(sort(unique(c(the_duke_position$ticker,the_luke_position$ticker))),"")
+)[,"class":=list(ticker_class(ticker))]
+
+@
+
+
+\documentclass{article}
+
+\usepackage[portrait, headheight = 0cm, margin=0.25cm, top = 0.25cm, nofoot]{geometry} 
+\usepackage[export]{adjustbox} 
+\usepackage{graphicx}
+\usepackage[space]{grffile}
+\usepackage[dvipsnames,table]{xcolor} % [dvipsnames,table] for setting colors \usepackage{amsmath} \usepackage{xfrac}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric}
+\usetikzlibrary{shapes.misc}
+%\usetikzlibrary{external}
+%\tikzexternalize % activate!
+%\usepackage{sparklines}
+\usepackage{xfrac}
+
+\DeclareRobustCommand\Tstrut{\rule{0pt}{2.6ex}}         % = `top' strut
+\DeclareRobustCommand\Bstrut{\rule[-0.9ex]{0pt}{0pt}}   % = `bottom' strut
+\renewcommand{\familydefault}{\sfdefault}
+
+\begin{document}
+
+\section*{LUKE, DUKE market data, instrument static as of \Sexpr{latexTranslate(as.character(Sys.time()))}}
+
+\vskip 0.5cm
+
+\noindent Fetch market data and compute portfolio market values, instrument static
+
+\vskip 0.5cm
+
+\begin{center}
+\Sexpr{ntable(data_loaded[,.(latex_name=latexTranslate(name),class,rows,cols,na_count)],title="Market data fetched and saved")}
+\end{center}
+
+
+\begin{center}
+\begin{tabular}{c c}
+\multicolumn{2}{c}{LUKE and DUKE tickers} \\
+\hline
+Ticker count & \Sexpr{nrow(all_tickers)} \\
+Uncategorizeable tickers & \Sexpr{sum(all_tickers$class=="nomatch")} \\
+Futures tickers & \Sexpr{sum(!is.na(match(all_tickers$class,c("future|index|nomatch","future|nomatch"))))} \\
+Equity tickers & \Sexpr{sum(!is.na(match(all_tickers$class,c("equity|nomatch"))))} \\
+Index tickers & \Sexpr{sum(!is.na(match(all_tickers$class,c("index|nomatch"))))} \\
+\hline
+\end{tabular}
+\end{center}
+
+\begin{center}
+\begin{tabular}{l l l}
+\multicolumn{3}{c}{LUKE and DUKE portfolios} \\
+\hline
+ & LUKE & DUKE \\
+Managers & \Sexpr{length(unique(the_luke_portfolio$Manager))} & \Sexpr{length(unique(the_duke_portfolio$Manager))} \\
+Pairs   & \Sexpr{length(unique(the_luke_portfolio$Pair))} & \Sexpr{length(unique(the_duke_portfolio$Pair))} \\
+Tickers & \Sexpr{length(unique(the_luke_portfolio$Ticker))} & \Sexpr{length(unique(the_duke_portfolio$Ticker))} \\
+Longs   & 
+\Sexpr{sum(the_luke_portfolio$Quantity>0)} & 
+\Sexpr{sum(the_duke_portfolio$Quantity>0)} \\
+Long Exposure & 
+\Sexpr{comma(sum(pmax(the_luke_portfolio$Exposure,0)),digits=0)} & 
+\Sexpr{comma(sum(pmax(the_duke_portfolio$Exposure,0)),digits=0)} \\
+Shorts  & 
+\Sexpr{sum(the_luke_portfolio$Quantity<0)} & 
+\Sexpr{sum(the_duke_portfolio$Quantity<0)} \\
+Short Exposure & 
+\Sexpr{comma(sum(pmax(-the_luke_portfolio$Exposure,0)),digits=0)} & 
+\Sexpr{comma(sum(pmax(-the_duke_portfolio$Exposure,0)),digits=0)} \\
+Position in ADV multiples &
+\Sexpr{comma(mean(the_luke_portfolio$days_volume),digits=2,nsmall=2)} & 
+\Sexpr{comma(mean(the_duke_portfolio$days_volume),digits=2,nsmall=2)} \\
+\hline
+\end{tabular}
+\end{center}
+
+
+\end{document}
+

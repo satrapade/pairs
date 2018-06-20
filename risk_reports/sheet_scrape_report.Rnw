@@ -1,0 +1,458 @@
+\documentclass{article}
+
+
+<<init_cover, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+require(Hmisc)
+require(brotli)
+require(feather)
+require(digest)
+require(base64enc)
+require(stringi)
+require(readxl)
+require(scales)
+require(data.table)
+require(Matrix)
+require(Matrix.utils)
+require(clue)
+require(Rtsne)
+require(RSQLite)
+
+source(
+  "https://raw.githubusercontent.com/satrapade/utility/master/utility_functions.R"
+)
+
+
+source(
+  "https://raw.githubusercontent.com/satrapade/latex_utils/master/latex_helpers_v2.R"
+)
+
+db<-dbConnect(
+  SQLite(), 
+  dbname="N:/Depts/Share/UK Alpha Team/Analytics/sheet_scrape/sheet_scrapes.sqlite"
+)
+# 
+# query<-function(statement,db=get("db_ss",parent.frame())){
+#   q<-dbSendQuery(conn=db,statement)
+#   r<-dbFetch(q,n=-1)
+#   dbClearResult(q)
+#   r
+# }
+
+all_dates<-sort(unique(query("SELECT date FROM sheet_scrape")$date))
+
+open_duke_pnl<-data.table(query(paste0(
+  "SELECT ",
+  "date, pair, ",
+  "sum(cast(bps as real)) AS bps, ",
+  "sum(abs(cast(asset_value as real))) AS gross ",
+  "FROM portfolio_lines ",
+  "WHERE fund='DUKE' ",
+  "AND type='live'",
+  "GROUP BY date, pair"
+)))
+
+closed_duke_pnl<-data.table(query(paste0(
+  "SELECT ",
+  "date, pair, ",
+  "sum(cast(bps as real)) AS bps, ",
+  "0 AS gross ",
+  "FROM cummulative_closed_portfolio_lines ",
+  "WHERE fund='DUKE' ",
+  "AND type='closed'",
+  "GROUP BY date, pair"
+)))
+
+pair_pnl<-apply(rename_colnames(
+  dMcast(rbind(open_duke_pnl,closed_duke_pnl),date~pair,value.var = "bps",drop.unused.levels=FALSE),
+  "^pair",
+  ""
+),2,function(x)x-x[1])
+
+pair_gross<-rename_colnames(
+  dMcast(rbind(open_duke_pnl,closed_duke_pnl),date~pair,value.var = "gross",drop.unused.levels=FALSE),
+  "^pair",
+  ""
+)
+
+recent_days<-nrow(pair_pnl)
+
+recent_pair_pnl<-apply(tail(pair_pnl,recent_days),2,function(x)x-x[1])
+recent_pair_gross<-tail(pair_gross,recent_days)
+recent_live_pairs<-colSums(recent_pair_gross)>0
+
+live_pair_ids<-mapply(
+  function(x)colnames(recent_pair_gross)[which(x>0)],
+  split(recent_pair_gross,rownames(recent_pair_gross)[row(recent_pair_gross)])
+)
+
+
+rolling_ratios<-function(pnl,w){
+  start<-head(pnl,-w)
+  end<-tail(pnl,-w)
+  perf<-end-start
+  hr<-apply(perf,1,function(x)sum(x>0)/(sum(x>0)+sum(x<0)))
+  wlr<-apply(perf,1,function(x)mean(x[x>0])/abs(mean(x[x<0])))
+  data.table(
+    start=rownames(start),
+    end=rownames(end),
+    hr=hr,
+    wlr=wlr
+  )
+}
+
+get_gross<-function(pairs,date)sum(pair_gross[date,pairs])
+
+@
+
+\usepackage[portrait, headheight = 0cm, margin=0.25cm, top = 0.25cm, nofoot]{geometry} 
+\usepackage[export]{adjustbox} 
+\usepackage[space]{grffile}
+\usepackage[dvipsnames,table]{xcolor} % for setting colors \usepackage{amsmath} \usepackage{xfrac}
+\usepackage{tikz}
+\usepackage{sparklines}
+\usepackage{graphicx}
+\usepackage{xfrac}
+
+\DeclareRobustCommand\Tstrut{\rule{0pt}{2.6ex}}         % = `top' strut
+\DeclareRobustCommand\Bstrut{\rule[-0.9ex]{0pt}{0pt}}   % = `bottom' strut
+\renewcommand{\familydefault}{\sfdefault}
+
+\begin{document}
+
+\section{Scrape database contents}
+
+\vskip 5mm
+
+\begin{center}
+\Sexpr{ntable(
+  df=query(paste0(
+    "SELECT count(sheet) AS count, sheet, max(date), min(date) ",
+    "FROM sheet_scrape ",
+    "GROUP BY sheet"
+  )),
+  add_rownames=FALSE,
+  title="Current contents of `sheet scrape' table"
+)}
+\end{center}
+
+\begin{center}
+\Sexpr{ntable(
+  df=query(paste0(
+    "SELECT ",
+    "fund, manager, ",
+    "count(line) AS lines, ",
+    "count(DISTINCT date) AS dates, ",
+    "count(DISTINCT digest) AS digests, ",
+    "count(DISTINCT pair) AS pairs, ",
+    "count(DISTINCT ticker) AS tickers, ",
+    "max(date), min(date) ",
+    "FROM portfolio_lines ",
+    "GROUP BY fund, manager"
+  )),
+  add_rownames=FALSE,
+  title="Current contents of `portfolio lines' table"
+)}
+\end{center}
+
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+
+
+recent_tab1<-function(pnl,gross,who=""){
+  live_pairs<-colSums(gross)>0
+  live_pair_ids<-mapply(
+   function(x)colnames(gross)[which(x>0)],
+   split(gross,rownames(gross)[row(gross)])
+  )
+  paste0(
+    "\\begin{center} \n",
+    "\\begin{tabular}{m{8cm} m{8cm}} \n",
+    "\\hline \n",
+    "\\rowcolor{gray!20} \n",
+    "\\multicolumn{1}{c}{",who,":Performance} & \n",
+    "\\multicolumn{1}{c}{",who,":Pair count} \\\\ \n",
+    make_plot(
+     plot_with_dates(cumprod(diff(rowSums(pnl))/10000+1),divisor=0.001),
+     height="7cm",width="8cm"
+    ),"\n", 
+    " & \n",
+    make_plot(
+     plot_with_dates(apply(gross,1,function(x)sum(abs(x)>0)),divisor=1),
+     height="7cm",width="8cm"
+    ),"\n", 
+    "\\\\ \\\\ \n",
+    "\\hline \n",
+    "\\rowcolor{gray!20} \n",
+    "\\multicolumn{1}{c}{",who,":Pair performance} & \n",
+    "\\multicolumn{1}{c}{",who,":Pair gross} \\\\ \n",
+    make_plot(
+     matplot(
+      x=matrix(1:nrow(pnl),ncol=1)[,rep(1,sum(live_pairs))],
+      y=pnl[,live_pairs],
+      type="l",
+      lty=1,
+      lwd=1,
+      col=rgb(0,0,1,0.33),
+      ylab="bps",
+      xlab=paste0("days since T-",nrow(pnl))
+     ),
+     height="7cm",width="8cm"),"\n",  
+     " & \n",
+     make_plot(
+      matplot(
+       x=matrix(1:nrow(gross),ncol=1)[,rep(1,sum(live_pairs))],
+       y=gross[,live_pairs],
+       type="l",
+       lty=1,
+       lwd=1,
+       col=rgb(0,0,1,0.33),
+       ylab="gross",
+       xlab=paste0("days since T-",nrow(pnl))
+      ),
+     height="7cm",width="8cm"),"\n",
+     "\\\\ \\\\ \n",
+     "\\hline \n",
+     "\\rowcolor{gray!20} \n",
+     "\\multicolumn{1}{c}{",who,":Cummulative pairs opened} & \n",
+     "\\multicolumn{1}{c}{",who,":Cummulative pairs closed} \\\\ \n",
+     make_plot(
+       plot(
+         cumsum(mapply(
+          function(new,old)length(setdiff(new,old)),
+          new=tail(live_pair_ids,-1),
+          old=head(live_pair_ids,-1)
+         )),
+         ylab="New pairs",
+         xlab=paste0("days since T-",length(live_pair_ids)),
+         pch=19,
+         col="blue"
+      ),
+      height="7cm",width="8cm"
+    ),"\n",
+    " & \n",
+    make_plot(
+      plot(
+        cumsum(mapply(
+          function(new,old)length(setdiff(old,new)),
+          new=tail(live_pair_ids,-1),
+          old=head(live_pair_ids,-1)
+        )),
+        ylab="Closed pairs",
+        xlab=paste0("days since T-",length(live_pair_ids)),
+        pch=19,
+        col="blue"
+      ),
+    height="7cm",width="8cm"),"\n",  
+    "\\\\ \n",
+    "\\end{tabular} \n",
+    "\\end{center} \n"
+  )
+}
+
+recent_tab2<-function(pnl,gross,all_pnl,all_gross,who=""){
+  live_pairs<-colSums(gross)>0
+  live_pair_ids<-mapply(
+   function(x)colnames(gross)[which(x>0)],
+   split(gross,rownames(gross)[row(gross)])
+  )
+  ratios<-rolling_ratios(all_pnl[,colSums(all_gross)>0],61)
+  paste0(
+    "\\begin{center} \n",
+    "\\begin{tabular}{m{8cm} m{8cm}} \n",
+    "\\hline \n",
+    "\\rowcolor{gray!20} \n",
+    "\\multicolumn{1}{c}{",who,":Gross added} & \n",
+    "\\multicolumn{1}{c}{",who,":Gross unwound} \\\\ \n",
+    make_plot(
+     plot(
+      cumsum(mapply(
+       function(new,old,date)get_gross(pairs=setdiff(new,old),date=date),
+       new=tail(live_pair_ids,-1),
+       old=head(live_pair_ids,-1),
+       date=tail(names(live_pair_ids),-1)
+      )),
+      ylab="New pair gross",
+      xlab=paste0("days since T-",recent_days),
+      pch=19,
+      col="blue"
+     ),
+     height="7cm",width="8cm"
+    ),"\n", 
+    " & \n",
+    make_plot(
+      plot(
+       cumsum(mapply(
+        function(new,old,date)get_gross(pairs=setdiff(old,new),date=date),
+        new=tail(live_pair_ids,-1),
+        old=head(live_pair_ids,-1),
+        date=head(names(live_pair_ids),-1)
+       )),
+       ylab="Closed pair gross",
+       xlab=paste0("days since T-",recent_days),
+       pch=19,
+       col="blue"
+     ),
+     height="7cm",width="8cm"
+    ),"\n", 
+    "\\\\ \\\\ \n",
+    "\\hline \n",
+    "\\rowcolor{gray!20} \n",
+    "\\multicolumn{1}{c}{",who,":Net gross added} & \n",
+    "\\multicolumn{1}{c}{} \\\\ \n",
+    make_plot(
+     plot(
+      cumsum(mapply(
+       function(new,old,date)get_gross(pairs=setdiff(new,old),date=date),
+       new=tail(live_pair_ids,-1),
+       old=head(live_pair_ids,-1),
+       date=tail(names(live_pair_ids),-1)
+      ))-
+      cumsum(mapply(
+       function(new,old,date)get_gross(pairs=setdiff(old,new),date=date),
+       new=tail(live_pair_ids,-1),
+       old=head(live_pair_ids,-1),
+       date=head(names(live_pair_ids),-1)
+      )),
+      ylab="Net gross",
+      xlab=paste0("days since T-",recent_days),
+      pch=19,
+      col="blue"
+     ),
+     height="7cm",width="8cm"),"\n",  
+     " & \n",
+     make_plot(
+      plot(NA,type="n",axes=FALSE,xlab="",ylab="",xlim=c(0,1),ylim=c(0,1)),
+     height="7cm",width="8cm"),"\n",
+     "\\\\ \\\\ \n",
+     "\\hline \n",
+     "\\rowcolor{gray!20} \n",
+     "\\multicolumn{1}{c}{",who,":3mo rolling hit ratio} & \n",
+     "\\multicolumn{1}{c}{",who,":3mo rolling win-loss} \\\\ \n",
+     make_plot(expression(
+        plot(
+          ratios$hr,
+          ylab="Rolling hit ratio",
+          xlab=paste0("days since T-400"),
+          pch=19,
+          col="blue"
+        ),
+        abline(h=0.5,col="red")
+      ),height="7cm",width="8cm",envir=environment()
+    ),"\n",
+    " & \n",
+    make_plot(expression(
+      plot(
+        ratios$wlr,
+        ylab="Rolling win-loss ratio",
+        xlab=paste0("days since T-400"),
+        pch=19,
+        col="blue"
+      ),
+      abline(h=1,col="red")
+    ),height="7cm",width="8cm"),"\n",  
+    "\\\\ \n",
+    "\\end{tabular} \n",
+    "\\end{center} \n"
+  )
+}
+
+
+ratios<-rolling_ratios(tail(pair_pnl,400)[,colSums(tail(pair_gross,400))>0],61)
+get_pairs<-function(m,p)m[,grepl(p,colnames(m))]
+
+@
+
+\newpage
+\section{What happened to DUKE in the last \Sexpr{recent_days} days?}
+
+\vskip 5mm
+
+\Sexpr{recent_tab1(recent_pair_pnl,recent_pair_gross,"DUKE")}
+
+\Sexpr{recent_tab2(recent_pair_pnl,recent_pair_gross,pair_pnl,pair_gross,"DUKE")}
+
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+@
+
+\newpage
+\section{Report }
+
+\newpage
+\section{What happened to DH in the last \Sexpr{recent_days} days?}
+\vskip 5mm
+\Sexpr{recent_tab1(get_pairs(recent_pair_pnl,"^DH"),get_pairs(recent_pair_gross,"^DH"),"DH")}
+\Sexpr{recent_tab2(
+get_pairs(recent_pair_pnl,"^DH"),
+get_pairs(recent_pair_gross,"^DH"),
+get_pairs(pair_pnl,"^DH"),
+get_pairs(pair_gross,"^DH"),
+"DH"
+)}
+
+\newpage
+\section{What happened to GJ in the last \Sexpr{recent_days} days?}
+\vskip 5mm
+\Sexpr{recent_tab1(get_pairs(recent_pair_pnl,"^GJ"),get_pairs(recent_pair_gross,"^GJ"),"GJ")}
+\Sexpr{recent_tab2(
+get_pairs(recent_pair_pnl,"^GJ"),
+get_pairs(recent_pair_gross,"^GJ"),
+get_pairs(pair_pnl,"^GJ"),
+get_pairs(pair_gross,"^GJ"),
+"GJ"
+)}
+
+\newpage
+\section{What happened to ABC in the last \Sexpr{recent_days} days?}
+\vskip 5mm
+\Sexpr{recent_tab1(get_pairs(recent_pair_pnl,"^ABC"),get_pairs(recent_pair_gross,"^ABC"),"ABC")}
+\Sexpr{recent_tab2(
+get_pairs(recent_pair_pnl,"^ABC"),
+get_pairs(recent_pair_gross,"^ABC"),
+get_pairs(pair_pnl,"^ABC"),
+get_pairs(pair_gross,"^ABC"),
+"ABC"
+)}
+
+
+\newpage
+\section{What happened to JR in the last \Sexpr{recent_days} days?}
+\vskip 5mm
+\Sexpr{recent_tab1(get_pairs(recent_pair_pnl,"^JR"),get_pairs(recent_pair_gross,"^JR"),"JR")}
+\Sexpr{recent_tab2(
+get_pairs(recent_pair_pnl,"^JR"),
+get_pairs(recent_pair_gross,"^JR"),
+get_pairs(pair_pnl,"^JR"),
+get_pairs(pair_gross,"^JR"),
+"JR"
+)}
+
+\newpage
+\section{What happened to MC in the last \Sexpr{recent_days} days?}
+\vskip 5mm
+\Sexpr{recent_tab1(get_pairs(recent_pair_pnl,"^MC"),get_pairs(recent_pair_gross,"^MC"),"MC")}
+\Sexpr{recent_tab2(
+get_pairs(recent_pair_pnl,"^MC"),
+get_pairs(recent_pair_gross,"^MC"),
+get_pairs(pair_pnl,"^MC"),
+get_pairs(pair_gross,"^MC"),
+"MC"
+)}
+
+
+\newpage
+\section{What happened to AC in the last \Sexpr{recent_days} days?}
+\vskip 5mm
+\Sexpr{recent_tab1(get_pairs(recent_pair_pnl,"^AC"),get_pairs(recent_pair_gross,"^AC"),"AC")}
+\Sexpr{recent_tab2(
+get_pairs(recent_pair_pnl,"^AC"),
+get_pairs(recent_pair_gross,"^AC"),
+get_pairs(pair_pnl,"^AC"),
+get_pairs(pair_gross,"^AC"),
+"AC"
+)}
+
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+dbDisconnect(db)
+@
+
+
+\end{document}
