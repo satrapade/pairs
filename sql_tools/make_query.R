@@ -1,4 +1,5 @@
-function(
+
+make_query<-function(
   ..., 
   query_string=paste(readLines(file),collapse="\n"),
   file="bucket_pnl.sql"
@@ -9,7 +10,7 @@ function(
   }
   R_regex<-"--R{[\\\\ \\n \\t \\r  \\* \\. \\$ \\[ \\] \\( \\) \\: <> \\, \\_ '!\"a-zA-Z0-9=\\-+/% ]*}--"
   error_regex<-"--error{[\\\\ \\n \\t \\r  \\* \\. \\$ \\[ \\] \\( \\) \\: <> \\, \\_ '!\"a-zA-Z0-9=\\-+/% ]*}--"
-  include_regex<-"--include{[a-zA-Z0-9\\.\\_]+}--"
+  include_regex<-"--include{[:/ a-zA-Z0-9\\.\\_]+}--"
   e<-list2env(list(...))
   eval_fun<-function(x){
     r_expr_txt<-stri_sub(x,5,-4)
@@ -35,4 +36,5 @@ function(
   attributes(res1)$errors<-error_env$errors
   res1
 }
+
 
