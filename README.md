@@ -82,10 +82,10 @@ The SQL scripts used to create these tables are in the ``sql`` folder.
 | Table                        | Description                         | Script         |
 |------------------------------|-------------------------------------|----------------|
 |ttBUCKET_EXPOSURES            | exposures by bucket                 | [create_ttBUCKET_EXPOSURES.sql](sql/create_ttBUCKET_EXPOSURES.sql) |
-|ttBUCKET_PNL                  | pnl by bucket                       | [create_ttDATES.sql](sql/create_ttDATES.sql) |
-|ttBUCKETS                     | relevant buckets                    | [create_ttBUCKET_PNL.sql](sql/create_ttBUCKET_PNL.sql) |
-|ttBUID_MARKET_STATUS          | market status of relevant BUIDs     | [create_ttBUCKETS.sql](sql/create_ttBUCKETS.sql) |
-|ttCURRENT_ISIN_MARKET_STATUS  | market status of current ISINs      | [create_ttBUID_MARKET_STATUS.sql](sql/create_ttBUID_MARKET_STATUS.sql) |
+|ttBUCKET_PNL                  | pnl by bucket                       | [create_ttBUCKET_PNL.sql](sql/create_ttBUCKET_PNL.sql) |
+|ttBUCKETS                     | relevant buckets                    | [create_ttBUCKETS.sql](sql/create_ttBUCKETS.sql) |
+|ttBUID_MARKET_STATUS          | market status of relevant BUIDs     | [create_ttBUID_MARKET_STATUS.sql](sql/create_ttBUID_MARKET_STATUS.sql) |
+|ttCURRENT_ISIN_MARKET_STATUS  | market status of current ISINs      | [create_ttCURRENT_ISIN_MARKET_STATUS.sql](sql/create_ttCURRENT_ISIN_MARKET_STATUS.sql) |
 |ttDATES                       | relevant dates (including weekends) | [create_ttDATES.sql](sql/create_ttDATES.sql) |
 |ttEXPOSURE_SECURITIES         | relevant instrument table           | [create_ttEXPOSURE_SECURITIES.sql](sql/create_ttEXPOSURE_SECURITIES.sql) |
 |ttHISTORICAL_BUCKET_EXPOSURES | exposures over time                 | [create_ttHISTORICAL_BUCKET_EXPOSURES.sql](sql/create_ttHISTORICAL_BUCKET_EXPOSURES.sql) |
