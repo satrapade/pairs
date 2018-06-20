@@ -48,23 +48,23 @@ all knitr Rnw files used to generate reports.
 
 
 | File | Description | Documentation | Example |
-| ``bank_pair_report.Rnw`` ||||
-| ``custom_ABC_report.Rnw`` ||||
-| ``custom_AC_report.Rnw`` ||||
-| ``custom_DH_report.Rnw`` ||||
-| ``custom_GJ_report.Rnw`` ||||
-| ``custom_JR_report.Rnw`` ||||
-| ``custom_MC_report.Rnw`` ||||
-| ``fx_trend_report.Rnw`` ||||
-| ``market_data_status.Rnw`` ||||
-| ``pair_risk_contribution.Rnw`` ||||
-| ``portfolio_summary.Rnw`` ||||
-| ``risk_plots.Rnw`` ||||
-| ``scrape_status.Rnw`` ||||
-| ``sheet_scrape_report.Rnw`` ||||
-| ``tech_pair_report.Rnw``||||
-| ``trailing_stop_report.Rnw``||||
-| ``what_happened_last_week.Rnw``||||
+| ``bank_pair_report.Rnw`` | search for trending bank pairs | | |
+| ``custom_ABC_report.Rnw`` | analysis of ABC's pairs | | |
+| ``custom_AC_report.Rnw`` | analysis of ABC's pairs | | |
+| ``custom_DH_report.Rnw`` | analysis of ABC's pairs | | |
+| ``custom_GJ_report.Rnw`` | analysis of ABC's pairs | | |
+| ``custom_JR_report.Rnw`` | analysis of ABC's pairs | | |
+| ``custom_MC_report.Rnw`` | analysis of ABC's pairs | | |
+| ``fx_trend_report.Rnw`` | search for trending FX pairs| | |
+| ``market_data_status.Rnw`` | market data fetch | | |
+| ``pair_risk_contribution.Rnw`` | pair risk contribution | | |
+| ``portfolio_summary.Rnw`` | portfolio summary statistics | | |
+| ``risk_plots.Rnw`` | risk plot | | |
+| ``scrape_status.Rnw`` | sheet scrape status | | |
+| ``sheet_scrape_report.Rnw`` | sheet scrape report | | |
+| ``tech_pair_report.Rnw``| search for trending technology pairs | | |
+| ``trailing_stop_report.Rnw``| trailing stop-loss report | | |
+| ``what_happened_last_week.Rnw``| what happened last week report| | |
 
 
 
