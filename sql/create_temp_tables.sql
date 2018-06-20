@@ -1,5 +1,5 @@
 
---include{N:/Depts/Share/UK Alpha Team/Analytics/Rscripts/query_parameters.sql}--
+--include{https://raw.githubusercontent.com/satrapade/pairs/master/sql/query_parameters.sql}--
 
 --
 -- tables required to compute P&L by bucket and perform
