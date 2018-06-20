@@ -48,6 +48,7 @@ all knitr Rnw files used to generate reports.
 
 
 | File | Description | Documentation | Example |
+|----------|----------|----------|----------|
 | ``bank_pair_report.Rnw`` | search for trending bank pairs | here | here |
 | ``custom_ABC_report.Rnw`` | analysis of ABC's pairs | here | here |
 | ``custom_AC_report.Rnw`` | analysis of ABC's pairs | here | here |
@@ -64,7 +65,7 @@ all knitr Rnw files used to generate reports.
 | ``sheet_scrape_report.Rnw`` | sheet scrape report | here | here |
 | ``tech_pair_report.Rnw``| search for trending technology pairs | here | here |
 | ``trailing_stop_report.Rnw``| trailing stop-loss report | here | here |
-| ``what_happened_last_week.Rnw``| what happened last week report| here | here |
+| ``what_happened_last_week.Rnw``| what happened last week report | here | here |
 
 
 
