@@ -1,4 +1,9 @@
 # risk reports
+
+knitr documents resulting in report .PDFs contaioning product risk and performance analysis 
+as well as pair and forex trend filters. in addition to the business-related reports, there
+are a number of diagnostics used to check data integrity.
+
 ---
 
 The  ``risk_reports`` directory contains 
