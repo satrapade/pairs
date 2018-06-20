@@ -23,24 +23,24 @@ all workflow scripts.
 
 | File | Description | Documentation |
 |----------|----------|----------|
-| ``workflow.R`` | the start script  |[here](documentation/default.md)|
-| ``workflow.log`` | results log |[here](documentation/default.md)|
-| ``query_parameters.sql`` | set query parameters |[here](documentation/default.md)|
-| ``relevant_equity_ticker_table.sql`` | construct date, ticker, bucket tables |[here](documentation/default.md)|
-| ``create_temp_tables.sql`` |  create tables |[here](default.md)|
-| ``initialize_scrape_db.R`` |  make sure the sheet scrape DB exists |[here](default.md)|
-| ``perform_sheet_scrape_to_db.R`` |  scrape latest sheet |[here](default.md)|
-| ``create_cix_uploads.R`` |  create ``BLOOMBERG`` CIX formuli |[here](default.md)|
-| ``create_database_temp_tables.R`` | call ``SQL`` scripts  |[here](default.md)|
-| ``create_market_data.R`` | fetch relevant market data from ``BLOOMBERG`` |[here](default.md)|
-| ``create_market_data_intraday.R`` | fetch relevant intraday data from ``BLOOMBERG`` |[here](default.md)|
-| ``create_pair_icons.R`` | create icons for live pairs |[here](default.md)|
-| ``create_portfolio_summary.R`` | create portfolio summery from sheet scrapes |[here](default.md)|
-| ``create_portfolio_upload.R`` | create portfolio upload files |[here](default.md)|
-| ``create_risk_reports.R`` |  run .Rnw files to create risk reports |[here](default.md)|
-| ``create_tsne_grid.R`` | compute 2D layout of pairs, live stocks |[here](default.md)|
-| ``intraday_bank_pairs.R`` |  fetch intraday price action for SX7P components |[here](default.md)|
-| ``intraday_fx.R`` |  fetch intraday price action for 30 currencies |[here](default.md)|
+| ``workflow.R`` | the start script  |[here](documentation/workflow.md)|
+| ``workflow.log`` | results log |[here](documentation/workflow.md)|
+| ``query_parameters.sql`` | set query parameters |[here](documentation/query_parameters.md)|
+| ``relevant_equity_ticker_table.sql`` | construct date, ticker, bucket tables |[here](documentation/relevant_equity_ticker_table.md)|
+| ``create_temp_tables.sql`` |  create tables |[here](create_temp_tables.md)|
+| ``initialize_scrape_db.R`` |  make sure the sheet scrape DB exists |[here](initialize_scrape_db.md)|
+| ``perform_sheet_scrape_to_db.R`` |  scrape latest sheet |[here](perform_sheet_scrape_to_db.md)|
+| ``create_cix_uploads.R`` |  create ``BLOOMBERG`` CIX formuli |[here](create_cix_uploads.md)|
+| ``create_database_temp_tables.R`` | call ``SQL`` scripts  |[here](create_database_temp_tables.md)|
+| ``create_market_data.R`` | fetch relevant market data from ``BLOOMBERG`` |[here](create_market_data.md)|
+| ``create_market_data_intraday.R`` | fetch relevant intraday data from ``BLOOMBERG`` |[here](create_market_data_intraday.md)|
+| ``create_pair_icons.R`` | create icons for live pairs |[here](create_pair_icons.md)|
+| ``create_portfolio_summary.R`` | create portfolio summery from sheet scrapes |[here](create_portfolio_summary.md)|
+| ``create_portfolio_upload.R`` | create portfolio upload files |[here](create_portfolio_upload.md)|
+| ``create_risk_reports.R`` |  run .Rnw files to create risk reports |[here](create_risk_reports.md)|
+| ``create_tsne_grid.R`` | compute 2D layout of pairs, live stocks |[here](create_tsne_grid.md)|
+| ``intraday_bank_pairs.R`` |  fetch intraday price action for SX7P components |[here](intraday_bank_pairs.md)|
+| ``intraday_fx.R`` |  fetch intraday price action for 30 currencies |[here](intraday_fx.md)|
 
 
 
