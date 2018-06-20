@@ -13,7 +13,7 @@ require(data.table)
 require(Matrix)
 require(Matrix.utils)
 require(clue)
-require(Rtsne)
+
 
 source(
   "https://raw.githubusercontent.com/satrapade/utility/master/utility_functions.R"
