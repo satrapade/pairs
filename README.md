@@ -63,8 +63,8 @@ all knitr Rnw files used to generate reports.
 | ``scrape_status.Rnw`` ||||
 | ``sheet_scrape_report.Rnw`` ||||
 | ``tech_pair_report.Rnw||||
-| ``trailing_stop_report.Rnw||||
-| ``what_happened_last_week.Rnw||||
+| ``trailing_stop_report.Rnw``||||
+| ``what_happened_last_week.Rnw``||||
 
 
 
