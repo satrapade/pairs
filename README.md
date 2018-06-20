@@ -23,10 +23,10 @@ all workflow scripts.
 
 | File | Description | Documentation |
 |----------|----------|----------|
-| ``workflow.R`` | the start script  |[here](default.md)|
-| ``workflow.log`` | results log |[here](default.md)|
-| ``query_parameters.sql`` | set query parameters |[here](default.md)|
-| ``relevant_equity_ticker_table.sql`` | construct date, ticker, bucket tables |[here](default.md)|
+| ``workflow.R`` | the start script  |[here](documentation/default.md)|
+| ``workflow.log`` | results log |[here](documentation/default.md)|
+| ``query_parameters.sql`` | set query parameters |[here](documentation/default.md)|
+| ``relevant_equity_ticker_table.sql`` | construct date, ticker, bucket tables |[here](documentation/default.md)|
 | ``create_temp_tables.sql`` |  create tables |[here](default.md)|
 | ``initialize_scrape_db.R`` |  make sure the sheet scrape DB exists |[here](default.md)|
 | ``perform_sheet_scrape_to_db.R`` |  scrape latest sheet |[here](default.md)|
