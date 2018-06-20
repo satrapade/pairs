@@ -81,19 +81,19 @@ The SQL scripts used to create these tables are in the ``sql`` folder.
 
 | Table                        | Description                         | Script         |
 |------------------------------|-------------------------------------|----------------|
-|ttBUCKET_EXPOSURES            | exposures by bucket                 | [create_ttDATES.sql](sql/create_ttDATES.sql) |
+|ttBUCKET_EXPOSURES            | exposures by bucket                 | [create_ttBUCKET_EXPOSURES.sql](sql/create_ttBUCKET_EXPOSURES.sql) |
 |ttBUCKET_PNL                  | pnl by bucket                       | [create_ttDATES.sql](sql/create_ttDATES.sql) |
-|ttBUCKETS                     | relevant buckets                    | [create_ttDATES.sql](sql/create_ttDATES.sql) |
-|ttBUID_MARKET_STATUS          | market status of relevant BUIDs     | [create_ttDATES.sql](sql/create_ttDATES.sql) |
-|ttCURRENT_ISIN_MARKET_STATUS  | market status of current ISINs      | [create_ttDATES.sql](sql/create_ttDATES.sql) |
+|ttBUCKETS                     | relevant buckets                    | [create_ttBUCKET_PNL.sql](sql/create_ttBUCKET_PNL.sql) |
+|ttBUID_MARKET_STATUS          | market status of relevant BUIDs     | [create_ttBUCKETS.sql](sql/create_ttBUCKETS.sql) |
+|ttCURRENT_ISIN_MARKET_STATUS  | market status of current ISINs      | [create_ttBUID_MARKET_STATUS.sql](sql/create_ttBUID_MARKET_STATUS.sql) |
 |ttDATES                       | relevant dates (including weekends) | [create_ttDATES.sql](sql/create_ttDATES.sql) |
-|ttEXPOSURE_SECURITIES         | relevant instrument table           | [create_ttDATES.sql](sql/create_ttDATES.sql) |
-|ttHISTORICAL_BUCKET_EXPOSURES | exposures over time                 | [create_ttDATES.sql](sql/create_ttDATES.sql) |
-|ttHISTORICAL_BUCKET_HOLDINGS  | holdings                            | [create_ttDATES.sql](sql/create_ttDATES.sql) |
-|ttHISTORICAL_BUCKETS          | all buckets                         | [create_ttDATES.sql](sql/create_ttDATES.sql) |
-|ttHISTORICAL_EQUITY_ISIN      | map historical to current ISINs     | [create_ttDATES.sql](sql/create_ttDATES.sql) |
-|ttISIN_MARKET_STATUS          | old ISIN status                     | [create_ttDATES.sql](sql/create_ttDATES.sql) |
-|ttTICKER_MARKET_STATUS        | ticker status                       | [create_ttDATES.sql](sql/create_ttDATES.sql) |
+|ttEXPOSURE_SECURITIES         | relevant instrument table           | [create_ttEXPOSURE_SECURITIES.sql](sql/create_ttEXPOSURE_SECURITIES.sql) |
+|ttHISTORICAL_BUCKET_EXPOSURES | exposures over time                 | [create_ttHISTORICAL_BUCKET_EXPOSURES.sql](sql/create_ttHISTORICAL_BUCKET_EXPOSURES.sql) |
+|ttHISTORICAL_BUCKET_HOLDINGS  | holdings                            | [create_ttHISTORICAL_BUCKET_HOLDINGS.sql](sql/create_ttHISTORICAL_BUCKET_HOLDINGS.sql) |
+|ttHISTORICAL_BUCKETS          | all buckets                         | [create_ttHISTORICAL_BUCKETS.sql](sql/create_ttHISTORICAL_BUCKETS.sql) |
+|ttHISTORICAL_EQUITY_ISIN      | map historical to current ISINs     | [create_ttHISTORICAL_EQUITY_ISIN.sql](sql/create_ttHISTORICAL_EQUITY_ISIN.sql) |
+|ttISIN_MARKET_STATUS          | old ISIN status                     | [create_ttISIN_MARKET_STATUS.sql](sql/create_ttISIN_MARKET_STATUS.sql) |
+|ttTICKER_MARKET_STATUS        | ticker status                       | [create_ttTICKER_MARKET_STATUS.sql](sql/create_ttTICKER_MARKET_STATUS.sql) |
 
 
 
