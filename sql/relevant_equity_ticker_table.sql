@@ -4,7 +4,7 @@
 -- +' 12:00:00.0000000'
 --
 
---include{N:/Depts/Share/UK Alpha Team/Analytics/Rscripts/query_parameters.sql}--
+--include{https://raw.githubusercontent.com/satrapade/pairs/master/sql/query_parameters.sql}--
 
 
 SELECT DISTINCT
