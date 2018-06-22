@@ -324,6 +324,16 @@ db_sheets<-dbConnect(
    dbname="N:/Depts/Share/UK Alpha Team/Analytics/sheet_scrape/sheet_scrapes.sqlite"
 )
 
+db<-dbConnect(
+  odbc::odbc(), 
+  .connection_string = paste0(
+    "driver={SQL Server};",
+    "server=SQLS071FP\\QST;",
+    "database=PRDQSTFundPerformance;",
+    "trusted_connection=true"
+  )
+)
+
 @
 
 
@@ -375,6 +385,45 @@ sheet.
   ),2,latexTranslate)
 )}
 \end{center}
+
+
+\vskip 5mm
+
+The performance DB used for calculations is as follows:
+
+\vskip 5mm
+
+
+\begin{center}
+\Sexpr{ntable(
+  df=apply(as.data.table(
+    t(query("
+    select Top 1        
+    bs.backup_finish_date                    as PRDFundPerformance_BackupDateTime,
+    rs.restore_date                          as PRDQSTFundPerformance_RestoreDateTime
+    from msdb..restorehistory rs
+    inner join msdb..backupset bs 
+    on rs.backup_set_id = bs.backup_set_id
+    where destination_database_name = 'PRDQSTFundPerformance'
+    order by rs.restore_date desc
+    ",db)),
+    keep.rownames=TRUE
+  ),2,latexTranslate)
+)}
+\end{center}
+
+\vskip 5mm
+
+
+Trades are manually assigned to buckets by the performance team. It is possible that
+position bucketing will lag product positions. We would expect the latest bucket date 
+to occur in the near past (couple of days). Latest bucket day in LUKE: {\bf \Sexpr{query("
+SELECT MAX(HistoricalDate) 
+FROM tHistoricalBucketHolding 
+WHERE tHistoricalBucketHolding.ProductId = 7 
+AND   tHistoricalBucketHolding.DataSourceId = 1")[[1]][1]
+}}
+
 
 \newpage 
 \section{Summary: Recent performance of \underline{current} portfolio holdings}
