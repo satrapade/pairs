@@ -1,6 +1,3 @@
-require(knitr)
-require(stringi)
-
 #
 create_report<-function(
   report_name,
@@ -9,6 +6,12 @@ create_report<-function(
 {
   wd<-getwd()
   setwd("N:/Depts/Share/UK Alpha Team/Analytics/risk_reports")
+  res<-try(fetch_risk_report(report_name),silent=TRUE)
+  if(any(class(res) %in% "try-error")){
+    append2log(paste0("!!!>ERROR<!!! fetch:",report_name))
+    setwd(wd)
+    return(paste0(report_name,": error: cant fetch report"))
+  }
   if(!file.exists(paste0(report_name,".Rnw"))){
     append2log(paste0("!!!>ERROR<!!! report does not exist:",report_name))
     setwd(wd)
@@ -79,5 +82,3 @@ create_report<-function(
   setwd(wd)
   return(paste0(report_name,": success"))
 }
-
-
