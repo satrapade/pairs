@@ -1,0 +1,414 @@
+
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+  
+require(RSQLite)
+require(DBI)
+require(Matrix)
+require(Matrix.utils)
+require(Rblpapi)
+require(R.cache)
+require(RcppRoll)
+require(data.table)
+require(Hmisc)
+require(clue)
+require(gsubfn)
+require(magrittr)
+
+x<-list.files(
+  path="figure",
+  pattern="*.pdf",
+  full.names=TRUE
+)
+if(length(x)>0)file.remove(x)
+
+source(
+  "https://raw.githubusercontent.com/satrapade/utility/master/utility_functions.R"
+)
+
+source(
+  "https://raw.githubusercontent.com/satrapade/latex_utils/master/latex_helpers_v2.R"
+)
+
+source(
+  "https://raw.githubusercontent.com/satrapade/utility/master/scrub.R"
+)
+
+source(
+  "https://raw.githubusercontent.com/satrapade/utility/master/with_columns.R"
+)
+
+source(
+  "https://raw.githubusercontent.com/satrapade/utility/master/nn_cast.R"
+)
+
+source(
+  "https://raw.githubusercontent.com/satrapade/utility/master/make_query.R"
+)
+
+
+
+
+if(exists("db"))dbDisconnect(db)
+db<-dbConnect(
+  odbc::odbc(), 
+  .connection_string = paste0(
+    "driver={SQL Server};",
+    "server=SQLS071FP\\QST;",
+    "database=PRDQSTFundPerformance;",
+    "trusted_connection=true"
+  )
+)
+
+
+query_string="
+SELECT 
+tBucket.Name AS bucket,
+SUBSTRING(CONVERT(varchar,tHistoricalBucket.HistoricalDate),1,10) AS date,
+tHistoricalBucket.BucketPricePlItd AS cummulative_return
+FROM tHistoricalBucket
+LEFT JOIN tBucket
+ON tBucket.BucketId = tHistoricalBucket.BucketId
+LEFT JOIN tBucket AS tParentBucket 
+ON tParentBucket.BucketId=tBucket.ParentBucketId
+LEFT JOIN tBucket AS tRootBucket 
+ON tRootBucket.BucketId=tParentBucket.ParentBucketId
+WHERE tRootBucket.Name = 'EqyBucket'
+AND tHistoricalBucket.ProductId=--R{product_id}--
+AND tHistoricalBucket.DataSourceId=--R{data_source_id}--
+"
+
+
+
+@
+
+
+\documentclass{article}
+
+
+\usepackage[portrait, headheight = 0cm, margin=0.25cm, top = 0.25cm, nofoot]{geometry} 
+\usepackage[export]{adjustbox} 
+\usepackage[space]{grffile}
+\usepackage[dvipsnames,table]{xcolor} % for setting colors \usepackage{amsmath} \usepackage{xfrac}
+\usepackage{tikz}
+\usepackage{sparklines}
+\usepackage{graphicx}
+\usepackage{xfrac}
+\usepackage{hyperref}
+\usepackage{amsmath, amsthm, amssymb, amsfonts}
+\usepackage{listings}
+\lstset{language=R} 
+
+\DeclareRobustCommand\Tstrut{\rule{0pt}{2.6ex}}         % = `top' strut
+\DeclareRobustCommand\Bstrut{\rule[-0.9ex]{0pt}{0pt}}   % = `bottom' strut
+\renewcommand{\familydefault}{\sfdefault}
+
+
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+
+#
+# LUKE
+#
+
+luke_bucket_return<-query(make_query(
+  query_string = query_string,
+  product_id="7",
+  data_source_id="1"
+),db=db)[
+  grepl("[A-Z]{2,3}_PAIR_[0-9]{2,9}",bucket) &
+  !is.na(cummulative_return)
+]
+
+luke_bucket_return_matrix<-10000*NNcast(
+  data=luke_bucket_return,
+  i_name="date",
+  j_name="bucket",
+  v_name="cummulative_return",
+  fun=sum,
+  scrub_fun=scrub
+)
+
+luke_high_water_mark<-apply(luke_bucket_return_matrix,2,max)
+luke_current_drawdown<-apply(luke_bucket_return_matrix,2,function(x)max(x)-x[length(x)])
+luke_max_drawdown<-apply(luke_bucket_return_matrix,2,function(x)max(cummax(x)-x))
+
+luke_pair_pms<-gsub("_PAIR_[0-9]+$","",colnames(luke_bucket_return_matrix))
+luke_pms<-sort(unique(luke_pair_pms))
+
+luke_pm_return<-structure(
+  luke_bucket_return_matrix%*%diag(length(luke_pms))[match(luke_pair_pms,luke_pms),],
+  dimnames=list(rownames(luke_bucket_return_matrix),luke_pms)
+)
+
+luke_pm_high_water_mark<-apply(luke_pm_return,2,max)
+luke_pm_current_drawdown<-apply(luke_pm_return,2,function(x)max(x)-x[length(x)])
+luke_pm_max_drawdown<-apply(luke_pm_return,2,function(x)max(cummax(x)-x))
+
+gg_luke_pm_plot<-melt(
+  data.table(date=as.Date(rownames(luke_pm_return),format="%Y-%m-%d"),luke_pm_return),
+  id.vars="date",
+  measure.vars = colnames(luke_pm_return),
+  variable.name="pm",
+  value.name="return"
+) %>% ggplot() +
+geom_line(
+  aes(x=date,y=return,color=pm,group=pm)
+)+
+scale_x_date(
+  labels = date_format("%Y-%m-%d"),
+  breaks = pretty(as.Date(rownames(luke_pm_return),format="%Y-%m-%d"), n = 15)
+) +
+labs(y = "P&L, basis points") +
+labs(x = "") +
+theme(
+  axis.text.x=element_text(angle=50,size=6,vjust=0.5)
+)
+
+
+#
+# DUKE
+#
+duke_bucket_return<-query(make_query(
+  query_string = query_string,
+  product_id="8",
+  data_source_id="2"
+),db=db)[
+  grepl("[A-Z]{2,3}_PAIR_[0-9]{2,9}",bucket) &
+  !is.na(cummulative_return)
+]
+
+duke_bucket_return_matrix<-10000*NNcast(
+  data=duke_bucket_return,
+  i_name="date",
+  j_name="bucket",
+  v_name="cummulative_return",
+  fun=sum,
+  scrub_fun=scrub
+)
+
+duke_high_water_mark<-apply(duke_bucket_return_matrix,2,max)
+duke_current_drawdown<-apply(duke_bucket_return_matrix,2,function(x)max(x)-x[length(x)])
+duke_max_drawdown<-apply(duke_bucket_return_matrix,2,function(x)max(cummax(x)-x))
+
+duke_pair_pms<-gsub("_PAIR_[0-9]+$","",colnames(duke_bucket_return_matrix))
+duke_pms<-sort(unique(duke_pair_pms))
+
+duke_pm_return<-structure(
+  duke_bucket_return_matrix%*%diag(length(duke_pms))[match(duke_pair_pms,duke_pms),],
+  dimnames=list(rownames(duke_bucket_return_matrix),duke_pms)
+)
+
+duke_pm_high_water_mark<-apply(duke_pm_return,2,max)
+duke_pm_current_drawdown<-apply(duke_pm_return,2,function(x)max(x)-x[length(x)])
+duke_pm_max_drawdown<-apply(duke_pm_return,2,function(x)max(cummax(x)-x))
+
+gg_duke_pm_plot<-melt(
+  data.table(date=as.Date(rownames(duke_pm_return),format="%Y-%m-%d"),duke_pm_return),
+  id.vars="date",
+  measure.vars = colnames(duke_pm_return),
+  variable.name="pm",
+  value.name="return"
+) %>% ggplot() +
+geom_line(
+  aes(x=date,y=return,color=pm,group=pm)
+)+
+scale_x_date(
+  labels = date_format("%Y-%m-%d"),
+  breaks = pretty(as.Date(rownames(duke_pm_return),format="%Y-%m-%d"), n = 15)
+) +
+labs(y = "P&L, basis points") +
+labs(x = "") +
+theme(
+  axis.text.x=element_text(angle=50,size=6,vjust=0.5)
+)
+
+
+@
+
+\begin{document}
+
+\tableofcontents
+
+\newpage
+\section{Data sources}
+
+\vskip 5mm
+
+\begin{itemize}
+\item We rely on the performance attribution database to obtain pair P\&L time-series. 
+\item The allocation of positions (and P\&L) to pairs is a daily manual process that 
+relies on a feed of settled trades from our custodian. 
+\item This means that our information is out of date by at least the settlement period
+(best practice would be to have exposures on the day they were traded). 
+\item Because coverage at the performance team varies, our numbers can be out of date 
+beyond the settlement lag. 
+\item A standard portfolio management system would bring this process up to current best practice.
+\end{itemize}
+
+\vskip 10mm
+
+\begin{center}
+\begin{tabular}{l l}
+\hline
+\multicolumn{2}{c}{Latest bucket P\&L date} \\
+LUKE  &  
+\Sexpr{query("SELECT MAX(HistoricalDate) FROM tHistoricalBucket WHERE tHistoricalBucket.ProductId=7")[[1]][1]}
+\\
+DUKE  &  
+\Sexpr{query("SELECT MAX(HistoricalDate) FROM tHistoricalBucket WHERE tHistoricalBucket.ProductId=8")[[1]][1]}
+\\
+\end{tabular}
+\end{center}
+
+\vskip 5mm
+
+\begin{center}
+\Sexpr{ntable(
+  df=apply(as.data.table(
+    t(query("
+    select Top 1        
+    bs.backup_finish_date                    as PRDFundPerformance_BackupDateTime,
+    rs.restore_date                          as PRDQSTFundPerformance_RestoreDateTime
+    from msdb..restorehistory rs
+    inner join msdb..backupset bs 
+    on rs.backup_set_id = bs.backup_set_id
+    where destination_database_name = 'PRDQSTFundPerformance'
+    order by rs.restore_date desc
+    ",db)),
+    keep.rownames=TRUE
+  ),2,latexTranslate),
+  title="Database copy date"
+)}
+\end{center}
+
+\newpage
+\section{
+  Historical DUKE performance by manager: 
+  \Sexpr{head(rownames(duke_bucket_return_matrix),1)} to \Sexpr{tail(rownames(duke_bucket_return_matrix),1)} 
+}
+
+\subsection{All together}
+
+\vskip 5mm
+
+\begin{center}
+\Sexpr{make_plot(
+  plot(gg_duke_pm_plot),
+  width="20cm",
+  height="20cm",
+  envir=environment()
+)}
+\end{center}
+
+\subsection{By manager}
+
+\vskip 5mm
+
+\begin{center}
+\Sexpr{make_plot(
+  plot(gg_duke_pm_plot + facet_grid(rows=vars(pm))),
+  width="20cm",
+  height="20cm",
+  envir=environment()
+)}
+\end{center}
+
+
+\newpage
+\section{
+  Historical LUKE performance by manager: 
+  \Sexpr{head(rownames(luke_bucket_return_matrix),1)} to \Sexpr{tail(rownames(luke_bucket_return_matrix),1)} 
+}
+
+\subsection{All together}
+
+\vskip 5mm
+
+\begin{center}
+\Sexpr{make_plot(
+  plot(gg_luke_pm_plot),
+  width="20cm",
+  height="20cm",
+  envir=environment()
+)}
+\end{center}
+
+\subsection{By manager}
+
+\vskip 5mm
+
+\begin{center}
+\Sexpr{make_plot(
+  plot(gg_luke_pm_plot + facet_grid(rows=vars(pm))),
+  width="20cm",
+  height="20cm",
+  envir=environment()
+)}
+\end{center}
+
+
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+duke_live_pairs<-setdiff(names(which(apply(tail(duke_bucket_return_matrix,30),2,sd)>0)),"DH_PAIR_20")
+duke_live_drawdowns<-duke_current_drawdown[duke_live_pairs]
+duke_top_drawdowns<-names(which(rank(-duke_live_drawdowns)<11))
+  
+gg_duke_drawdown_plot<-melt(
+  data.table(
+    date=tail(as.Date(rownames(duke_bucket_return_matrix[,duke_top_drawdowns]),format="%Y-%m-%d"),60),
+    tail(apply(duke_bucket_return_matrix[,duke_top_drawdowns],2,function(x)max(x)-x),60)
+  ),
+  id.vars="date",
+  measure.vars = duke_top_drawdowns,
+  variable.name="pair",
+  value.name="return"
+) %>% ggplot() +
+ylim(
+  low=0,
+  high=50
+)+
+geom_hline(
+    aes(yintercept=40),size=0.25,color=rgb(1,0,0,0.5),show.legend=FALSE
+)+ 
+geom_line(
+  aes(x=date,y=return,group=pair),
+  color=rgb(0,0,1,0.5)
+)+
+scale_x_date(
+  labels = date_format("%Y-%m-%d"),
+  breaks = pretty(as.Date(tail(rownames(duke_bucket_return_matrix),60),format="%Y-%m-%d"), n = 15)
+) +
+labs(
+  y = "Drawdown from high watermark, basis points"
+) +
+labs(
+  x = ""
+) +
+theme(
+  axis.text.x=element_text(angle=50,size=6,vjust=0.5)
+) + 
+facet_grid(
+  rows=vars(pair),
+  labeller=labeller(pair=function(x)gsub("_PAIR_","",x))
+)
+
+@
+
+\section{top DUKE drawdowns}
+
+\vskip 5mm
+
+\begin{center}
+\Sexpr{make_plot(
+  plot(gg_duke_drawdown_plot),
+  width="20cm",
+  height="20cm",
+  envir=environment()
+)}
+\end{center}
+
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+if(exists("db"))dbDisconnect(db)
+@
+
+\end{document}
+
+
