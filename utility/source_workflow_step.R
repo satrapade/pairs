@@ -1,6 +1,7 @@
 
 #
-#
+# source workflow from git repo (not local drive) and 
+# add log entry
 #
 
 source_workflow_step<-function(
