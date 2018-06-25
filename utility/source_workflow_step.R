@@ -8,7 +8,7 @@ source_workflow_step<-function(
 ){
   
   workflow_url<-paste0(
-    "https://raw.githubusercontent.com/satrapade/pairs/master/Rscripts/",
+    "https://raw.githubusercontent.com/satrapade/pairs/master/workflow/",
     workflow_step,
     ".R"
   )
