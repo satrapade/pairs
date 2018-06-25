@@ -25,7 +25,7 @@ source_workflow_step("intraday_bank_pairs")
 source_workflow_step("create_tsne_grid")
 source_workflow_step("perform_sheet_scrape_to_db")
 source_workflow_step("create_pair_icons")
-source_workflow_step("create_pair_icons")
+
 
 #
 append2log("workflow: create_risk_reports")
