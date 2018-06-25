@@ -3,6 +3,7 @@
 #
 #
 
+# data preparation steps
 workflow = c(
   "create_database_temp_tables"=list(),
   "create_cix_uploads"=list(),
@@ -18,6 +19,7 @@ workflow = c(
   "create_pair_icons"=list()
 )
 
+# risk reports prepared using knitr
 risk_report=list(
   "scrape_status"=list(),
   "market_data_status"=list(),
