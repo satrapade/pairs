@@ -9,14 +9,14 @@ fetch_workflow_step<-function(
   
   report_url<-paste0(
     "https://raw.githubusercontent.com/satrapade/pairs/master/Rscripts/",
-    report_name,
+    workflow_step,
     ".R"
   )
   
   report_fname<-paste0(
     target_directory,
     "/",
-    report_name,
+    workflow_step,
     ".R"
   )
   
