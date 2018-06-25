@@ -7,20 +7,20 @@ fetch_workflow_step<-function(
   target_directory="N:/Depts/Share/UK Alpha Team/Analytics/Rscripts"
 ){
   
-  report_url<-paste0(
+  workflow_url<-paste0(
     "https://raw.githubusercontent.com/satrapade/pairs/master/Rscripts/",
     workflow_step,
     ".R"
   )
   
-  report_fname<-paste0(
+  workflow_fname<-paste0(
     target_directory,
     "/",
     workflow_step,
     ".R"
   )
   
-  download.file(report_url,report_fname) 
+  download.file(workflow_url,workflow_fname) 
   
 }
 
