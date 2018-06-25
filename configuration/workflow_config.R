@@ -32,7 +32,7 @@ risk_report=list(
   "custom_GJ_report"=list(),
   "custom_ABC_report"=list(),
   "custom_MC_report"=list(),
-  "fx_trend_report"=list(push_to_directory ="N:/Depts/FI Currency/Quant/")
+  "fx_trend_report"=list(push_to_directory ="N:/Depts/FI Currency/Quant/"),
   "bank_pair_report"=list(),
   "trailing_stop_report"=list(),
   "duke_luke_drawdown"=list()
