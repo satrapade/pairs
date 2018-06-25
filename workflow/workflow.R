@@ -4,6 +4,8 @@
 require(stringi)
 require(knitr)
 
+setwd("N:/Depts/Share/UK Alpha Team/Analytics")
+
 source("https://raw.githubusercontent.com/satrapade/utility/master/utility_functions.R")
 source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/append2log.R")
 source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/create_report.R")
