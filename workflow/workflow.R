@@ -19,7 +19,7 @@ source(
 )
 
 # workflow steps
-mapply(source_workflow_step,names(config$workflow))
+mapply(function(w)try(source_workflow_step(w),silent=TRUE),names(config$workflow))
 
 #source_workflow_step("create_database_temp_tables")
 #source_workflow_step("create_cix_uploads")
