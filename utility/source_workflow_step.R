@@ -13,6 +13,7 @@ source_workflow_step<-function(
     ".R"
   )
   
+ append2log(paste0(workflow_step,": starting"))
  source(workflow_url)
   
 }
