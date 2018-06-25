@@ -18,6 +18,25 @@ workflow = c(
   "create_pair_icons"
 )
 
+risk_report=list(
+  "scrape_status"=list(),
+  "market_data_status"=list(),
+  "portfolio_summary"=list(),
+  "risk_plots"=list(),
+  "pair_risk_contribution"=list(),
+  "what_happened_last_week"=list(),
+  "sheet_scrape_report"=list(),
+  "custom_AC_report"=list(),
+  "custom_JR_report"=list(),
+  "custom_DH_report"=list(),
+  "custom_GJ_report"=list(),
+  "custom_ABC_report"=list(),
+  "custom_MC_report"=list(),
+  "fx_trend_report"=list(push_to_directory ="N:/Depts/FI Currency/Quant/")
+  "bank_pair_report"=list(),
+  "trailing_stop_report"=list(),
+  "duke_luke_drawdown"=list()
+)
 
 database_product_id="7"
 database_source_id="1"
