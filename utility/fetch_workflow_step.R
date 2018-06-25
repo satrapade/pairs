@@ -1,5 +1,5 @@
 #
-#
+# getch workflow step from repo to local dire for execution
 #
 
 fetch_workflow_step<-function(
