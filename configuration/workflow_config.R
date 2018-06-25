@@ -40,6 +40,7 @@ risk_report=list(
   "duke_luke_drawdown"=list()
 )
 
+# create_database_temp_tables constants
 database_product_id="7"
 database_source_id="1"
 database_start_date="'2015-05-28'"
