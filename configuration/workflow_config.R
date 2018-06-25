@@ -4,18 +4,18 @@
 #
 
 workflow = c(
-  "create_database_temp_tables",
-  "create_cix_uploads",
-  "create_portfolio_upload",
-  "create_market_data",
-  "create_portfolio_summary",
-  "create_market_data_intraday",
-  "intraday_fx",
-  "intraday_index_members",
-  "intraday_bank_pairs",
-  "create_tsne_grid",
-  "perform_sheet_scrape_to_db",
-  "create_pair_icons"
+  "create_database_temp_tables"=list(),
+  "create_cix_uploads"=list(),
+  "create_portfolio_upload"=list(),
+  "create_market_data"=list(),
+  "create_portfolio_summary"=list(),
+  "create_market_data_intraday"=list(),
+  "intraday_fx"=list(),
+  "intraday_index_members"=list(),
+  "intraday_bank_pairs"=list(),
+  "create_tsne_grid"=list(),
+  "perform_sheet_scrape_to_db"=list(),
+  "create_pair_icons"=list()
 )
 
 risk_report=list(
