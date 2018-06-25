@@ -4,7 +4,7 @@
 #
 
 # data preparation steps
-workflow = c(
+workflow = list(
   "create_database_temp_tables"=list(),
   "create_cix_uploads"=list(),
   "create_portfolio_upload"=list(),
