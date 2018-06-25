@@ -1,6 +1,6 @@
 
 
-fetch_risk_report<-function(
+fetch_workflow_step<-function(
   workflow_step="create_cix_uploads",
   target_directory="N:/Depts/Share/UK Alpha Team/Analytics/Rscripts"
 ){
