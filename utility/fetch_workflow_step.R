@@ -20,7 +20,7 @@ fetch_workflow_step<-function(
     ".R"
   )
   
-  download.file(workflow_url,workflow_fname) 
+  download.file(workflow_url,workflow_fname, mode = "wb") 
   
 }
 
