@@ -13,23 +13,18 @@ library(Rblpapi)
 conn <- new(BlpApiConnection)
 Rblpapi::blpConnect()
 
-append2log<-function(log_text)
-{
-  cat(
-    paste0(stri_trim(gsub("##|-","",capture.output(timestamp())))," : ",log_text,"\n"),
-    file="N:/Depts/Share/UK Alpha Team/Analytics/Rscripts/workflow.log",
-    append=TRUE
-  )
-}
-
-
-source("https://raw.githubusercontent.com/satrapade/latex_utils/master/utility_functions.R")
-source("https://raw.githubusercontent.com/satrapade/utility/master/sheet_scraping_functions.R")
-cat(
-  "create_cix_uploads: sourced utility function","\n",
-  file="N:/Depts/Share/UK Alpha Team/Analytics/Rscripts/workflow.log",
-  append=TRUE
+config<-new.env()
+source(
+  file="https://raw.githubusercontent.com/satrapade/pairs/master/configuration/workflow_config.R",
+  local=config
 )
+
+source("https://raw.githubusercontent.com/satrapade/utility/master/utility_functions.R")
+source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/append2log.R")
+#source("https://raw.githubusercontent.com/satrapade/latex_utils/master/utility_functions.R")
+source("https://raw.githubusercontent.com/satrapade/utility/master/sheet_scraping_functions.R")
+
+append2log("create_cix_uploads: sourced utility function")
 
 cix_results_directory<-"N:/Depts/Share/UK Alpha Team/Analytics/CIX"
 luke_results_directory<-"N:/Depts/Share/UK Alpha Team/Analytics/LUKE"
