@@ -16,7 +16,11 @@ workflow = list(
     database_root_bucket_name="'EqyBucket'",
     database_results_directory="N:/Depts/Share/UK Alpha Team/Analytics/db_cache/"
   ),
-  "create_cix_uploads"=list(),
+  "create_cix_uploads"=list(
+    cix_results_directory="N:/Depts/Share/UK Alpha Team/Analytics/CIX",
+    luke_results_directory="N:/Depts/Share/UK Alpha Team/Analytics/LUKE",
+    duke_results_directory="N:/Depts/Share/UK Alpha Team/Analytics/DUKE"
+  ),
   "create_portfolio_upload"=list(),
   "create_market_data"=list(),
   "create_portfolio_summary"=list(),
