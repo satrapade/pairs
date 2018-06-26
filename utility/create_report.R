@@ -29,8 +29,8 @@ create_report<-function(
     full.names = TRUE
   )
   file.remove(temp_files)
-  file.remove(paste0(report_name,".tex"))
-  file.remove(paste0(report_name,".pdf"))
+  if(file.exists(paste0(report_name,".tex")))file.remove(paste0(report_name,".tex"))
+  if(file.exists(paste0(report_name,".pdf")))file.remove(paste0(report_name,".pdf"))
   
   # knit .Rnw file
   append2log(paste0(report_name,": knitting Rnw:"))
