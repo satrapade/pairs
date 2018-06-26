@@ -3,6 +3,9 @@
 #
 #
 
+script_directory="N:/Depts/Share/UK Alpha Team/Analytics/Rscripts"
+risk_report_directory="N:/Depts/Share/UK Alpha Team/Analytics/risk_reports"
+
 # data preparation steps
 workflow = list(
   "create_database_temp_tables"=list(
