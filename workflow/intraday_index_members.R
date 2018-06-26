@@ -13,6 +13,12 @@ library(Rblpapi)
 conn <- new(BlpApiConnection)
 rcon<-Rblpapi::blpConnect()
 
+config<-new.env()
+source(
+  file="https://raw.githubusercontent.com/satrapade/pairs/master/configuration/workflow_config.R",
+  local=config
+)
+
 source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/append2log.R")
 
 append2log("intraday_index_members: source utility_functions, sheet_bbg_functions")
@@ -21,7 +27,7 @@ source("https://raw.githubusercontent.com/satrapade/utility/master/sheet_bbg_fun
 
 
 append2log("intraday_index_members: fetch index memebers")
-indices<-c("SX8P Index","SX5E Index","SX7E Index","SX7P Index","SXIP Index","SXIE Index")
+indices<-config$workflow$intraday_index_members$indices
 
 get_index_members<-function(ndx){
   ndx<-stri_trim(ndx)
