@@ -4,15 +4,11 @@
 require(stringi)
 require(knitr)
 
-setwd("N:/Depts/Share/UK Alpha Team/Analytics")
-
 source("https://raw.githubusercontent.com/satrapade/utility/master/utility_functions.R")
 source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/append2log.R")
 source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/create_report.R")
 source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/fetch_risk_report.R")
 source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/source_workflow_step.R")
-
-append2log("workflow: start",append=FALSE)
 
 config<-new.env()
 source(
@@ -20,13 +16,18 @@ source(
   local=config
 )
 
+setwd(config$home_directory)
+
+append2log("workflow: start",append=FALSE)
+
 # workflow steps
 mapply(function(w)try(source_workflow_step(w),silent=TRUE),names(config$workflow))
 
 
 # risk report steps
 append2log("workflow: create_risk_reports")
-setwd("N:/Depts/Share/UK Alpha Team/Analytics/risk_reports")
+# setwd("N:/Depts/Share/UK Alpha Team/Analytics/risk_reports")
+setwd(config$risk_report_directory)
 create_report("scrape_status")
 create_report("market_data_status")
 create_report("portfolio_summary")
