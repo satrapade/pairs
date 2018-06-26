@@ -13,7 +13,13 @@ workflow = list(
   "create_market_data_intraday"=list(),
   "intraday_fx"=list(),
   "intraday_index_members"=list(
-    indices=c("SX8P Index","SX5E Index","SX7E Index","SX7P Index","SXIP Index","SXIE Index")
+    indices=c("SX8P Index","SX5E Index","SX7E Index","SX7P Index","SXIP Index","SXIE Index"),
+    index_membership_fn="N:/Depts/Share/UK Alpha Team/Analytics/market_data/index_membership.csv",
+    intraday_fn="N:/Depts/Share/UK Alpha Team/Analytics/market_data/intraday_index_members.csv",
+    intraday_perf_fn="N:/Depts/Share/UK Alpha Team/Analytics/market_data/intraday_perf_index_members.csv",
+    intraday_open_fn="N:/Depts/Share/UK Alpha Team/Analytics/market_data/intraday_open_index_members.csv",
+    intraday_close_fn="N:/Depts/Share/UK Alpha Team/Analytics/market_data/intraday_close_index_members.csv",
+    bar_intervals_fn="N:/Depts/Share/UK Alpha Team/Analytics/market_data/bar_intervals_index_members.csv"
   ),
   "intraday_bank_pairs"=list(),
   "create_tsne_grid"=list(),
