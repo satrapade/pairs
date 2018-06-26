@@ -150,10 +150,6 @@ the_luke_unwinds<- get_sheet_unwinds(
   unwind_range=the_luke_unwind_range
 )
 
-#fwrite(the_duke_position,file="N:/Depts/Share/UK Alpha Team/Analytics/DUKE/duke_position.csv")
-#fwrite(the_luke_position,file="N:/Depts/Share/UK Alpha Team/Analytics/LUKE/luke_position.csv")
-
-
 
 # setup a mapping, valid column types:
 # PID Portfolio Name
@@ -264,20 +260,44 @@ append2log("create_portfolio upload: save LUKE, DUKE porfolio spec")
 cat(luke_portfolio_spec,file=paste0(config$home_directory,"/LUKE/luke_portfolio_spec.txt"),sep="\n")
 cat(duke_portfolio_spec,file=paste0(config$home_directory,"/DUKE/duke_portfolio_spec.txt"),sep="\n")
 
-
-
-#bbu("uploads/duke_portfolio_spec.txt")
-#Portfolio,Ticker,Quantity,Date,LUKE_ABC,LUKE_AC,LUKE_ACRW,LUKE_DH,LUKE_GJ,LUKE_MC
-
-# the_date<-as.character(Sys.Date(),format="%Y-%m-%d")
-# #the_file<-make_sheet_name(the_date)
-# the_file<-"N:/Depts/Global/Absolute Insight/UK Equity/AbsoluteUK xp final.xlsm"
-# the_type<-determine_excel_filetype(the_file)
-# the_position_range<-get_sheet_position_range(date=the_date,fn=the_file,file_type = the_type)
-# the_unwind_range<-get_sheet_unwind_range(date=the_date,fn=the_file,file_type = the_type)
-# the_position<-get_sheet_positions(date=the_date,fn=the_file,file_type=the_type,position_range=the_position_range)
-# the_unwinds<- get_sheet_unwinds(date=the_date,fn=the_file,file_type=the_type,unwind_range=the_unwind_range)
-
+all_duke_portfolio_spec<-c(
+  "\\TARGET, MAPPING",
+  "Name,DUKE Uploads",
+  "Delimiter,\",\"",
+  "Start Row,2",
+  "Ignore Lines Starting,\"\"",
+  "Upload To,Portfolio",
+  "Apply To,all_duke_bbg_upload_portfolio.csv",
+  "Default Date,today",
+  "Enterprise Upload,No",
+  "Desktop Upload,Yes",
+  "Has Custom Data,Yes",
+  "Ignore CDE Blank,No",
+  "XSLT Seed1,0",
+  "XSLT Seed2,0",
+  "#Columns",
+  "Column,1,PID",
+  "Column,2,ID",
+  "Column,3,QUANTITY",
+  "Column,4,DATE",
+  "#File Defaults",
+  "Asset", 
+  "Class,Equity",
+  "Currency,GBP",
+  "Is Current Face,No",
+  "Is Swap Units,No",
+  "Has OVML As Notional,No",
+  "Is Current Face for Bonds,No",
+  "Number Format,\"nnn,nnn.dd\"",
+  "Date Format,YY/MM/DD or YYYY/MM/DD",
+  "Bypass Blank Quantity,Yes",
+  "Create New ",
+  "Portfolio,Yes",
+  "Divide by 1000,Yes",
+  "Excel Worksheet Name,",
+  "Excel Worksheet Number,0"
+)
+cat(all_duke_portfolio_spec,file=paste0(config$home_directory,"/DUKE/all_duke_portfolio_spec.txt"),sep="\n")
 
 
 append2log("create_portfolio upload: compute all tickers")
@@ -403,6 +423,8 @@ the_luke_bbg_portfolio<-rbind(the_luke_position[ticker_class(ticker)!="nomatch",
   LUKE_IB=mapply(function(x)sum(as.numeric(Quantity)[Portfolio=="LUKE_IB" & Ticker==x]),Ticker),
   LUKE_JR=mapply(function(x)sum(as.numeric(Quantity)[Portfolio=="LUKE_JR" & Ticker==x]),Ticker)
  )],the_luke_cash)
+append2log("create_portfolio upload: save LUKE/luke_bbg_upload_portfolio.csv")
+fwrite(the_luke_bbg_portfolio,"N:/Depts/Share/UK Alpha Team/Analytics/LUKE/luke_bbg_upload_portfolio.csv")
 
 # bbg portfolio
 append2log("create_portfolio upload: compute DUKE bloomberg portfolio")
@@ -429,6 +451,17 @@ the_duke_bbg_portfolio<-rbind(the_duke_position[ticker_class(ticker)!="nomatch",
   DUKE_IB=mapply(function(x)sum(as.numeric(Quantity)[Portfolio=="DUKE_IB" & Ticker==x]),Ticker),
   DUKE_JR=mapply(function(x)sum(as.numeric(Quantity)[Portfolio=="DUKE_JR" & Ticker==x]),Ticker)
 )],the_duke_cash)
+append2log("create_portfolio upload: save DUKE/duke_bbg_upload_portfolio.csv")
+fwrite(the_duke_bbg_portfolio,"N:/Depts/Share/UK Alpha Team/Analytics/DUKE/duke_bbg_upload_portfolio.csv")
+fwrite(the_duke_bbg_portfolio[,.(
+  Portfolio="DUKE",
+  Quantity=as.character(sum(as.numeric(Quantity)))
+),keyby=c("Ticker","Date")][,.(
+  Portfolio=Portfolio,
+  Ticker=Ticker,
+  Quantity=Quantity,
+  Date=Date
+)],"N:/Depts/Share/UK Alpha Team/Analytics/DUKE/all_duke_bbg_upload_portfolio.csv")
 
 
 append2log("create_portfolio upload: save LUKE, DUKE unwind range")
@@ -466,11 +499,6 @@ fwrite(data.table(list2data.frame(list(
  duke_summary_sheet=attributes(the_duke_position_range)$summary_sheet,
  timestamp=as.character(Sys.timeDate(),format="%Y-%m-%d")
 ))),"N:/Depts/Share/UK Alpha Team/Analytics/sheet_scrape/scrape_details.csv")
-
-append2log("create_portfolio upload: save LUKE/luke_bbg_upload_portfolio.csv, DUKE/duke_bbg_upload_portfolio.csv")
-fwrite(the_luke_bbg_portfolio,"N:/Depts/Share/UK Alpha Team/Analytics/LUKE/luke_bbg_upload_portfolio.csv")
-fwrite(the_duke_bbg_portfolio,"N:/Depts/Share/UK Alpha Team/Analytics/DUKE/duke_bbg_upload_portfolio.csv")
-
 
 
 append2log("create_portfolio upload: compute LUKE portfolio")
