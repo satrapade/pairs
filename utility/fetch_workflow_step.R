@@ -3,7 +3,7 @@
 #
 
 fetch_workflow_step<-function(
-  workflow_step="create_cix_uploads",
+  workflow_step,
   target_directory="N:/Depts/Share/UK Alpha Team/Analytics/Rscripts"
 ){
   
