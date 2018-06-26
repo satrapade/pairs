@@ -23,7 +23,22 @@ workflow = list(
     duke_results_directory="N:/Depts/Share/UK Alpha Team/Analytics/DUKE",
     sheet_fn="N:/Depts/Global/Absolute Insight/UK Equity/AbsoluteUK xp final.xlsm"
   ),
-  "create_portfolio_upload"=list(),
+  "create_portfolio_upload"=list(
+    sheet_fn="N:/Depts/Global/Absolute Insight/UK Equity/AbsoluteUK xp final.xlsm",
+    luke_unwind_range_fn="N:/Depts/Share/UK Alpha Team/Analytics/sheet_scrape/luke_unwind_range.csv",
+    duke_unwind_range_fn="N:/Depts/Share/UK Alpha Team/Analytics/sheet_scrape/duke_unwind_range.csv",
+    luke_position_range_fn="N:/Depts/Share/UK Alpha Team/Analytics/sheet_scrape/luke_position_range.csv",
+    duke_position_range_fn="N:/Depts/Share/UK Alpha Team/Analytics/sheet_scrape/duke_position_range.csv",
+    luke_unwinds_fn="N:/Depts/Share/UK Alpha Team/Analytics/sheet_scrape/luke_unwinds.csv",
+    duke_unwinds_fn="N:/Depts/Share/UK Alpha Team/Analytics/sheet_scrape/duke_unwinds.csv",
+    luke_position_fn="N:/Depts/Share/UK Alpha Team/Analytics/sheet_scrape/luke_position.csv",
+    duke_position_fn="N:/Depts/Share/UK Alpha Team/Analytics/sheet_scrape/duke_position.csv",
+    scrape_details_fn="N:/Depts/Share/UK Alpha Team/Analytics/sheet_scrape/scrape_details.csv",
+    luke_bbg_upload_portfolio_fn="N:/Depts/Share/UK Alpha Team/Analytics/LUKE/luke_bbg_upload_portfolio.csv",
+    duke_bbg_upload_portfolio_fn="N:/Depts/Share/UK Alpha Team/Analytics/DUKE/duke_bbg_upload_portfolio.csv",
+    luke_portfolio_fn="N:/Depts/Share/UK Alpha Team/Analytics/sheet_scrape/luke_portfolio.csv",
+    duke_portfolio_fn="N:/Depts/Share/UK Alpha Team/Analytics/sheet_scrape/duke_portfolio.csv"
+  ),
   "create_market_data"=list(),
   "create_portfolio_summary"=list(),
   "create_market_data_intraday"=list(),
