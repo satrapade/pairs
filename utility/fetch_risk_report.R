@@ -1,9 +1,9 @@
 
 fetch_risk_report<-function(
   report_name="what_happened_last_week",
-  target_directory="N:/Depts/Share/UK Alpha Team/Analytics/risk_reports"
+  target_directory=config$risk_report_directory
 ){
-  
+
   report_url<-paste0(
     "https://raw.githubusercontent.com/satrapade/pairs/master/risk_reports/",
     report_name,
