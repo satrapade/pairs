@@ -12,7 +12,9 @@ workflow = list(
   "create_portfolio_summary"=list(),
   "create_market_data_intraday"=list(),
   "intraday_fx"=list(),
-  "intraday_index_members"=list(),
+  "intraday_index_members"=list(
+    indices=c("SX8P Index","SX5E Index","SX7E Index","SX7P Index","SXIP Index","SXIE Index")
+  ),
   "intraday_bank_pairs"=list(),
   "create_tsne_grid"=list(),
   "perform_sheet_scrape_to_db"=list(),
@@ -34,7 +36,9 @@ risk_report=list(
   "custom_GJ_report"=list(),
   "custom_ABC_report"=list(),
   "custom_MC_report"=list(),
-  "fx_trend_report"=list(push_to_directory ="N:/Depts/FI Currency/Quant/"),
+  "fx_trend_report"=list(
+    push_to_directory ="N:/Depts/FI Currency/Quant/"
+  ),
   "bank_pair_report"=list(),
   "trailing_stop_report"=list(),
   "duke_luke_drawdown"=list()
