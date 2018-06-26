@@ -302,12 +302,12 @@ append2log("create_cix_uploads : compute save DUKE cix formuli for all pairs")
 cat(c(
   "\\Target, CIX, Description, Permission",
   paste(the_duke_CIX_formuli$pair,",",the_duke_CIX_formuli$Formula,",",the_duke_CIX_formuli$Name,",")
-),file=paste0("N:/Depts/Share/UK Alpha Team/Analytics/CIX","/duke_all_cix.txt"),sep="\n")
+),file=paste0(config$home_directory,"/CIX/duke_all_cix.txt"),sep="\n")
 append2log("create_cix_uploads : compute save LUKE cix formuli for all pairs")
 cat(c(
   "\\Target, CIX, Description, Permission",
   paste(the_luke_CIX_formuli$pair,",",the_luke_CIX_formuli$Formula,",",the_luke_CIX_formuli$Name,",")
-),file=paste0("N:/Depts/Share/UK Alpha Team/Analytics/CIX","/luke_all_cix.txt"),sep="\n")
+),file=paste0(config$home_directory,"/CIX/luke_all_cix.txt"),sep="\n")
 
 
 # one file per portfolio manager
@@ -317,7 +317,7 @@ for(i in sort(unique(gsub("[0-9]{1,9}$","",the_duke_CIX_formuli$pair)))){
   cat(c(
   "\\Target, CIX, Description, Permission",
   paste(the_duke_CIX_formuli[n]$pair,",",the_duke_CIX_formuli[n]$Formula,",",the_duke_CIX_formuli[n]$Name,",")
-  ),file=paste0("N:/Depts/Share/UK Alpha Team/Analytics/CIX","/duke_",i,"_cix.txt"),sep="\n")
+  ),file=paste0(config$home_directory,"/CIX/duke_",i,"_cix.txt"),sep="\n")
 }
 append2log("create_cix_uploads : compute save LUKE cix formuli for each manager")
 for(i in sort(unique(gsub("[0-9]{1,9}$","",the_luke_CIX_formuli$pair)))){
@@ -325,7 +325,7 @@ for(i in sort(unique(gsub("[0-9]{1,9}$","",the_luke_CIX_formuli$pair)))){
   cat(c(
     "\\Target, CIX, Description, Permission",
     paste(the_luke_CIX_formuli[n]$pair,",",the_luke_CIX_formuli[n]$Formula,",",the_luke_CIX_formuli[n]$Name,",")
-  ),file=paste0("N:/Depts/Share/UK Alpha Team/Analytics/CIX","/luke_",i,"_cix.txt"),sep="\n")
+  ),file=paste0(config$home_directory,"/CIX/luke_",i,"_cix.txt"),sep="\n")
 }
 
 
