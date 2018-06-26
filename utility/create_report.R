@@ -67,7 +67,7 @@ create_report<-function(
   append2log(paste0(report_name,": remove temporary latex files"))  
   temp_files<-list.files(
     path="N:/Depts/Share/UK Alpha Team/Analytics/risk_reports",
-    pattern="(dpth$)|(log$)|(md5$)|(aux$)|(gz$)",
+    pattern="(dpth$)|(log$)|(md5$)|(aux$)|(gz$)|(toc$)|(out$)",
     recursive = FALSE,
     full.names = TRUE
   )
@@ -87,7 +87,12 @@ create_report<-function(
   if(file.exists(paste0(report_name,".tex")))file.remove(paste0(report_name,".tex"))
   if(file.exists(paste0(report_name,".toc")))file.remove(paste0(report_name,".toc"))
   if(file.exists(paste0(report_name,".out")))file.remove(paste0(report_name,".out"))
-  file.remove(paste0(report_name,"-concordance.tex"))
+  if(file.exists(paste0(report_name,"-concordance.tex")))file.remove(paste0(report_name,"-concordance.tex"))
+  if(file.exists(paste0(outfn,".tex")))file.remove(paste0(outfn,".tex"))
+  if(file.exists(paste0(outfn,".toc")))file.remove(paste0(outfn,".toc"))
+  if(file.exists(paste0(outfn,".out")))file.remove(paste0(outfn,".out"))
+  if(file.exists(paste0(outfn,"-concordance.tex")))file.remove(paste0(outfn,"-concordance.tex"))
+  
   setwd(wd)
   return(paste0(report_name,": success"))
 }
