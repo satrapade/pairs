@@ -1,6 +1,7 @@
 #
-#
-#
+# risk reports with a time-date component in the file name accumulate over time
+# to avoid filling up the risk reports directory, we copy these to 
+# folders named after months
 #
 
 move_risk_reports_to_month_folder<-function(config){
