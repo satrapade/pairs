@@ -58,8 +58,17 @@ memo_calc_futures_static<-function(
 
 
 the_date<-as.character(Sys.Date(),format="%Y-%m-%d")
-the_file<-config$create_portfolio_upload$sheet_fn
+the_file<-config$workflow$create_portfolio_upload$sheet_fn
 the_type<-determine_excel_filetype(the_file)
+
+if(is.null(the_file)){
+  append2log("create_portfolio upload: config contains no file name")
+  stop()
+}
+if(!file.exists(the_file)){
+  append2log("create_portfolio upload: file does not exist")
+  stop()
+}
 
 
 #
