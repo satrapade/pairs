@@ -1,11 +1,12 @@
 #
 create_report<-function(
   report_name,
-  push_to_directory=NULL
+  push_to_directory=NULL,
+  config=get("config",parent.frame())
 )
 {
   wd<-getwd()
-  setwd("N:/Depts/Share/UK Alpha Team/Analytics/risk_reports")
+  setwd(config$risk_report_directory)
   res<-try(fetch_risk_report(report_name),silent=TRUE)
   if(any(class(res) %in% "try-error")){
     append2log(paste0("!!!>ERROR<!!! fetch:",report_name))
@@ -22,7 +23,7 @@ create_report<-function(
   # remove figures 
   append2log(paste0(report_name,": deleting old figures, old .tex and pdf files"))
   temp_files<-list.files(
-    path="N:/Depts/Share/UK Alpha Team/Analytics/risk_reports/figure",
+    path=paste0(config$risk_report_directory,"/figure"),
     pattern="pdf$",
     recursive = FALSE,
     full.names = TRUE
@@ -34,8 +35,8 @@ create_report<-function(
   # knit .Rnw file
   append2log(paste0(report_name,": knitting Rnw:"))
   res<-try(knit(
-    input=paste0("N:/Depts/Share/UK Alpha Team/Analytics/risk_reports/",report_name,".Rnw"),
-    output=paste0("N:/Depts/Share/UK Alpha Team/Analytics/risk_reports/",report_name,".tex"),
+    input=paste0(config$risk_report_directory,"/",report_name,".Rnw"),
+    output=paste0(config$risk_report_directory,"/",report_name,".tex"),
     envir=.GlobalEnv
   ),silent = TRUE)
   if(class(res) %in% "try-error"){
@@ -52,7 +53,13 @@ create_report<-function(
   append2log(paste0(report_name,": pdflatex on"))  
   outfn<-paste0(report_name,"_",gsub("\\s","x",gsub(":","",as.character(Sys.timeDate()))))
   pdf_latex_cmd<-paste0(
-    "pdflatex  -jobname=\"",outfn,"\" \"N:/Depts/Share/UK Alpha Team/Analytics/risk_reports/",report_name,".tex\""
+    "pdflatex  -jobname=\"",
+    outfn,
+    "\" \"",
+    config$risk_report_directory,
+    "/",
+    report_name,
+    ".tex\""
   )
   system(pdf_latex_cmd)
   
@@ -77,7 +84,9 @@ create_report<-function(
   if(!is.null(push_to_directory)){
     file.copy(paste0(outfn,".pdf"),paste0(push_to_directory,outfn,".pdf"))
   }
-  file.remove(paste0(report_name,".tex"))
+  if(file.exists(paste0(report_name,".tex")))file.remove(paste0(report_name,".tex"))
+  if(file.exists(paste0(report_name,".toc")))file.remove(paste0(report_name,".toc"))
+  if(file.exists(paste0(report_name,".out")))file.remove(paste0(report_name,".out"))
   file.remove(paste0(report_name,"-concordance.tex"))
   setwd(wd)
   return(paste0(report_name,": success"))
