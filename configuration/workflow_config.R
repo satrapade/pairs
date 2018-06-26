@@ -19,7 +19,8 @@ workflow = list(
   "create_cix_uploads"=list(
     cix_results_directory="N:/Depts/Share/UK Alpha Team/Analytics/CIX",
     luke_results_directory="N:/Depts/Share/UK Alpha Team/Analytics/LUKE",
-    duke_results_directory="N:/Depts/Share/UK Alpha Team/Analytics/DUKE"
+    duke_results_directory="N:/Depts/Share/UK Alpha Team/Analytics/DUKE",
+    sheet_fn="N:/Depts/Global/Absolute Insight/UK Equity/AbsoluteUK xp final.xlsm"
   ),
   "create_portfolio_upload"=list(),
   "create_market_data"=list(),
