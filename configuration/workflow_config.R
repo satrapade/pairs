@@ -31,7 +31,6 @@ workflow = list(
     intraday_close_fn="N:/Depts/Share/UK Alpha Team/Analytics/market_data/intraday_close_index_members.csv",
     bar_intervals_fn="N:/Depts/Share/UK Alpha Team/Analytics/market_data/bar_intervals_index_members.csv"
   ),
-  "intraday_bank_pairs"=list(),
   "create_tsne_grid"=list(),
   "perform_sheet_scrape_to_db"=list(),
   "create_pair_icons"=list()
@@ -56,6 +55,7 @@ risk_report=list(
     push_to_directory ="N:/Depts/FI Currency/Quant/"
   ),
   "bank_pair_report"=list(),
+  "tech_pair_report"=list(),
   "trailing_stop_report"=list(),
   "duke_luke_drawdown"=list()
 )
