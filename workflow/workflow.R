@@ -23,19 +23,6 @@ source(
 # workflow steps
 mapply(function(w)try(source_workflow_step(w),silent=TRUE),names(config$workflow))
 
-#source_workflow_step("create_database_temp_tables")
-#source_workflow_step("create_cix_uploads")
-#source_workflow_step("create_portfolio_upload")
-#source_workflow_step("create_market_data")
-#source_workflow_step("create_portfolio_summary")
-#source_workflow_step("create_market_data_intraday")
-#source_workflow_step("intraday_fx")
-#source_workflow_step("intraday_index_members")
-#source_workflow_step("intraday_bank_pairs")
-#source_workflow_step("create_tsne_grid")
-#source_workflow_step("perform_sheet_scrape_to_db")
-#source_workflow_step("create_pair_icons")
-
 
 # risk report steps
 append2log("workflow: create_risk_reports")
