@@ -26,9 +26,9 @@ source("https://raw.githubusercontent.com/satrapade/utility/master/sheet_scrapin
 
 append2log("create_cix_uploads: sourced utility function")
 
-cix_results_directory<-"N:/Depts/Share/UK Alpha Team/Analytics/CIX"
-luke_results_directory<-"N:/Depts/Share/UK Alpha Team/Analytics/LUKE"
-duke_results_directory<-"N:/Depts/Share/UK Alpha Team/Analytics/DUKE"
+cix_results_directory<-config$workflow$create_cix_uploads$cix_results_directory
+luke_results_directory<-config$workflow$create_cix_uploads$luke_results_directory
+duke_results_directory<-config$workflow$create_cix_uploads$duke_results_directory
 
 #
 # fetch futures historical tickers
@@ -80,7 +80,8 @@ memo_calc_futures_static<-function(
 
 the_date<-as.character(Sys.Date(),format="%Y-%m-%d")
 the_file<-make_sheet_name(the_date)
-the_file<-"N:/Depts/Global/Absolute Insight/UK Equity/AbsoluteUK xp final.xlsm"
+# sheet_fn is like "N:/Depts/Global/Absolute Insight/UK Equity/AbsoluteUK xp final.xlsm"
+the_file<-config$workflow$create_cix_uploads$sheet_fn 
 the_type<-determine_excel_filetype(the_file)
 
 #
