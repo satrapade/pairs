@@ -9,6 +9,7 @@ source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/append2
 source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/create_report.R")
 source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/fetch_risk_report.R")
 source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/source_workflow_step.R")
+source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/move_risk_reports_to_month_folder.R")
 
 config<-new.env()
 source(
@@ -31,6 +32,8 @@ mapply(function(w){
 append2log("workflow: create_risk_reports")
 # setwd("N:/Depts/Share/UK Alpha Team/Analytics/risk_reports")
 setwd(config$risk_report_directory)
+move_risk_reports_to_month_folder(config)
+
 create_report("scrape_status")
 create_report("market_data_status")
 create_report("portfolio_summary")
