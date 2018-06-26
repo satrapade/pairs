@@ -560,7 +560,7 @@ the_duke_portfolio$PX_LAST<-the_prices[,.SD,keyby=ticker][the_duke_portfolio$Tic
 the_duke_portfolio$Exposure<-the_duke_portfolio$Quantity*the_duke_portfolio$PX_LAST
 
 append2log("create_portfolio upload: save sheet_scrape/luke_portfolio.csv, sheet_scrape/duke_portfolio.csv")
-fwrite(the_luke_portfolio,config$create_portfolio_upload$luke_portfolio_fn)
-fwrite(the_duke_portfolio,config$create_portfolio_upload$duke_portfolio_fn)
+fwrite(the_luke_portfolio,config$workflow$create_portfolio_upload$luke_portfolio_fn)
+fwrite(the_duke_portfolio,config$workflow$create_portfolio_upload$duke_portfolio_fn)
 
 
