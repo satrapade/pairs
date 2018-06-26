@@ -58,7 +58,7 @@ memo_calc_futures_static<-function(
 
 
 the_date<-as.character(Sys.Date(),format="%Y-%m-%d")
-the_file<-"N:/Depts/Global/Absolute Insight/UK Equity/AbsoluteUK xp final.xlsm"
+the_file<-config$create_portfolio_upload$sheet_fn
 the_type<-determine_excel_filetype(the_file)
 
 
@@ -252,8 +252,8 @@ duke_portfolio_spec<-c(
   "Excel Worksheet Number,0"
 )
 append2log("create_portfolio upload: save LUKE, DUKE porfolio spec")
-cat(luke_portfolio_spec,file="N:/Depts/Share/UK Alpha Team/Analytics/LUKE/luke_portfolio_spec.txt",sep="\n")
-cat(duke_portfolio_spec,file="N:/Depts/Share/UK Alpha Team/Analytics/DUKE/duke_portfolio_spec.txt",sep="\n")
+cat(luke_portfolio_spec,file=paste0(config$home_directory,"/LUKE/luke_portfolio_spec.txt"),sep="\n")
+cat(duke_portfolio_spec,file=paste0(config$home_directory,"/DUKE/duke_portfolio_spec.txt"),sep="\n")
 
 
 
@@ -464,7 +464,7 @@ fwrite(the_duke_bbg_portfolio,"N:/Depts/Share/UK Alpha Team/Analytics/DUKE/duke_
 
 
 
-append2log("create_portfolio upload: compute DUKE portfolio")
+append2log("create_portfolio upload: compute LUKE portfolio")
 the_luke_portfolio<-the_luke_position[ticker_class(ticker)!="nomatch",.(
   Ticker=ticker2undl(ticker[1]),
   Quantity=sum(units)*ticker2mult(ticker[1]),
@@ -551,7 +551,7 @@ the_duke_portfolio$PX_LAST<-the_prices[,.SD,keyby=ticker][the_duke_portfolio$Tic
 the_duke_portfolio$Exposure<-the_duke_portfolio$Quantity*the_duke_portfolio$PX_LAST
 
 append2log("create_portfolio upload: save sheet_scrape/luke_portfolio.csv, sheet_scrape/duke_portfolio.csv")
-fwrite(the_luke_portfolio,"N:/Depts/Share/UK Alpha Team/Analytics/sheet_scrape/luke_portfolio.csv")
-fwrite(the_duke_portfolio,"N:/Depts/Share/UK Alpha Team/Analytics/sheet_scrape/duke_portfolio.csv")
+fwrite(the_luke_portfolio,config$create_portfolio_upload$luke_portfolio_fn)
+fwrite(the_duke_portfolio,config$create_portfolio_upload$duke_portfolio_fn)
 
 
