@@ -18,10 +18,13 @@ source(
 
 setwd(config$home_directory)
 
-append2log("workflow: start",append=FALSE)
-
 # workflow steps
-mapply(function(w)try(source_workflow_step(w),silent=TRUE),names(config$workflow))
+append2log("workflow: start",append=FALSE)
+mapply(function(w){
+  append2log("workflow: sourcing ",w,append=TRUE)
+  try(source_workflow_step(w),silent=TRUE)
+  append2log("workflow: finished ",w,append=TRUE)
+},names(config$workflow))
 
 
 # risk report steps
