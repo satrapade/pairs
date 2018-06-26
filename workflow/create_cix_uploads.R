@@ -21,6 +21,7 @@ source(
 
 source("https://raw.githubusercontent.com/satrapade/utility/master/utility_functions.R")
 source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/append2log.R")
+source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/futures_historical_tickers.R")
 #source("https://raw.githubusercontent.com/satrapade/latex_utils/master/utility_functions.R")
 source("https://raw.githubusercontent.com/satrapade/utility/master/sheet_scraping_functions.R")
 
@@ -30,26 +31,6 @@ cix_results_directory<-config$workflow$create_cix_uploads$cix_results_directory
 luke_results_directory<-config$workflow$create_cix_uploads$luke_results_directory
 duke_results_directory<-config$workflow$create_cix_uploads$duke_results_directory
 
-#
-# fetch futures historical tickers
-#
-futures_historical_tickers<-function(futures_tickers){
-  fmc<-c(
-    "F"="Jan","G"="Feb","H"="Mar","J"="Apr","K"="May","M"="Jun",
-    "N"="Jul","Q"="Aug","U"="Sep","V"="Oct","X"="Nov","Z"="Dec"
-  )
-  futures<-sort(unique(futures_tickers))  
-  f2d<-function(f){
-    date_string<-paste0("01-",fmc[stri_sub(f,3,3)],"-201",stri_sub(f,4,4))
-    as.character(as.Date(date_string,format="%d-%b-%Y"),format="%Y-%m-%d")
-  }
-  lookup_table<-do.call(rbind,mapply(function(f){
-    ffc<-paste0(stri_sub(f,1,2),"1 Index")
-    res<-Rblpapi::bds(ffc,"FUT_CHAIN", override=c(CHAIN_DATE=gsub("-","",f2d(f))))
-    data.frame(contract=f,historical=res[1,1],row.names=NULL,stringsAsFactors=FALSE)
-  },futures,SIMPLIFY=FALSE))
-  lookup_table[futures_tickers,"historical"]
-}
 
 memo_calc_futures_static<-function(
   futures
