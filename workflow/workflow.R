@@ -22,9 +22,9 @@ setwd(config$home_directory)
 # workflow steps
 append2log("workflow: start",append=FALSE)
 mapply(function(w){
-  append2log("workflow: sourcing ",w,append=TRUE)
+  append2log(paste0("workflow: sourcing ",w),append=TRUE)
   try(source_workflow_step(w),silent=TRUE)
-  append2log("workflow: finished ",w,append=TRUE)
+  append2log(paste0("workflow: finished "),w,append=TRUE)
 },names(config$workflow))
 
 
@@ -51,7 +51,4 @@ create_report("fx_trend_report",push_to_directory ="N:/Depts/FI Currency/Quant/"
 create_report("bank_pair_report")
 create_report("trailing_stop_report")
 create_report("duke_luke_drawdown")
-
-
-
 
