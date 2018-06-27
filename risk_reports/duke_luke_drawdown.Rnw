@@ -280,71 +280,6 @@ DUKE  &
 )}
 \end{center}
 
-\newpage
-\section{
-  Historical DUKE performance by manager: 
-  \Sexpr{head(rownames(duke_bucket_return_matrix),1)} to \Sexpr{tail(rownames(duke_bucket_return_matrix),1)} 
-}
-
-\subsection{All together}
-
-\vskip 5mm
-
-\begin{center}
-\Sexpr{make_plot(
-  plot(gg_duke_pm_plot),
-  width="20cm",
-  height="20cm",
-  envir=environment()
-)}
-\end{center}
-
-\subsection{By manager}
-
-\vskip 5mm
-
-\begin{center}
-\Sexpr{make_plot(
-  plot(gg_duke_pm_plot + facet_grid(rows=vars(pm))),
-  width="20cm",
-  height="20cm",
-  envir=environment()
-)}
-\end{center}
-
-
-\newpage
-\section{
-  Historical LUKE performance by manager: 
-  \Sexpr{head(rownames(luke_bucket_return_matrix),1)} to \Sexpr{tail(rownames(luke_bucket_return_matrix),1)} 
-}
-
-\subsection{All together}
-
-\vskip 5mm
-
-\begin{center}
-\Sexpr{make_plot(
-  plot(gg_luke_pm_plot),
-  width="20cm",
-  height="20cm",
-  envir=environment()
-)}
-\end{center}
-
-\subsection{By manager}
-
-\vskip 5mm
-
-\begin{center}
-\Sexpr{make_plot(
-  plot(gg_luke_pm_plot + facet_grid(rows=vars(pm))),
-  width="20cm",
-  height="20cm",
-  envir=environment()
-)}
-\end{center}
-
 
 <<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
 duke_live_pairs<-setdiff(names(which(apply(tail(duke_bucket_return_matrix,30),2,sd)>0)),"DH_PAIR_20")
@@ -391,8 +326,8 @@ facet_grid(
 )
 
 @
-
-\section{top DUKE drawdowns}
+\newpage
+\section{top DUKE drawdowns, as of \Sexpr{ tail(rownames(duke_bucket_return_matrix),1)}}
 
 \vskip 5mm
 
@@ -405,10 +340,75 @@ facet_grid(
 )}
 \end{center}
 
+\newpage
+\section{
+  Historical DUKE performance by manager: 
+  \Sexpr{head(rownames(duke_bucket_return_matrix),1)} to \Sexpr{tail(rownames(duke_bucket_return_matrix),1)} 
+}
+
+\subsection{DUKE: All together}
+
+\vskip 5mm
+
+\begin{center}
+\Sexpr{make_plot(
+  plot(gg_duke_pm_plot),
+  width="20cm",
+  height="20cm",
+  envir=environment()
+)}
+\end{center}
+
+\subsection{DUKE: By manager}
+
+\vskip 5mm
+
+\begin{center}
+\Sexpr{make_plot(
+  plot(gg_duke_pm_plot + facet_grid(rows=vars(pm))),
+  width="20cm",
+  height="20cm",
+  envir=environment()
+)}
+\end{center}
+
+
+\newpage
+\section{
+  Historical LUKE performance by manager: 
+  \Sexpr{head(rownames(luke_bucket_return_matrix),1)} to \Sexpr{tail(rownames(luke_bucket_return_matrix),1)} 
+}
+
+\subsection{LUKE: All together}
+
+\vskip 5mm
+
+\begin{center}
+\Sexpr{make_plot(
+  plot(gg_luke_pm_plot),
+  width="20cm",
+  height="20cm",
+  envir=environment()
+)}
+\end{center}
+
+\subsection{LUKE: By manager}
+
+\vskip 5mm
+
+\begin{center}
+\Sexpr{make_plot(
+  plot(gg_luke_pm_plot + facet_grid(rows=vars(pm))),
+  width="20cm",
+  height="20cm",
+  envir=environment()
+)}
+\end{center}
+
+
 <<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
 if(exists("db"))dbDisconnect(db)
 @
 
 \end{document}
-
 
