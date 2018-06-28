@@ -1,5 +1,4 @@
 
-
 require(RSQLite)
 require(DBI)
 require(Matrix)
@@ -35,6 +34,48 @@ rconn<-Rblpapi::blpConnect()
 fundamentals<-fread(
   "N:/Depts/Share/UK Alpha Team/Analytics/market_data/fundamentals.csv"
 )
+
+super_sector_index_map<-fread(
+'
+  NAME,                           INDEX
+  "Automobiles & Parts",          "SXA"
+  "Banks",                        "SX7"
+  "Basic Resources",              "SXP"
+  "Chemicals",                    "SX4"
+  "Construction & Materials",     "SXO"
+  "Financial Services",           "SXF"
+  "Food & Beverage",              "SX3"
+  "Health Care",                  "SXD"
+  "Industrial Goods & Services",  "SXN"
+  "Insurance",                    "SXI"
+  "Media",                        "SXM"
+  "Oil & Gas",                    "SXE"
+  "Personal & Household Goods",   "SXQ"
+  "Real Estate",                  "SX86"
+  "Retail",                       "SXR"
+  "Technology",                   "SX8"
+  "Telecommunications",           "SXK"
+  "Travel & Leisure",             "SXT"
+  "Utilities",                    "SX6"         
+'
+)[,
+  c(
+    "P_Index",
+    "E_Index"
+  ):=list(
+    P_index=local({
+      Rblpapi::bdp(unique(paste0(INDEX,"P Index")),"DAY_TO_DAY_TOT_RETURN_GROSS_DVDS")[
+        paste0(INDEX,"P Index")  , "DAY_TO_DAY_TOT_RETURN_GROSS_DVDS"
+      ]
+    }),
+    E_index=local({
+      Rblpapi::bdp(unique(paste0(INDEX,"E Index")),"DAY_TO_DAY_TOT_RETURN_GROSS_DVDS")[
+        paste0(INDEX,"E Index")  , "DAY_TO_DAY_TOT_RETURN_GROSS_DVDS"
+        ]
+    })
+  )
+]
+
 
 #
 # all of duke look-through
@@ -135,7 +176,12 @@ duke_manager_look_vs_outright<-duke_manager_aggregated_look_through_exposure[,.(
   Outright=sum(Exposure[Source=="Outright"]),
   LookThrough=sum(Exposure[Source=="LookThrough"])
 ),keyby=c("Manager","Ticker")][,
- c("Sector","SuperSector"):=list(
+ c(
+   "Sector",
+   "SuperSector",
+   "Industry",
+   "Return"
+  ):=list(
     Sector=local({
       res<-Rblpapi::bdp(unique(Ticker),"ICB_SECTOR_NAME")
       res[Ticker,"ICB_SECTOR_NAME"]
@@ -143,8 +189,38 @@ duke_manager_look_vs_outright<-duke_manager_aggregated_look_through_exposure[,.(
     SuperSector=local({
       res<-Rblpapi::bdp(unique(Ticker),"ICB_SUPERSECTOR_NAME")
       res[Ticker,"ICB_SUPERSECTOR_NAME"]
+    }),
+    Industry=local({
+      res<-Rblpapi::bdp(unique(Ticker),"ICB_INDUSTRY_NAME")
+      res[Ticker,"ICB_INDUSTRY_NAME"]
+    }),
+    Return=local({
+      res<-Rblpapi::bdp(unique(Ticker),"DAY_TO_DAY_TOT_RETURN_GROSS_DVDS")
+      scrub(res[Ticker,"DAY_TO_DAY_TOT_RETURN_GROSS_DVDS"])
     })
  )
+][,
+  c(
+    "SuperSectorIndex",
+    "SuperSectorIndexReturn"
+  ):=list(
+    SuperSectorIndex=local({
+      i<-match(SuperSector,super_sector_index_map$NAME)
+      res<-ifelse(
+        is.na(i),
+        "",
+        paste0(super_sector_index_map$INDEX[i],"P Index")  
+      )
+    }),
+    SuperSectorIndexReturn=local({
+      i<-match(SuperSector,super_sector_index_map$NAME)
+      res<-ifelse(
+        is.na(i),
+        0,
+        super_sector_index_map$P_Index[i]
+      )
+    })
+  )
 ]
 
 fwrite(
@@ -161,5 +237,4 @@ fwrite(
   duke_manager_look_vs_outright,
   "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_manager_look_vs_outright.csv"
 )
-
 
