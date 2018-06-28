@@ -54,6 +54,7 @@ workflow = list(
   ),
   "create_tsne_grid"=list(),
   "perform_sheet_scrape_to_db"=list(),
+  "create_duke_look_through_exposures"=list(),
   "create_pair_icons"=list()
 )
 
