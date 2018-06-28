@@ -2,7 +2,8 @@
 create_report<-function(
   report_name,
   push_to_directory=NULL,
-  config=get("config",parent.frame())
+  config=get("config",parent.frame()),
+  envir=new.env()
 )
 {
   wd<-getwd()
@@ -37,7 +38,7 @@ create_report<-function(
   res<-try(knit(
     input=paste0(config$risk_report_directory,"/",report_name,".Rnw"),
     output=paste0(config$risk_report_directory,"/",report_name,".tex"),
-    envir=.GlobalEnv
+    envir=envir
   ),silent = TRUE)
   if(class(res) %in% "try-error"){
     append2log(paste0(report_name,": !!!>ERROR<!!! :",gsub("\n","",as.character(res))))
