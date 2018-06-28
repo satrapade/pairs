@@ -1,0 +1,312 @@
+
+
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+  
+require(RSQLite)
+require(DBI)
+require(Matrix)
+require(Matrix.utils)
+require(Rblpapi)
+require(R.cache)
+require(RcppRoll)
+require(data.table)
+require(Hmisc)
+require(clue)
+require(gsubfn)
+require(magrittr)
+
+x<-list.files(
+  path="figure",
+  pattern="*.pdf",
+  full.names=TRUE
+)
+if(length(x)>0)file.remove(x)
+
+source("https://raw.githubusercontent.com/satrapade/utility/master/utility_functions.R")
+source("https://raw.githubusercontent.com/satrapade/latex_utils/master/latex_helpers_v2.R")
+source("https://raw.githubusercontent.com/satrapade/utility/master/scrub.R")
+source("https://raw.githubusercontent.com/satrapade/utility/master/with_columns.R")
+source("https://raw.githubusercontent.com/satrapade/utility/master/nn_cast.R")
+source("https://raw.githubusercontent.com/satrapade/utility/master/make_query.R")
+
+
+if(exists("db"))dbDisconnect(db)
+db<-dbConnect(
+  odbc::odbc(), 
+  .connection_string = paste0(
+    "driver={SQL Server};",
+    "server=SQLS071FP\\QST;",
+    "database=PRDQSTFundPerformance;",
+    "trusted_connection=true"
+  )
+)
+
+
+bucket_pnl_query_string="
+SELECT 
+tBucket.Name AS bucket,
+SUBSTRING(CONVERT(varchar,tHistoricalBucket.HistoricalDate),1,10) AS date,
+tHistoricalBucket.BucketPricePl AS pnl,
+tHistoricalBucket.BucketPricePlItd AS pnl_ltd,
+tHistoricalBucket.BucketPricePlMtd AS pnl_mtd,
+tHistoricalBucket.BucketPricePlYtd AS pnl_ytd,
+tHistoricalBucket.BucketPricePlRolling AS pnl_rolling,
+tHistoricalBucket.BucketPricePlDrawdown AS pnl_draw,
+tHistoricalBucket.NetExposure AS net,
+tHistoricalBucket.GrossExposure AS gross
+FROM tHistoricalBucket
+LEFT JOIN tBucket
+ON tBucket.BucketId = tHistoricalBucket.BucketId
+LEFT JOIN tBucket AS tParentBucket 
+ON tParentBucket.BucketId=tBucket.ParentBucketId
+LEFT JOIN tBucket AS tRootBucket 
+ON tRootBucket.BucketId=tParentBucket.ParentBucketId
+WHERE tRootBucket.Name = 'EqyBucket'
+AND tHistoricalBucket.ProductId=--R{product_id}--
+AND tHistoricalBucket.DataSourceId=--R{data_source_id}--
+"
+
+duke<-query(make_query(
+  query_string = bucket_pnl_query_string,
+  product_id="8",
+  data_source_id="2"
+),db=db)[
+  grepl("[A-Z]{2,3}_PAIR_[0-9]{2,9}",bucket) 
+]
+
+
+
+@
+
+
+\documentclass{article}
+
+
+\usepackage[portrait, headheight = 0cm, margin=0.25cm, top = 0.25cm, nofoot]{geometry} 
+\usepackage[export]{adjustbox} 
+\usepackage[space]{grffile}
+\usepackage[dvipsnames,table]{xcolor} % for setting colors \usepackage{amsmath} \usepackage{xfrac}
+\usepackage{tikz}
+\usepackage{sparklines}
+\usepackage{graphicx}
+\usepackage{xfrac}
+\usepackage{hyperref}
+\usepackage{amsmath, amsthm, amssymb, amsfonts}
+\usepackage{listings}
+\lstset{language=R} 
+
+\DeclareRobustCommand\Tstrut{\rule{0pt}{2.6ex}}         % = `top' strut
+\DeclareRobustCommand\Bstrut{\rule[-0.9ex]{0pt}{0pt}}   % = `bottom' strut
+\renewcommand{\familydefault}{\sfdefault}
+
+
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+
+
+@
+
+\begin{document}
+
+\tableofcontents
+
+\newpage
+\section{Data sources}
+
+\vskip 5mm
+
+\begin{itemize}
+\item We rely on the performance attribution database to obtain pair P\&L time-series. 
+\item The allocation of positions (and P\&L) to pairs is a daily manual process that 
+relies on a feed of settled trades from our custodian. 
+\item This means that our information is out of date by at least the settlement period
+(best practice would be to have exposures on the day they were traded). 
+\item Because coverage at the performance team varies, our numbers can be out of date 
+beyond the settlement lag. 
+\item A standard portfolio management system would bring this process up to current best practice.
+\end{itemize}
+
+\vskip 10mm
+
+\begin{center}
+\begin{tabular}{l l}
+\hline
+\rowcolor{gray!20}
+\multicolumn{2}{c}{Latest bucket date for which numbers are available for DUKE} \\
+Daily P\&L  &  \Sexpr{duke[!is.na(pnl)][,max(date)]} \\
+Month-to-date P\&L  &  \Sexpr{duke[!is.na(pnl_mtd)][,max(date)]} \\
+Year-to-date P\&L  &  \Sexpr{duke[!is.na(pnl_ytd)][,max(date)]} \\
+Life-to-date P\&L  &  \Sexpr{duke[!is.na(pnl_ltd)][,max(date)]} \\
+Rolling P\&L  &  \Sexpr{duke[!is.na(pnl_rolling)][,max(date)]} \\
+Drawdown  &  \Sexpr{duke[!is.na(pnl_draw)][,max(date)]} \\
+Gross  &  \Sexpr{duke[!is.na(gross)][,max(date)]} \\
+Net  &  \Sexpr{duke[!is.na(net)][,max(date)]} \\
+\end{tabular}
+\end{center}
+
+\vskip 5mm
+
+\begin{center}
+\Sexpr{ntable(
+  df=apply(as.data.table(
+    t(query("
+    select Top 1        
+    bs.backup_finish_date                    as PRDFundPerformance_BackupDateTime,
+    rs.restore_date                          as PRDQSTFundPerformance_RestoreDateTime
+    from msdb..restorehistory rs
+    inner join msdb..backupset bs 
+    on rs.backup_set_id = bs.backup_set_id
+    where destination_database_name = 'PRDQSTFundPerformance'
+    order by rs.restore_date desc
+    ",db)),
+    keep.rownames=TRUE
+  ),2,latexTranslate),
+  title="Database copy date"
+)}
+\end{center}
+
+
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+live_pairs<- duke[!is.na(gross)][date==max(date),bucket] %>% 
+{split(.,gsub("_PAIR_[0-9]{1,3}$","",.))} %>% 
+{ mapply(.%>%paste(collapse=", "),.)} %>% 
+{ data.table(
+    manager=names(.),
+    pairs=stri_count(.,regex="_PAIR_"),
+    pairs=gsub("_PAIR_","",.)
+) }
+
+live_pairs_latex<-ntable(
+  df = live_pairs,
+  align= c("m{1cm}","m{1cm}","m{15cm}"),
+  add_rownames = FALSE
+)
+
+@
+
+\newpage
+\section{Live pairs}
+
+\begin{center}
+\Sexpr{live_pairs_latex}
+\end{center}
+
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+managers<-unique(stri_replace_all(unique(duke$bucket),"",regex="_PAIR_[0-9]{1,3}$"))
+
+last_live_pairs<- duke[!is.na(gross) & !is.na(pnl_rolling)][date==max(date),.(
+  pair=structure(hdr="Pair",stri_replace_all(bucket,"",regex="_PAIR_")),
+  pnl_mtd=structure(
+    hdr=tbl(c("Pair","P\\&L","MTD"),align="l"),
+    format=quote(sign_color(n_fmt(this),this)),
+    round(10000*pnl_mtd,digits=1)
+  ),
+  pnl_rolling=structure(
+    hdr=tbl(c("Pair","P\\&L","20-day"),align="l"),
+    format=quote(sign_color(n_fmt(this),this)),
+    round(10000*pnl_rolling,digits=1)
+  ),
+  pnl_ytd=structure(
+    hdr=tbl(c("Pair","P\\&L","YTD"),align="l"),
+    format=quote(sign_color(n_fmt(this),this)),
+    round(10000*pnl_ytd,digits=1)
+  ),
+  pnl_ltd=structure(
+    hdr=tbl(c("Pair","P\\&L","ITD"),align="l"),
+    format=quote(sign_color(n_fmt(this),this)),
+    round(10000*pnl_ltd,digits=1)
+  )
+)]
+
+manager_latex<-do.call(c,mapply(function(m){
+  pairs<-last_live_pairs[grepl(paste0("^",m),pair)]
+  if(nrow(pairs)<1)return(NULL)
+  pairs_latex<-ntable(
+      df=pairs,
+      halign=rep("l",ncol(pairs)),
+      align=rep("m{2cm}",ncol(pairs)),
+      add_rownames=FALSE
+  )
+  pairs_sums_latex<-pairs[,
+    mapply(
+      function(x)structure(round(sum(x),digits=1),format=quote(sign_color(n_fmt(this),this))),
+      .SD,
+      SIMPLIFY = FALSE
+    ),
+    keyby=list(manager=paste0(gsub("[0-9]{1,3}$","",pair),"\\_PAIRS"))
+  ] %>%
+  ntable(
+      halign=rep("l",ncol(pairs)),
+      align=rep("m{2cm}",ncol(pairs)),
+      add_rownames=FALSE,
+      add_header=FALSE
+  )
+  pairs_hit_ratio_latex<-pairs[,
+    mapply(
+      function(x)structure(round(100*mean(pmax(sign(x),0)),digits=1),format=quote(sign_color(n_fmt(this),this))),
+      .SD,
+      SIMPLIFY = FALSE
+    ),
+    keyby=list(manager=paste0(gsub("[0-9]{1,3}$","",pair),"\\_HIT"))
+  ] %>%
+  ntable(
+      halign=rep("l",ncol(pairs)),
+      align=rep("m{2cm}",ncol(pairs)),
+      add_rownames=FALSE,
+      add_header=FALSE
+  )
+  pairs_winloss_ratio_latex<-pairs[,
+    mapply(
+      function(x){
+        win<-sum(pmax(x,0))
+        loss<-sum(pmax(-x,0))
+        if(abs(loss)<1e-3)return(0)
+        wlratio<-win/loss
+        structure(round(100*wlratio,digits=1),format=quote(sign_color(n_fmt(this),this)))
+       },
+      .SD,
+      SIMPLIFY = FALSE
+    ),
+    keyby=list(manager=paste0(gsub("[0-9]{1,3}$","",pair),"\\_WINLOSS"))
+  ] %>%
+  ntable(
+      halign=rep("l",ncol(pairs)),
+      align=rep("m{2cm}",ncol(pairs)),
+      add_rownames=FALSE,
+      add_header=FALSE
+  )
+  paste0(
+    if(m==head(managers,1))""else"\\newpage",
+    paste0("\\subsection{\\bf ",m," pairs}\n"),
+    "\\begin{center}\n",
+   "\\begin{tabular}{c}\n",
+   pairs_latex,
+   "\\\\",
+   pairs_sums_latex,
+   "\\\\",
+   pairs_hit_ratio_latex,
+   "\\\\",
+   pairs_winloss_ratio_latex,
+   "\\\\",
+   "\\end{tabular}\n",
+    "\\end{center}\n"
+  )
+},managers,SIMPLIFY=FALSE))
+
+
+@
+
+\newpage
+\section{Live pairs detail}
+
+
+\Sexpr{paste(manager_latex,sep="")}
+
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+if(exists("db"))dbDisconnect(db)
+@
+
+\end{document}
+
+
+
+
