@@ -1,7 +1,5 @@
 
 
-
-
 require(RSQLite)
 require(DBI)
 require(Matrix)
@@ -34,6 +32,9 @@ db<-dbConnect(
 
 rconn<-Rblpapi::blpConnect()
 
+fundamentals<-fread(
+  "N:/Depts/Share/UK Alpha Team/Analytics/market_data/fundamentals.csv"
+)
 
 #
 # all of duke look-through
@@ -134,10 +135,31 @@ duke_manager_look_vs_outright<-duke_manager_aggregated_look_through_exposure[,.(
   Outright=sum(Exposure[Source=="Outright"]),
   LookThrough=sum(Exposure[Source=="LookThrough"])
 ),keyby=c("Manager","Ticker")][,
- "Sector":=local({
-    res<-Rblpapi::bdp(unique(Ticker),"ICB_SECTOR_NAME")
-    res[Ticker,"ICB_SECTOR_NAME"]
-  })
+ c("Sector","SuperSector"):=list(
+    Sector=local({
+      res<-Rblpapi::bdp(unique(Ticker),"ICB_SECTOR_NAME")
+      res[Ticker,"ICB_SECTOR_NAME"]
+    }),
+    SuperSector=local({
+      res<-Rblpapi::bdp(unique(Ticker),"ICB_SUPERSECTOR_NAME")
+      res[Ticker,"ICB_SUPERSECTOR_NAME"]
+    })
+ )
 ]
+
+fwrite(
+  duke_look_vs_outright,
+  "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_look_vs_outright.csv"
+)
+
+fwrite(
+  duke_index_look_through,
+  "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_index_look_through.csv"
+)
+
+fwrite(
+  duke_manager_look_vs_outright,
+  "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_manager_look_vs_outright.csv"
+)
 
 
