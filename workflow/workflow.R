@@ -51,4 +51,5 @@ create_report("fx_trend_report",push_to_directory ="N:/Depts/FI Currency/Quant/"
 create_report("bank_pair_report")
 create_report("trailing_stop_report")
 create_report("duke_luke_drawdown")
+create_report("duke_pair_performance")
 
