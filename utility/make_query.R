@@ -1,5 +1,5 @@
 
-require(gsubfun)
+require(gsubfn)
 require(proto)
 
 
