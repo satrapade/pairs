@@ -27,8 +27,9 @@ source("https://raw.githubusercontent.com/satrapade/latex_utils/master/latex_hel
 source("https://raw.githubusercontent.com/satrapade/utility/master/scrub.R")
 source("https://raw.githubusercontent.com/satrapade/utility/master/with_columns.R")
 source("https://raw.githubusercontent.com/satrapade/utility/master/nn_cast.R")
-source("https://raw.githubusercontent.com/satrapade/utility/master/make_query.R")
-
+source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/query.R")
+source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/make_query.R")
+source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/make_date_range.R")
 
 if(exists("db"))dbDisconnect(db)
 db<-dbConnect(
@@ -74,7 +75,42 @@ duke<-query(make_query(
   grepl("[A-Z]{2,3}_PAIR_[0-9]{2,9}",bucket) 
 ]
 
+pair_subset<-function(manager="*",cutoff="2018-06-01")(duke[grepl(manager,bucket)] %>%
+  {.$pair<-gsub("_PAIR_","",.$bucket);.} %>%
+  {.$bucket<-NULL;.} %>% 
+  {.[!is.na(gross),.(
+    initial_date=min(date),
+    final_date=max(date),
+    duration=date%>%{c(min(.),max(.))}%>%as.Date(format="%Y-%m-%d")%>%as.integer%>%diff,
+    peak_date=date[which.max(cumprod(1+scrub(pnl)))],
+    peak_pnl=round(10000*max(cumprod(1+scrub(pnl))-1),digits=1),
+    last_pnl=round(10000*(cumprod(1+scrub(pnl))-1)[which(date==max(date))],digits=1),
+    start_date=as.Date(min(date),format="%Y-%m-%d"),
+    end_date=as.Date(max(date),format="%Y-%m-%d"),
+    final_gross=round(10000*gross[which(date==max(date))],digits=1),
+    final_net=round(10000*net[which(date==max(date))],digits=1),
+    final_pnl_draw=round(10000*pnl_draw[which(date==max(date))],digits=1),
+    final_pnl_ltd=round(10000*pnl_ltd[which(date==max(date))],digits=1),
+    final_pnl_ytd=round(10000*pnl_ytd[which(date==max(date))],digits=1),
+    final_pnl_mtd=round(10000*pnl_mtd[which(date==max(date))],digits=1),
+    final_pnl_rolling=round(10000*pnl_rolling[which(date==max(date))],digits=1)
+  ),keyby=pair]})[final_date>=cutoff]
 
+pair_stats<-function(manager="*",cutoff="2018-06-01"){
+  res<-pair_subset(manager=manager,cutoff=cutoff)
+  res0<-res[,c("pair","final_pnl_mtd","final_pnl_ytd","final_pnl_ltd")]
+  res1<-mapply(function(x)data.table(
+    SUM=sum(x),
+    HITRATIO=round(100*mean(pmax(sign(x),0)),digits=1),
+    WINLOSSRATIO=round(100*scrub(sum(pmax(x,0))/sum(pmax(-x,0))),digits=1)
+  ),res0[,c("final_pnl_mtd","final_pnl_ytd","final_pnl_ltd")]) %>%
+  {data.table(pair=rownames(.),.)}
+  res2<-rbind(res0,res1)
+  attributes(res2[["final_pnl_mtd"]])$format<-quote(sign_color(n_fmt(this),this))
+  attributes(res2[["final_pnl_ytd"]])$format<-quote(sign_color(n_fmt(this),this))
+  attributes(res2[["final_pnl_ltd"]])$format<-quote(sign_color(n_fmt(this),this))
+  res2
+}
 
 @
 
@@ -101,6 +137,7 @@ duke<-query(make_query(
 
 
 <<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+
 
 
 @
@@ -164,6 +201,12 @@ Net  &  \Sexpr{duke[!is.na(net)][,max(date)]} \\
 )}
 \end{center}
 
+\newpage
+\section{test}
+
+\Sexpr{ntable(df=pair_stats("^AC"))}
+\Sexpr{ntable(df=pair_stats("^ABC"))}
+\Sexpr{ntable(df=pair_stats("^GJ"))}
 
 <<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
 live_pairs<- duke[!is.na(gross)][date==max(date),bucket] %>% 
@@ -280,7 +323,8 @@ manager_latex<-do.call(c,mapply(function(m){
     "\\begin{center}\n",
    "\\begin{tabular}{c}\n",
    pairs_latex,
-   "\\\\",
+   "\\\\ \n",
+   "\\hline \n",
    pairs_sums_latex,
    "\\\\",
    pairs_hit_ratio_latex,
@@ -306,7 +350,6 @@ if(exists("db"))dbDisconnect(db)
 @
 
 \end{document}
-
 
 
 
