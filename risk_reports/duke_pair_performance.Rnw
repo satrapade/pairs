@@ -76,8 +76,13 @@ duke<-query(make_query(
   grepl("[A-Z]{2,3}_PAIR_[0-9]{2,9}",bucket) 
 ]
 
-pair_subset<-function(manager="*",cutoff="2018-06-01")(
-  duke[grepl(manager,bucket)] %>%
+pair_subset<-function(
+  manager="*",
+  cutoff="2018-06-01",
+  filter=grepl(manager,bucket),
+  dataset=duke
+ )(
+  dataset[filter] %>%
   {.$pair<-gsub("_PAIR_","",.$bucket);.} %>%
   {.$bucket<-NULL;.} %>% 
   {.[!is.na(gross),.(
