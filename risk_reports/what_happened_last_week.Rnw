@@ -1,7 +1,7 @@
 %
 % scrape status
 %
- 
+
 <<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
 # required packages
 require(Hmisc)
@@ -14,36 +14,36 @@ require(Matrix)
 require(Matrix.utils)
 require(clue)
 require(Rtsne)
- 
+
 source(
   "https://raw.githubusercontent.com/satrapade/utility/master/utility_functions.R"
 )
 source(
   "https://raw.githubusercontent.com/satrapade/latex_utils/master/latex_helpers_v2.R"
 )
- 
+
 x<-list.files(
   path="N:/Depts/Share/UK Alpha Team/Analytics/risk_reports/figure",
   pattern="*.pdf",
   full.names=TRUE
 )
 if(length(x)>0)file.remove(x)
- 
+
 #
 # daily data
 #
- 
+
 data_loaded<-fread("N:/Depts/Share/UK Alpha Team/Analytics/market_data/data_loaded.csv")
 for(i in 1:nrow(data_loaded)){
     if(data_loaded$class[i]!="matrix")next;
     assign(data_loaded$name[i],load_matrix(data_loaded$fn[i],row_names = TRUE))
 }
 rm("i")
- 
+
 #
 # daily data
 #
- 
+
 data_directory<-"N:/Depts/Share/UK Alpha Team/Analytics/duke_summary"
 prefix<-"duke_"
 row_names<-TRUE
@@ -54,23 +54,23 @@ pair_local_pnl    <- load_matrix(paste0(data_directory,"/",prefix,"pair_local_pn
 pair_long_pnl     <- load_matrix(paste0(data_directory,"/",prefix,"pair_long_pnl.csv"),row_names=row_names)
 pair_short_pnl    <- load_matrix(paste0(data_directory,"/",prefix,"pair_short_pnl.csv"),row_names=row_names)
 drop_one_pair_pnl <- load_matrix(paste0(data_directory,"/",prefix,"drop_one_pair_pnl.csv"),row_names=row_names)
- 
+
 # manager-level data
 manager_exposure          <- load_matrix(paste0(data_directory,"/",prefix,"manager_exposure.csv"),row_names=row_names)
 manager_local_pnl         <- load_matrix(paste0(data_directory,"/",prefix,"manager_local_pnl.csv"),row_names=row_names)
 drop_one_manager_pnl      <- load_matrix(paste0(data_directory,"/",prefix,"drop_one_manager_pnl.csv"),row_names=row_names)
 manager_drop_one_pair_pnl <- load_matrix(paste0(data_directory,"/",prefix,"manager_drop_one_pair_pnl.csv"),row_names=row_names)
- 
+
 # fund-level data
 exposure        <- load_matrix(paste0(data_directory,"/",prefix,"exposure.csv"),row_names=row_names)
 long_exposure   <- load_matrix(paste0(data_directory,"/",prefix,"long_exposure.csv"),row_names=row_names)
 short_exposure  <- load_matrix(paste0(data_directory,"/",prefix,"short_exposure.csv"),row_names=row_names)
 local_pnl       <- load_matrix(paste0(data_directory,"/",prefix,"local_pnl.csv"),row_names=row_names)
- 
+
 # color assigment
 manager_col <- fread("N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/manager_col.csv")
 pair_col    <- fread("N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/pair_col.csv")
- 
+
 #determine pairs, managers and pair-to-manager mapping
 pairs<-sort(unique(colnames(pair_exposure)))
 managers<-sort(unique(colnames(manager_exposure)))
@@ -78,10 +78,10 @@ manager_pairs<-structure(
   diag(length(managers))[match(gsub("[0-9]+","",pairs),managers),],
   dimnames=list(pairs,managers)
 )
- 
+
 keys<-fread("N:/Depts/Share/UK Alpha Team/Analytics/pair_icons/keys.csv")
 images<-fread("N:/Depts/Share/UK Alpha Team/Analytics/pair_icons/images.csv")
- 
+
 icon<-function(icon_name,icon_table=images,height="2cm",width="3cm"){
   icon_table[
     ,
@@ -92,21 +92,21 @@ icon<-function(icon_name,icon_table=images,height="2cm",width="3cm"){
     paste0("\\includegraphics[height=",height,",width=",width,",valign=T]{",file,"}")
   ]
 }
- 
+
 #
 # intraday data
 #
- 
+
 intraday<-fread("N:/Depts/Share/UK Alpha Team/Analytics/market_data/intraday.csv")
 intraday_perf<-as.matrix(fread("N:/Depts/Share/UK Alpha Team/Analytics/market_data/intraday_perf.csv"))
 bar_intervals<-fread("N:/Depts/Share/UK Alpha Team/Analytics/market_data/bar_intervals.csv")
 intraday_pair<-as.matrix(fread("N:/Depts/Share/UK Alpha Team/Analytics/market_data/intraday_pair.csv"))
 intraday_pair_longs<-as.matrix(fread("N:/Depts/Share/UK Alpha Team/Analytics/market_data/intraday_pair_longs.csv"))
 intraday_pair_shorts<-as.matrix(fread("N:/Depts/Share/UK Alpha Team/Analytics/market_data/intraday_pair_shorts.csv"))
- 
+
 last_bar<-tail(which(bar_intervals$day==max(bar_intervals$day)),1)
 first_bar<-head(which(bar_intervals$day==max(bar_intervals$day)),1)
- 
+
 row_size2universe<-function(x,u){
   m<-matrix(0,nrow=length(u),ncol=ncol(x),dimnames=list(u,colnames(x)))
   i<-match(rownames(x),u)
@@ -114,9 +114,9 @@ row_size2universe<-function(x,u){
   m[i,j]<-as.matrix(x)
   m
 }
- 
+
 mc<-function(x,p="*",rows=1:nrow(x),cols=which(grepl(p,colnames(x))))x[rows,cols,drop=FALSE]
- 
+
 make_pair<-function(
   w,
   intraday_perf=get("intraday_perf",envir=.GlobalEnv)
@@ -143,8 +143,8 @@ make_pair<-function(
   )
   structure(pnl,.Names=attributes(intraday_perf)$datetime)
 }
- 
- 
+
+
 pair_exposure<-local({
   res<-load_matrix(
     "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_pair_exposure.csv",
@@ -152,7 +152,7 @@ pair_exposure<-local({
   )
   res[rownames(res) %in% colnames(intraday_perf),]
 })
- 
+
 manager_exposure<-local({
   res<-load_matrix(
     "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_manager_exposure.csv",
@@ -160,8 +160,8 @@ manager_exposure<-local({
   )
   res[rownames(res) %in% colnames(intraday_perf),]
 })
- 
- 
+
+
 plot_intraday_pnl<-function(
   pm="*",
   intraday_pair=get("intraday_pair",envir=.GlobalEnv),
@@ -198,11 +198,11 @@ plot_intraday_pnl<-function(
   axis(2)
   #structure(pnl,.Names=attributes(intraday_pair)$datetime)
 }
- 
+
 the_pairs<-c("*",colnames(manager_exposure))
- 
+
 days_in_data<-sort(unique(bar_intervals$date[bar_intervals$day>0]))
- 
+
 summary_table<-data.table(
   pair=the_pairs,
   all=structure(
@@ -237,8 +237,8 @@ summary_table<-data.table(
     },p=the_pairs)
   ),days_in_data,SIMPLIFY=FALSE))
 )
- 
- 
+
+
 backtest_hit_ratio_table<-data.table(
   pair=the_pairs,
   do.call(data.table,mapply(function(i)structure(
@@ -253,7 +253,7 @@ backtest_hit_ratio_table<-data.table(
     },p=the_pairs)
   ),days_in_data,SIMPLIFY=FALSE))
 )
- 
+
 backtest_winloss_ratio_table<-data.table(
   pair=the_pairs,
   do.call(data.table,mapply(function(i)structure(
@@ -276,7 +276,7 @@ backtest_winloss_ratio_table<-data.table(
     },p=the_pairs)
   ),days_in_data,SIMPLIFY=FALSE))
 )
- 
+
 backtest_plot_table<-data.table(
   pm=structure(hdr="{\\bf PM}",paste0("{\\bf ",the_pairs,"}")),
   do.call(data.table,mapply(function(i)structure(
@@ -318,14 +318,14 @@ backtest_plot_table<-data.table(
     },p=the_pairs)
   ),days_in_data,SIMPLIFY=FALSE))
 )
- 
+
 db_sheets<-dbConnect(
-   SQLite(),
+   SQLite(), 
    dbname="N:/Depts/Share/UK Alpha Team/Analytics/sheet_scrape/sheet_scrapes.sqlite"
 )
- 
+
 db<-dbConnect(
-  odbc::odbc(),
+  odbc::odbc(), 
   .connection_string = paste0(
     "driver={SQL Server};",
     "server=SQLS071FP\\QST;",
@@ -333,14 +333,14 @@ db<-dbConnect(
     "trusted_connection=true"
   )
 )
- 
+
 @
- 
- 
+
+
 \documentclass{article}
- 
-\usepackage[portrait, headheight = 0cm, margin=0.25cm, top = 0.25cm, nofoot]{geometry}
-\usepackage[export]{adjustbox}
+
+\usepackage[portrait, headheight = 0cm, margin=0.25cm, top = 0.25cm, nofoot]{geometry} 
+\usepackage[export]{adjustbox} 
 \usepackage{graphicx}
 \usepackage[space]{grffile}
 \usepackage[dvipsnames,table]{xcolor} % [dvipsnames,table] for setting colors \usepackage{amsmath} \usepackage{xfrac}
@@ -349,60 +349,60 @@ db<-dbConnect(
 \usetikzlibrary{shapes.misc}
 \usetikzlibrary{arrows}
 \usepackage{xfrac}
- 
+
 \DeclareRobustCommand\Tstrut{\rule{0pt}{2.6ex}}         % = `top' strut
 \DeclareRobustCommand\Bstrut{\rule[-0.9ex]{0pt}{0pt}}   % = `bottom' strut
 \renewcommand{\familydefault}{\sfdefault}
- 
+
 \begin{document}
- 
+
 \section{Contents}
- 
+
 \vskip 5mm
- 
+
 \noindent This report contains an analysis of recent performance of the {\bf current} portfolio.
-Historical P\&L numbers in this report do not reflect actual portfolio performance,
-because historical changes of portfolio composition are not included in the analysis.
- 
+Historical P\&L numbers in this report do not reflect actual portfolio performance, 
+because historical changes of portfolio composition are not included in the analysis. 
+
 \vskip 5mm
- 
-\noindent The purpose of this analysis is to help future positioning, not to evaluate
-past decisions. This is more like a {\bf backtest} rather than a performance
+
+\noindent The purpose of this analysis is to help future positioning, not to evaluate 
+past decisions. This is more like a {\bf backtest} rather than a performance 
 attribution.
- 
+
 \vskip 5mm
- 
-\noindent Current position information is obtained by scraping the latest portfolio
+
+\noindent Current position information is obtained by scraping the latest portfolio 
 sheet.
- 
+
 \vskip 5mm
- 
+
 \begin{center}
 \Sexpr{ntable(
- df=apply(as.data.table(
+  df=apply(as.data.table(
     t(query("SELECT date, fname FROM sheet_scrape ORDER BY DATE DESC LIMIT 1",db_sheets)),
     keep.rownames=TRUE
   ),2,latexTranslate)
 )}
 \end{center}
- 
- 
+
+
 \vskip 5mm
- 
+
 The performance DB used for calculations is as follows:
- 
+
 \vskip 5mm
- 
- 
+
+
 \begin{center}
 \Sexpr{ntable(
   df=apply(as.data.table(
     t(query("
-    select Top 1       
+    select Top 1        
     bs.backup_finish_date                    as PRDFundPerformance_BackupDateTime,
     rs.restore_date                          as PRDQSTFundPerformance_RestoreDateTime
     from msdb..restorehistory rs
-    inner join msdb..backupset bs
+    inner join msdb..backupset bs 
     on rs.backup_set_id = bs.backup_set_id
     where destination_database_name = 'PRDQSTFundPerformance'
     order by rs.restore_date desc
@@ -411,25 +411,25 @@ The performance DB used for calculations is as follows:
   ),2,latexTranslate)
 )}
 \end{center}
- 
+
 \vskip 5mm
- 
- 
+
+
 Trades are manually assigned to buckets by the performance team. It is possible that
-position bucketing will lag product positions. We would expect the latest bucket date
+position bucketing will lag product positions. We would expect the latest bucket date 
 to occur in the near past (couple of days). Latest bucket day in LUKE: {\bf \Sexpr{query("
-SELECT MAX(HistoricalDate)
-FROM tHistoricalBucketHolding
-WHERE tHistoricalBucketHolding.ProductId = 7
+SELECT MAX(HistoricalDate) 
+FROM tHistoricalBucketHolding 
+WHERE tHistoricalBucketHolding.ProductId = 7 
 AND   tHistoricalBucketHolding.DataSourceId = 1")[[1]][1]
 }}
- 
- 
-\newpage
+
+
+\newpage 
 \section{Summary: Recent performance of \underline{current} portfolio holdings}
- 
+
 \vskip 5mm
- 
+
 \begin{center}
 \Sexpr{ntable(
   summary_table,
@@ -438,9 +438,9 @@ AND   tHistoricalBucketHolding.DataSourceId = 1")[[1]][1]
   scale=0.75
 )}
 \end{center}
- 
+
 \vskip 5mm
- 
+
 <<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
 a1<-c("m{1cm}",rep("@{}|@{}m{2cm}",ncol(backtest_plot_table)-1))
 @
@@ -448,7 +448,7 @@ a1<-c("m{1cm}",rep("@{}|@{}m{2cm}",ncol(backtest_plot_table)-1))
 \Sexpr{ntable(
   backtest_plot_table,
   add_rownames=FALSE,
-  title="Intra-day performance by manager, total",
+  title="Intra-day performance by manager, total", 
   scale=0.75,
   alternating=FALSE,
   align=a1,
@@ -456,17 +456,17 @@ a1<-c("m{1cm}",rep("@{}|@{}m{2cm}",ncol(backtest_plot_table)-1))
   row_end="\\hline\\\\[-7mm]"
 )}
 \end{center}
- 
+
 \vskip 5mm
- 
- 
+
+
 \begin{center}
 \begin{tabular}{cc}
 \Sexpr{ntable(
   backtest_hit_ratio_table,
   add_rownames=FALSE,
   title=paste(
-    "14 day hit ratios, up to",
+    "14 day hit ratios, up to", 
     max(attributes(intraday_perf)$datetime)
   ),
   scale=0.6
@@ -476,7 +476,7 @@ a1<-c("m{1cm}",rep("@{}|@{}m{2cm}",ncol(backtest_plot_table)-1))
   backtest_winloss_ratio_table,
   add_rownames=FALSE,
   title=paste(
-    "14 day win/loss ratios, up to",
+    "14 day win/loss ratios, up to", 
     max(attributes(intraday_perf)$datetime)
   ),
   scale=0.6
@@ -484,9 +484,9 @@ a1<-c("m{1cm}",rep("@{}|@{}m{2cm}",ncol(backtest_plot_table)-1))
 \\
 \end{tabular}
 \end{center}
- 
+
 <<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
- 
+
 backtest_long_vs_short_px_table<-data.table(
   pm=structure(hdr="{\\bf PM}",paste0("{\\bf ",the_pairs,"}")),
   do.call(data.table,mapply(function(i)structure(
@@ -533,7 +533,7 @@ backtest_long_vs_short_px_table<-data.table(
         )
         lines(
           x=seq_along(long_pnls),
-          y=long_pnls,         
+          y=long_pnls,          
           lwd=20,
           col=rgb(0,1,0,0.5)
         )
@@ -549,21 +549,21 @@ backtest_long_vs_short_px_table<-data.table(
     },p=the_pairs)
   ),days_in_data,SIMPLIFY=FALSE))
 )
- 
+
 a1<-c("m{1cm}",rep("@{}|@{}m{2cm}",ncol(backtest_long_vs_short_px_table)-1))
- 
+
 @
 \newpage
 \section{Long vs short leg price performance}
- 
+
 \vskip 5mm
- 
-\noindent P\&L from long and short legs of manager positions should have opposite signs most of
-the time. In addition, magnitutes should be roughly the same. Patters of realized behaviour
+
+\noindent P\&L from long and short legs of manager positions should have opposite signs most of 
+the time. In addition, magnitutes should be roughly the same. Patters of realized behaviour 
 can be used to pinpoint positioning inefficiencies.
- 
+
 \vskip 10mm
- 
+
 \begin{center}
 \Sexpr{ntable(
   backtest_long_vs_short_px_table,
@@ -571,7 +571,7 @@ can be used to pinpoint positioning inefficiencies.
   title=paste0(
     "Long leg (",dot("green"),") vs short leg (",dot("red"),"),",
     "legend is long, short P\\&L  L:(long P\\&L), S:(short P\\&L), all in bps"
-  ),
+  ), 
   scale=0.75,
   alternating=FALSE,
   align=a1,
@@ -579,9 +579,9 @@ can be used to pinpoint positioning inefficiencies.
   row_end="\\hline\\\\[-7mm]"
 )}
 \end{center}
- 
+
 <<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
- 
+
 backtest_long_vs_short_table<-data.table(
   pm=structure(hdr="{\\bf PM}",paste0("{\\bf ",the_pairs,"}")),
   do.call(data.table,mapply(function(i)structure(
@@ -645,31 +645,31 @@ backtest_long_vs_short_table<-data.table(
     },p=the_pairs)
   ),days_in_data,SIMPLIFY=FALSE))
 )
- 
+
 a1<-c("m{1cm}",rep("@{}|@{}m{2cm}",ncol(backtest_long_vs_short_table)-1))
- 
+
 @
 \newpage
 \section{Long vs short leg price correlation}
- 
+
 \vskip 5mm
- 
+
 \noindent Long and short legs of manager positions should be negatively correlated to
-avoid net beta exposures. Reviewing realized behaviour in the form of a ``portfolio path''
+avoid net beta exposures. Reviewing realized behaviour in the form of a ``portfolio path'' 
 allows us to identify days with unexpected price action and can be used to evaluate
-hedge efficiency. On the grid below, plots are color-coded by the correlation between
+hedge efficiency. On the grid below, plots are color-coded by the correlation between 
 long and short leg performances. Positive correlations are on a red background because
 these are situations where the hedge increased (rather than reduced) outcome volatility.
- 
+
 \vskip 10mm
- 
+
 \begin{center}
 \Sexpr{ntable(
   backtest_long_vs_short_table,
   add_rownames=FALSE,
   title=paste0(
     "Long leg (x axis) vs short leg (y axis), ",
-    "color-coded by sign of correlation ",
+    "color-coded by sign of correlation ", 
     "(",dot("green"),") negative",
     "(",dot("red"),") positive"
   ),
@@ -680,9 +680,9 @@ these are situations where the hedge increased (rather than reduced) outcome vol
   row_end="\\hline\\\\[-7mm]"
 )}
 \end{center}
- 
+
 <<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
- 
+
 backtest_return_cross_section_table<-data.table(
   pm=structure(hdr="{\\bf PM}",paste0("{\\bf ",the_pairs,"}")),
   do.call(data.table,mapply(function(i)structure(
@@ -738,31 +738,31 @@ backtest_return_cross_section_table<-data.table(
     },p=the_pairs)
   ),days_in_data,SIMPLIFY=FALSE))
 )
- 
+
 a1<-c("m{1cm}",rep("@{}|@{}m{2cm}",ncol(backtest_return_cross_section_table)-1))
- 
+
 @
 \newpage
 \section{Cross-section of pair returns}
- 
+
 \vskip 5mm
- 
-\noindent The cross-section of daily pair returns allows us to distinguish between specific and
+
+\noindent The cross-section of daily pair returns allows us to distinguish between specific and 
 systematic P\&L drivers. If the outcome is determined by one or two outliers we can assume there
-is no single factor driving performance. On the grid of plots below, the location of the faint,
+is no single factor driving performance. On the grid of plots below, the location of the faint, 
 vertical blue line is proportional to the {\bf hit ratio} whereas the faint, horizontal
 blue line's location is proportional to the {\bf win/loss ratio}.
- 
- 
+
+
 \vskip 10mm
- 
+
 \begin{center}
 \Sexpr{ntable(
   backtest_return_cross_section_table,
   add_rownames=FALSE,
   title=paste0(
     "Pairs sorted on performance, ",
-    "color-coded by daily P\\&L ",
+    "color-coded by daily P\\&L ", 
     "(",dot("green"),") positive",
     "(",dot("red"),") negative"
   ),
@@ -773,8 +773,8 @@ blue line's location is proportional to the {\bf win/loss ratio}.
   row_end="\\hline\\\\[-7mm]"
 )}
 \end{center}
- 
- 
+
+
 <<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
 ndx_regex<-"(^SX[0-9A-Z]{1,2}P Index)|(MSEEMOMO Index)|(MCX Index)|(UKX Index)"
 open_bars<-which(bar_intervals$day>0)
@@ -783,17 +783,17 @@ sector_betas<-cov(intraday_perf[open_bars,"SXXP Index"],sector_indices)/var(intr
 sector_betas[,"SXXP Index"]<-0
 sector_hedges<-intraday_perf[,"SXXP Index",drop=FALSE]%*%sector_betas
 sector_spreads<-mc(intraday_perf,ndx_regex)-sector_hedges
- 
+
 # bct : backtest correl table
 #
- 
+
 bct_pm<-structure(hdr="{\\bf PM}",paste0("{\\bf ",the_pairs,"}"))
- 
+
 no_plot<-make_plot(expression({
   plot(NA,type="n",xlab="",ylab="",xlim=c(0,1),ylim=c(0,1),axes=FALSE)
   text(0.5,0.5,labels="No data",cex=5)
 }),width="2cm",height="2cm")
- 
+
 make_pm_date_cor_plot<-function(the_pm,the_day){
   if(is.na(the_day))return("bad day")
   ndx<-bar_intervals$date==the_day & bar_intervals$day>0
@@ -826,7 +826,7 @@ make_pm_date_cor_plot<-function(the_pm,the_day){
   if(class(res)=="try-error")return(latexTranslate(as.character(res)))
   res
 }
- 
+
 pm_day_combo=data.table(
   pair=rep(the_pairs,times=length(days_in_data)),
   day=rep(days_in_data,each=length(the_pairs))
@@ -835,7 +835,7 @@ pm_day_combo=data.table(
   day=day,
   plot=mapply(make_pm_date_cor_plot,the_pm=pair,the_day=day)
 )]
- 
+
 pm_day_matrix<-matrix(
   "",
   ncol=length(days_in_data),
@@ -846,8 +846,8 @@ pm_day_matrix[cbind(
   match(pm_day_combo$pair,the_pairs),
   match(pm_day_combo$day,days_in_data)
 )]<-pm_day_combo$plot
- 
- 
+
+
 backtest_correl_table<-data.table(
   pm=bct_pm,
   pm_day_matrix,
@@ -911,25 +911,25 @@ backtest_correl_table<-data.table(
     },the_pairs)
   )
 )
- 
+
 a1<-c("m{1cm}",rep("@{}|@{}m{2cm}",ncol(backtest_correl_table)-2),"@{}|@{}m{3cm}")
- 
+
 @
 \newpage
 \section{Return correlations}
- 
+
 \vskip 5mm
- 
+
 \noindent Identifying the index with the highest intra-day correlation to a manager's
 position may help with understanding P\&L drivers.
- 
+
 \vskip 10mm
- 
+
 \begin{center}
 \Sexpr{ntable(
   backtest_correl_table,
   add_rownames=FALSE,
-  title="Market-hedged sector index with highest intra-day correlation (x axis: manager return)",
+  title="Market-hedged sector index with highest intra-day correlation (x axis: manager return)", 
   scale=0.75,
   alternating=FALSE,
   align=a1,
@@ -937,18 +937,18 @@ position may help with understanding P\&L drivers.
   row_end="\\hline\\\\[-6mm]"
 )}
 \end{center}
- 
- 
+
+
 <<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
 ndx_regex<-"^SX[0-9A-Z]{1,2}P Index$"
- 
+
 ndx_tickers<-Filter(
   function(x)grepl(ndx_regex,x),
   intersect(colnames(factor_local_tret),colnames(intraday_perf))
 )
- 
+
 open_bars<-which(bar_intervals$day>0)
- 
+
 intraday_sector_indices<-structure(
   intraday_perf[open_bars,ndx_tickers,drop=FALSE],
   dimnames=list(
@@ -956,10 +956,10 @@ intraday_sector_indices<-structure(
     ndx_tickers
   )
 )
- 
+
 daily_sector_indices<-factor_local_tret[,ndx_tickers,drop=FALSE]
- 
- 
+
+
 intraday_managers<-structure(
   mapply(
     function(p)rowSums(mc(intraday_pair[open_bars,],paste0("^",p))),
@@ -970,15 +970,15 @@ intraday_managers<-structure(
     the_pairs
   )
 )
- 
- 
+
+
 sector_pairs<-data.table(
   ndx1=rep(ndx_tickers,times=length(ndx_tickers)),
-  ndx2=rep(ndx_tickers,each=length(ndx_tickers))     
+  ndx2=rep(ndx_tickers,each=length(ndx_tickers))      
 )[
-ndx1!=ndx2
+ ndx1!=ndx2
 ][,
-c(
+ c(
    "intraday_cov","daily_cov",
    "intraday_cor","daily_cor",
    "intraday_vol1","daily_vol1",
@@ -1008,9 +1008,9 @@ c(
   daily_vol1=apply(daily_sector_indices[,ndx1],2,sd),
   intraday_vol2=apply(intraday_sector_indices[,ndx2],2,sd),
   daily_vol2=apply(daily_sector_indices[,ndx2],2,sd)
-)
+ )
 ][,
-c("intraday_beta","daily_beta"):=list(
+ c("intraday_beta","daily_beta"):=list(
    intraday_beta=intraday_cov/(intraday_vol2*intraday_vol2),
    daily_beta=daily_cov/(daily_vol2*daily_vol2)
   )
@@ -1077,7 +1077,7 @@ c("intraday_beta","daily_beta"):=list(
     sn=gsub(" Index","",paste0(ndx1,"|",ndx2))
   )
 ]
- 
+
 max_cor_table<-data.table(
   pm=structure(hdr="{\\bf PM}",paste0("{\\bf ",the_pairs,"}")),
   gross=mapply(function(p)round(100*sum(abs(mc(pair_exposure,p))),digits=0),the_pairs),
@@ -1272,14 +1272,14 @@ max_cor_table<-data.table(
     },the_pairs)
   )
 )
- 
+
 a1<-c("m{1cm}","@{}|@{}c","@{}|@{}c","@{}|@{}c","@{}|@{}c","@{}|@{}c","@{}|@{}c")
- 
+
 #
 #
 #
 best_spread<-function(pm,n=5){
-  pm_bars<-rowSums(mc(intraday_pair[open_bars,],pm))
+   pm_bars<-rowSums(mc(intraday_pair[open_bars,],pm))
    res<-mapply(
     cor,
     structure(sector_pairs$intraday_spread,.Names=sector_pairs$sn),
@@ -1297,30 +1297,30 @@ best_spread<-function(pm,n=5){
     beta=round(100*res1[o],digits=1)
   )
 }
- 
+
 x<-best_spread("*",5)
 intraday_best<-do.call(cbind,sector_pairs[,.SD,keyby=sn][x$spread,intraday_spread])%*%matrix(sign(x$cor)/5,ncol=1)
 intraday_duke<-rowSums(intraday_pair[open_bars,])
 duke_best_sd_ratio<-sd(intraday_best)/sd(intraday_duke)
- 
+
 x1<-cumsum(intraday_duke)
 x2<-cumsum(intraday_best/duke_best_sd_ratio)
 x3<-cumsum(intraday_best)
 ylim<-c(min(c(x1,x2)),max(c(x1,x2)))
- 
- 
+
+
 @
 \newpage
 \section{Relevant spreads and indices: Beta-neutral case}
- 
+
 \vskip 5mm
- 
-\noindent Identifying the index and index spreads with the highintra-day correlation
+
+\noindent Identifying the index and index spreads with the highintra-day correlation 
 to a manager's position may help with understanding P\&L drivers. In addition, portfolio
 or manager-level overlays can be constructed using this information.
- 
+
 \vskip 10mm
- 
+
 \begin{center}
 \Sexpr{ntable(
   max_cor_table,
@@ -1328,7 +1328,7 @@ or manager-level overlays can be constructed using this information.
   title=paste0(
     curly("\\bf Current portfolio")," : ",
     "Spread with highest similarity to manager positions, position correlations (pct), betas (pct AUM)"
-  ),
+  ), 
   scale=0.75,
   alternating=FALSE,
   align=a1,
@@ -1336,15 +1336,15 @@ or manager-level overlays can be constructed using this information.
   row_end="\\hline"
 )}
 \end{center}
- 
+
 \begin{center}
 \begin{tabular}{m{8cm} m{8cm}}
 \hline
 \begin{center}
 \begin{tabular}{m{8cm}}
-10-day performance (\Sexpr{dot("red")}) of an equally-weighted portfolio comprising the
- top 5 most correlated {\bf beta-neutral} spreads.  DUKE performance (\Sexpr{dot("blue")}) over
- the same period. The spread portfolio has been scaled to match DUKE's volatility.
+ 10-day performance (\Sexpr{dot("red")}) of an equally-weighted portfolio comprising the 
+ top 5 most correlated {\bf beta-neutral} spreads.  DUKE performance (\Sexpr{dot("blue")}) over 
+ the same period. The spread portfolio has been scaled to match DUKE's volatility. 
 \\
 \Sexpr{ntable(
   df=rbind(
@@ -1377,10 +1377,10 @@ or manager-level overlays can be constructed using this information.
 \hline
 \end{tabular}
 \end{center}
- 
+
 <<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
- 
- 
+
+
 relevant_spread_table_money_neutral<-data.table(
   pm=structure(hdr="{\\bf PM}",paste0("{\\bf ",the_pairs,"}")),
   gross=mapply(function(p)round(100*sum(abs(mc(pair_exposure,p))),digits=0),the_pairs),
@@ -1575,9 +1575,9 @@ relevant_spread_table_money_neutral<-data.table(
     },the_pairs)
   )
 )
- 
+
 a1<-c("m{1cm}","@{}|@{}c","@{}|@{}c","@{}|@{}c","@{}|@{}c","@{}|@{}c","@{}|@{}c")
- 
+
 #
 #
 #
@@ -1605,37 +1605,37 @@ best_money_neutral_spread<-function(pm,n=5){
     beta=round(100*res1[o],digits=1)
   )
 }
- 
+
 n<-5
 x<-best_money_neutral_spread("*",n)
- 
+
 intraday_best_money_neutral<-
   do.call(cbind,sector_pairs[,.SD,keyby=sn][x$spread,intraday_money_neutral_spread]) %*%
   matrix(sign(x$cor)/n,ncol=1)
- 
+
 intraday_duke<-rowSums(intraday_pair[open_bars,])
 duke_best_money_neutral_sd_ratio<-sd(intraday_best_money_neutral)/sd(intraday_duke)
- 
+
 x1<-cumsum(intraday_duke)
 x2<-cumsum(intraday_best_money_neutral/duke_best_money_neutral_sd_ratio)
 x3<-cumsum(intraday_best_money_neutral)
 ylim<-c(min(c(x1,x2)),max(c(x1,x2)))
- 
- 
- 
+
+
+
 @
- 
+
 \newpage
 \section{Relevant spreads and indices: Money-neutral case}
- 
+
 \vskip 5mm
- 
-\noindent Identifying the index and index spreads with the highintra-day correlation
+
+\noindent Identifying the index and index spreads with the highintra-day correlation 
 to a manager's position may help with understanding P\&L drivers. In addition, portfolio
 or manager-level overlays can be constructed using this information.
- 
+
 \vskip 10mm
- 
+
 \begin{center}
 \Sexpr{ntable(
   relevant_spread_table_money_neutral,
@@ -1643,7 +1643,7 @@ or manager-level overlays can be constructed using this information.
   title=paste0(
     curly("\\bf Current portfolio")," : ",
     "Spread with highest similarity to manager positions, position correlations (pct), betas (pct AUM)"
-  ),
+  ), 
   scale=0.75,
   alternating=FALSE,
   align=a1,
@@ -1651,15 +1651,15 @@ or manager-level overlays can be constructed using this information.
   row_end="\\hline"
 )}
 \end{center}
- 
+
 \begin{center}
 \begin{tabular}{m{8cm} m{8cm}}
 \hline
 \begin{center}
 \begin{tabular}{m{8cm}}
-10-day performance (\Sexpr{dot("red")}) of an equally-weighted portfolio comprising the
- top 5 most correlated {\bf money-neutral} spreads.  DUKE performance (\Sexpr{dot("blue")}) over
- the same period. The spread portfolio has been scaled to match DUKE's volatility.
+ 10-day performance (\Sexpr{dot("red")}) of an equally-weighted portfolio comprising the 
+ top 5 most correlated {\bf money-neutral} spreads.  DUKE performance (\Sexpr{dot("blue")}) over 
+ the same period. The spread portfolio has been scaled to match DUKE's volatility. 
  \\
 \Sexpr{ntable(
   df=rbind(
@@ -1668,7 +1668,7 @@ or manager-level overlays can be constructed using this information.
       value=round(100*cor(diff(x1),diff(x2)),digits=0)
     ),
     data.table(
-     stat="DUKE 2w beta to proxy (bps)",
+      stat="DUKE 2w beta to proxy (bps)",
       value=round(10000*safe_beta(diff(x1),diff(x3)),digits=0)
     ),
     data.table(
@@ -1692,55 +1692,93 @@ or manager-level overlays can be constructed using this information.
 \hline
 \end{tabular}
 \end{center}
- 
- 
+
+
 <<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
 require(data.table)
 require(magrittr)
- 
+
 source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/nn_cast.R")
- 
+
 duke_lt<-fread(
   "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_manager_look_vs_outright.csv"
 )
- 
+
 duke_lt_matrix<-NNcast(
   data=duke_lt,
   i_name="SuperSectorIndex",
   j_name="Manager",
   v_name="LookThrough+Outright",
   fun=function(x)round(sum(x),digits=1)
-)%>%
+) %>%
 {cbind(.,DUKE=rowSums(.))} %>%
-{rbind(.,NET=colSums(.),GROSS=colSums(abs(.)))}
- 
-sector_exposure<- duke_lt_matrix %>%
-{ data.table(sector=rownames(.),.)}
- 
+{rbind(.,NET=colSums(.),GROSS=colSums(abs(.)))} %>%
+round(digits=1)
+
+sector_exposure<- duke_lt_matrix %>% 
+{ data.table(sector=rownames(.),.)} 
+
 for(i in setdiff(names(sector_exposure),"sector")){
   attributes(sector_exposure[[i]])$format<-quote(sign_color(n_fmt(this),this))
 }
- 
- 
+
+z<-intraday_managers*10000
+colnames(z)[1]<-"DUKE"
+z<-z[,colnames(duke_lt_matrix)]
+x<-duke_lt_matrix[grepl("Index$",rownames(duke_lt_matrix)),]
+y<-intraday_sector_indices[,rownames(x)]%*%x
+explain<-data.table(
+  pm=structure(colnames(y),hrd="Manger"),
+  cor=structure(
+    round(100*mapply(cor,data.table(y),data.table(z)),digits=1),
+    format=quote(sign_color(n_fmt(this),this)),
+    hdr="Correlation"
+  ),
+  predicted=structure(
+    round(colSums(y),digits=1),
+    format=quote(sign_color(n_fmt(this),this)),
+    hdr="Predicted P\\&L"
+  ),
+  actual=structure(
+    round(colSums(z),digits=1),
+    format=quote(sign_color(n_fmt(this),this)),
+    hdr="Actual P\\&L"
+  )
+)
+
 @
 \newpage
 \section{Look-through sector exposures}
- 
+
 \vskip 5mm
- 
+
 \begin{center}
 \Sexpr{ntable(
-df=sector_exposure
+ df=sector_exposure
 )}
 \end{center}
- 
+
+\vskip 5mm
+
+We compare actual manager performance to predicted performance from index look-through
+holdings. Outcomes and intraday return correlations show how much of the portfolio risk 
+can be attributed to sector exposures.
+
+\vskip 5mm
+
+\begin{center}
+\Sexpr{ntable(
+ df=explain
+)}
+\end{center}
+
 <<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
- 
+
 require(DBI)
 require(data.table)
 require(gsubfn)
 require(magrittr)
- 
+
 source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/query.R")
 source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/make_query.R")
 source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/fetch_bucket_pnl.R")
@@ -1748,10 +1786,10 @@ source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/make_da
 source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/pair_subset.R")
 source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/pair_stats.R")
 source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/fetch_risk_report.R")
- 
+
 if(exists("db"))dbDisconnect(db)
 db<-dbConnect(
-  odbc::odbc(),
+  odbc::odbc(), 
   .connection_string = paste0(
     "driver={SQL Server};",
     "server=SQLS071FP\\QST;",
@@ -1759,7 +1797,7 @@ db<-dbConnect(
     "trusted_connection=true"
   )
 )
- 
+
 duke<-fetch_bucket_pnl(db)
 res0<-mapply(
   function(m)pair_stats(paste0("^",m)),
@@ -1772,14 +1810,14 @@ res1<-mapply(function(x,n)paste0(
   ntable(df=x),
   "\\vskip 5mm \n"
 ),x=res0,n=names(res0))
- 
- 
+
+
 @
 \newpage
 \section{Pair performance}
- 
+
 \vskip 10mm
- 
+
 \begin{center}
 \begin{tabular}{l l}
 \hline
@@ -1795,17 +1833,14 @@ Gross  &  \Sexpr{duke[!is.na(gross)][,max(date)]} \\
 Net  &  \Sexpr{duke[!is.na(net)][,max(date)]} \\
 \end{tabular}
 \end{center}
- 
+
 \vskip 5mm
- 
+
 \Sexpr{res1}
- 
+
 <<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
 if(exists("db"))dbDisconnect(db)
 @
- 
+
 \end{document}
- 
- 
- 
 
