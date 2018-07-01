@@ -1,6 +1,5 @@
 
 
-
 <<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
   
 require(RSQLite)
@@ -76,13 +75,7 @@ duke<-query(make_query(
   grepl("[A-Z]{2,3}_PAIR_[0-9]{2,9}",bucket) 
 ]
 
-pair_subset<-function(
-  manager="*",
-  cutoff="2018-06-01",
-  filter=grepl(manager,bucket),
-  dataset=duke
- )(
-  dataset[filter] %>%
+pair_subset<-function(manager="*",cutoff="2018-06-01")(duke[grepl(manager,bucket)] %>%
   {.$pair<-gsub("_PAIR_","",.$bucket);.} %>%
   {.$bucket<-NULL;.} %>% 
   {.[!is.na(gross),.(
@@ -101,8 +94,7 @@ pair_subset<-function(
     final_pnl_ytd=round(10000*pnl_ytd[which(date==max(date))],digits=1),
     final_pnl_mtd=round(10000*pnl_mtd[which(date==max(date))],digits=1),
     final_pnl_rolling=round(10000*pnl_rolling[which(date==max(date))],digits=1)
-  ),keyby=pair]}
-)[final_date>=cutoff]
+  ),keyby=pair]})[final_date>=cutoff]
 
 pair_stats<-function(manager="*",cutoff="2018-06-01"){
   res<-pair_subset(manager=manager,cutoff=cutoff)
@@ -379,6 +371,9 @@ if(exists("db"))dbDisconnect(db)
 @
 
 \end{document}
+
+
+
 
 
 
