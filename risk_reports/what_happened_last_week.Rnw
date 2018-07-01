@@ -1727,22 +1727,30 @@ colnames(z)[1]<-"DUKE"
 z<-z[,colnames(duke_lt_matrix)]
 x<-duke_lt_matrix[grepl("Index$",rownames(duke_lt_matrix)),]
 y<-intraday_sector_indices[,rownames(x)]%*%x
+w<-factor_local_tret[,rownames(x)]%*%x
+v<-manager_local_pnl%>%{cbind(.,DUKE=rowSums(.))[,colnames(y)]}
+
 explain<-data.table(
   pm=structure(colnames(y),hrd="Manger"),
-  cor=structure(
+  cor_short=structure(
     round(100*mapply(cor,data.table(y),data.table(z)),digits=1),
     format=quote(sign_color(n_fmt(this),this)),
-    hdr="Correlation"
+    hdr=tbl(c("Realized","correlation","intraday","2 weeks"))
+  ),
+  cor_long=structure(
+    round(100*mapply(cor,data.table(v),data.table(w)),digits=1),
+    format=quote(sign_color(n_fmt(this),this)),
+    hdr=tbl(c("Realized","correlation","daily","2 years"))
   ),
   predicted=structure(
     round(colSums(y),digits=1),
     format=quote(sign_color(n_fmt(this),this)),
-    hdr="Predicted P\\&L"
+    hdr=tbl(c("Predicted","P\\&L","intraday","2 weeks"))
   ),
   actual=structure(
     round(colSums(z),digits=1),
     format=quote(sign_color(n_fmt(this),this)),
-    hdr="Actual P\\&L"
+    hdr=tbl(c("Actual","P\\&L","intraday","2 weeks"))
   )
 )
 
