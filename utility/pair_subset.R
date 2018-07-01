@@ -5,7 +5,7 @@ require(magrittr)
 pair_subset<-function(
   manager="*",
   cutoff="2018-06-01",
-  filter=grepl(manager,bucket),
+  filter=grepl(dataset$manager,dataset$bucket),
   dataset=duke
 )(
 dataset[filter] %>%
