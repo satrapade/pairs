@@ -1,3 +1,4 @@
+
 %
 % scrape status
 %
@@ -1693,7 +1694,75 @@ or manager-level overlays can be constructed using this information.
 \end{tabular}
 \end{center}
 
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
 
+require(DBI)
+require(data.table)
+require(gsubfn)
+require(magrittr)
+
+source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/query.R")
+source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/make_query.R")
+source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/fetch_bucket_pnl.R")
+source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/make_date_range.R")
+source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/pair_subset.R")
+source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/pair_stats.R")
+source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/fetch_risk_report.R")
+
+if(exists("db"))dbDisconnect(db)
+db<-dbConnect(
+  odbc::odbc(), 
+  .connection_string = paste0(
+    "driver={SQL Server};",
+    "server=SQLS071FP\\QST;",
+    "database=PRDQSTFundPerformance;",
+    "trusted_connection=true"
+  )
+)
+
+duke<-fetch_bucket_pnl(db)
+res0<-mapply(
+  function(m)pair_stats(paste0("^",m)),
+  duke[,bucket]%>%stri_replace_all("",regex="_PAIR_[0-9]+$")%>%unique%>%sort,
+  SIMPLIFY=FALSE
+)
+res1<-mapply(function(x,n)paste0(
+  "\\subsection{",n,"}\n",
+  "\\vskip 5mm \n",
+  ntable(df=x),
+  "\\vskip 5mm \n"
+),x=res0,n=names(res0))
+
+
+@
+\newpage
+\section{Pair performance}
+
+\vskip 10mm
+
+\begin{center}
+\begin{tabular}{l l}
+\hline
+\rowcolor{gray!20}
+\multicolumn{2}{c}{Latest bucket date for which numbers are available for DUKE} \\
+Daily P\&L  &  \Sexpr{duke[!is.na(pnl)][,max(date)]} \\
+Month-to-date P\&L  &  \Sexpr{duke[!is.na(pnl_mtd)][,max(date)]} \\
+Year-to-date P\&L  &  \Sexpr{duke[!is.na(pnl_ytd)][,max(date)]} \\
+Life-to-date P\&L  &  \Sexpr{duke[!is.na(pnl_ltd)][,max(date)]} \\
+Rolling P\&L  &  \Sexpr{duke[!is.na(pnl_rolling)][,max(date)]} \\
+Drawdown  &  \Sexpr{duke[!is.na(pnl_draw)][,max(date)]} \\
+Gross  &  \Sexpr{duke[!is.na(gross)][,max(date)]} \\
+Net  &  \Sexpr{duke[!is.na(net)][,max(date)]} \\
+\end{tabular}
+\end{center}
+
+\vskip 5mm
+
+\Sexpr{res1}
+
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+if(exists("db"))dbDisconnect(db)
+@
 
 \end{document}
 
