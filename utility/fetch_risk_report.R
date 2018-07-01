@@ -17,7 +17,7 @@ fetch_risk_report<-function(
     ".Rnw"
   )
   
-  download.file(report_url,report_fname) 
+  download.file(report_url,report_fname,mode="wb") 
   
 }
 
