@@ -1,5 +1,7 @@
 
 
+
+
 <<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
   
 require(RSQLite)
@@ -46,7 +48,7 @@ db<-dbConnect(
   )
 )
 
-duke<-fetch_bucket_pnl(db)
+
 
 @
 
@@ -74,7 +76,7 @@ duke<-fetch_bucket_pnl(db)
 
 <<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
 
-
+duke<-fetch_bucket_pnl(db)
 
 @
 
@@ -137,160 +139,36 @@ Net  &  \Sexpr{duke[!is.na(net)][,max(date)]} \\
 )}
 \end{center}
 
-\newpage
-\section{test}
-
-\Sexpr{ntable(df=pair_stats("^AC"))}
-
-
-\Sexpr{ntable(df=pair_stats("^ABC"))}
-
-
-\Sexpr{ntable(df=pair_stats("^GJ"))}
-
-
 <<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
-live_pairs<- duke[!is.na(gross)][date==max(date),bucket] %>% 
-{split(.,gsub("_PAIR_[0-9]{1,3}$","",.))} %>% 
-{ mapply(.%>%paste(collapse=", "),.)} %>% 
-{ data.table(
-    manager=names(.),
-    pairs=stri_count(.,regex="_PAIR_"),
-    pairs=gsub("_PAIR_","",.)
-) }
-
-live_pairs_latex<-ntable(
-  df = live_pairs,
-  align= c("m{1cm}","m{1cm}","m{15cm}"),
-  add_rownames = FALSE
+duke<-fetch_bucket_pnl(db)
+res0<-mapply(
+  function(m)pair_stats(paste0("^",m)),
+  duke[,bucket]%>%stri_replace_all("",regex="_PAIR_[0-9]+$")%>%unique%>%sort,
+  SIMPLIFY=FALSE
 )
-
+res1<-mapply(function(x,n)paste0(
+  "\\subsection{",n,"}\n",
+  "\\vskip 5mm \n",
+  ntable(df=x),
+  "\\vskip 5mm \n"
+),x=res0,n=names(res0))
 @
-
 \newpage
-\section{Live pairs}
+\section{Pair performance}
 
-\begin{center}
-\Sexpr{live_pairs_latex}
-\end{center}
-
-<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
-managers<-unique(stri_replace_all(unique(duke$bucket),"",regex="_PAIR_[0-9]{1,3}$"))
-
-last_live_pairs<- duke[!is.na(gross) & !is.na(pnl_rolling)][date==max(date),.(
-  pair=structure(hdr="Pair",stri_replace_all(bucket,"",regex="_PAIR_")),
-  pnl_mtd=structure(
-    hdr=tbl(c("Pair","P\\&L","MTD"),align="l"),
-    format=quote(sign_color(n_fmt(this),this)),
-    round(10000*pnl_mtd,digits=1)
-  ),
-  pnl_rolling=structure(
-    hdr=tbl(c("Pair","P\\&L","20-day"),align="l"),
-    format=quote(sign_color(n_fmt(this),this)),
-    round(10000*pnl_rolling,digits=1)
-  ),
-  pnl_ytd=structure(
-    hdr=tbl(c("Pair","P\\&L","YTD"),align="l"),
-    format=quote(sign_color(n_fmt(this),this)),
-    round(10000*pnl_ytd,digits=1)
-  ),
-  pnl_ltd=structure(
-    hdr=tbl(c("Pair","P\\&L","ITD"),align="l"),
-    format=quote(sign_color(n_fmt(this),this)),
-    round(10000*pnl_ltd,digits=1)
-  )
-)]
-
-manager_latex<-do.call(c,mapply(function(m){
-  pairs<-last_live_pairs[grepl(paste0("^",m),pair)]
-  if(nrow(pairs)<1)return(NULL)
-  pairs_latex<-ntable(
-      df=pairs,
-      halign=rep("l",ncol(pairs)),
-      align=rep("m{2cm}",ncol(pairs)),
-      add_rownames=FALSE
-  )
-  pairs_sums_latex<-pairs[,
-    mapply(
-      function(x)structure(round(sum(x),digits=1),format=quote(sign_color(n_fmt(this),this))),
-      .SD,
-      SIMPLIFY = FALSE
-    ),
-    keyby=list(manager=paste0(gsub("[0-9]{1,3}$","",pair),"\\_PAIRS"))
-  ] %>%
-  ntable(
-      halign=rep("l",ncol(pairs)),
-      align=rep("m{2cm}",ncol(pairs)),
-      add_rownames=FALSE,
-      add_header=FALSE
-  )
-  pairs_hit_ratio_latex<-pairs[,
-    mapply(
-      function(x)structure(round(100*mean(pmax(sign(x),0)),digits=1),format=quote(sign_color(n_fmt(this),this))),
-      .SD,
-      SIMPLIFY = FALSE
-    ),
-    keyby=list(manager=paste0(gsub("[0-9]{1,3}$","",pair),"\\_HIT"))
-  ] %>%
-  ntable(
-      halign=rep("l",ncol(pairs)),
-      align=rep("m{2cm}",ncol(pairs)),
-      add_rownames=FALSE,
-      add_header=FALSE
-  )
-  pairs_winloss_ratio_latex<-pairs[,
-    mapply(
-      function(x){
-        win<-sum(pmax(x,0))
-        loss<-sum(pmax(-x,0))
-        if(abs(loss)<1e-3)return(0)
-        wlratio<-win/loss
-        structure(round(100*wlratio,digits=1),format=quote(sign_color(n_fmt(this),this)))
-       },
-      .SD,
-      SIMPLIFY = FALSE
-    ),
-    keyby=list(manager=paste0(gsub("[0-9]{1,3}$","",pair),"\\_WINLOSS"))
-  ] %>%
-  ntable(
-      halign=rep("l",ncol(pairs)),
-      align=rep("m{2cm}",ncol(pairs)),
-      add_rownames=FALSE,
-      add_header=FALSE
-  )
-  paste0(
-    if(m==head(managers,1))""else"\\newpage",
-    paste0("\\subsection{\\bf ",m," pairs}\n"),
-    "\\begin{center}\n",
-   "\\begin{tabular}{c}\n",
-   pairs_latex,
-   "\\\\ \n",
-   "\\hline \n",
-   pairs_sums_latex,
-   "\\\\",
-   pairs_hit_ratio_latex,
-   "\\\\",
-   pairs_winloss_ratio_latex,
-   "\\\\",
-   "\\end{tabular}\n",
-    "\\end{center}\n"
-  )
-},managers,SIMPLIFY=FALSE))
+\Sexpr{res1}
 
 
-@
-
-\newpage
-\section{Live pairs detail}
-
-
-\Sexpr{paste(manager_latex,sep="")}
 
 <<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
 if(exists("db"))dbDisconnect(db)
 @
 
 \end{document}
+
+
+
+
 
 
 
