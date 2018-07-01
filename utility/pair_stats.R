@@ -7,7 +7,7 @@ pair_stats<-function(manager="*",cutoff="2018-06-01"){
   res0<-res[,c("pair","final_pnl_mtd","final_pnl_ytd","final_pnl_ltd")]
   res1<-mapply(function(x)data.table(
     SUM=sum(x),
-    HITRATIO=round(100*mean(pmax(sign(x),0)),digits=1),
+    HITRATIO=round(100*sum(pmax(sign(x),0))/max(length(x),1),digits=1),
     WINLOSSRATIO=round(100*scrub(sum(pmax(x,0))/sum(pmax(-x,0))),digits=1)
   ),res0[,c("final_pnl_mtd","final_pnl_ytd","final_pnl_ltd")]) %>%
   {data.table(pair=rownames(.),.)}
