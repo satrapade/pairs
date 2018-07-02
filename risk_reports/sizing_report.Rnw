@@ -343,13 +343,17 @@ gg3<-melt(
 absolutely nothing about individual assets.
 \item[Risk parity] scales individual positions inversely to some estimate of their risk.
 \item[Equal risk contribution] scales positions inversely to their contribution to some portfolio risk
-measure. This approach incorporates portfolio effects in sizing.
+measure. This approach incorporates portfolio effects in sizing. 
+\href{https://github.com/satrapade/pairs/files/2155747/erc-slides.pdf}{\bf More details here}
 \item[Minimum variance] Minimizes portfolio variance. This approach sometimes excessively weights 
 low-volatility assets.
 \item[Minum tail dependence] Minimizes co-movement during historical extremes.
+\href{https://github.com/satrapade/pairs/files/2155764/minimum_tail_dependency.pdf}{\bf More details here}
 \item[Most diversified] Maximizes the diversification benefit of the portfolio, i.e. volatility 
 reduction due to correlation. This approach is sensitive to realized correlations, which are
-not as stable as volatilities.
+not as stable as volatilities. 
+\href{(https://github.com/satrapade/pairs/files/2155816/Properties-of-the-Most-Diversified-Portfolio.pdf)}{\bf 
+More details here}
 \end{description}
 
 \end{document}
