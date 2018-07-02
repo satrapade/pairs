@@ -2,7 +2,7 @@
 #
 #
 
-create_report_new<-function(
+create_report<-function(
   report_name,
   output_suffix="",
   push_to_directory=NULL,
