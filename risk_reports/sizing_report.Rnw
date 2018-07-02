@@ -82,13 +82,12 @@ total_gross<-round(pair_exposure[manager==the_manager,sum(abs(exposure))]*10000,
 
 gross_fraction<-pair_exposure[manager==the_manager,.(gross=sum(abs(exposure))),keyby=pair] %>%
 {setNames(.$gross,.$pair)} %>%
-{./sum(.)} %>%
-round(digits=2)
+{./sum(.)} 
 
 x <- m %>% { .%*%diag(10000/(total_gross*gross_fraction))}
 
 weights<-cbind(
-  ACT=round(gross_fraction/sum(gross_fraction),digits=5),
+  ACT=gross_fraction/sum(gross_fraction),
   RP=(mean(apply(x,2,sd))/apply(x,2,sd))%>%{./sum(.)}, # Risk Parity
   EQ=rep(1/ncol(x),ncol(x)), # Equal Weight
   ERC=PERC(Sigma= cov(x) )@weights/100, # Equal Risk Contribution
@@ -96,11 +95,10 @@ weights<-cbind(
   MTD=PMTD(Returns=x)@weights/100, # Minimum Tail-Dependence 
   MD=PMD(Returns=x)@weights/100 # Most Diversified
 ) %>%
-{ structure(
+{structure(
   .%*%diag(rep(total_gross,ncol(.))),
   dimnames=dimnames(.)
-) } %>%
-round(digits=1)
+)}
 
 y<-x%*%weights
 
@@ -109,6 +107,44 @@ res<-mapply(
   mapply(.%>%diag%>%{x%*%.},data.table(weights),SIMPLIFY = FALSE)
 ) %>%
 { rownames(.)<-paste0("vol_rank_",1:nrow(.)); . }
+
+#
+# data tables to display
+#
+
+hdrs <- . %>%
+  {attributes(.[["ACT"]])$hdr<-tbl(c("Actual","weights"));.} %>%
+  {attributes(.[["RP"]])$hdr<-tbl(c("Risk","parity"));.} %>%
+  {attributes(.[["EQ"]])$hdr<-tbl(c("Equal","weights"));.} %>%
+  {attributes(.[["ERC"]])$hdr<-tbl(c("Equal","risk","contrib"));.} %>%
+  {attributes(.[["GB"]])$hdr<-tbl(c("Global","min","var"));.} %>%
+  {attributes(.[["MTD"]])$hdr<-tbl(c("Min","tail","dependence"));.} %>%
+  {attributes(.[["MD"]])$hdr<-tbl(c("Most","diversified"));.}
+
+weight_df <- weights %>% round(digits=1) %>% {data.table(pair=rownames(.),.)} %>% hdrs
+
+vol_traj_df <- res %>% round(digits=1) %>% {data.table(pair=latexTranslate(rownames(.)),.)} %>% hdrs
+
+vol_df <- (diag(apply(x,2,sd))%*%weights) %>% 
+  round(digits=1) %>%
+  {data.table(pair=latexTranslate(rownames(weights)),.)} %>%
+  hdrs
+
+conviction_df <- data.table(
+  pair=rownames(weights),
+  actual=round(weights[,"ACT"],digits=1),
+  risk_parity=round(weights[,"RP"],digits=1),
+  conviction = round(scrub(100*weights[,"ACT"]/weights[,"RP"]),digits=0)
+)[order(-conviction)] %>%
+{attributes(.[["pair"]])$hdr<-tbl(c(the_manager,"pairs"));.} %>%
+{attributes(.[["actual"]])$hdr<-tbl(c("Actual","gross"));.} %>%
+{attributes(.[["risk_parity"]])$hdr<-tbl(c("Risk","parity","gross"));.} %>%
+{attributes(.[["conviction"]])$hdr<-tbl(c("Conviction","ratio","pct"));.}
+  
+
+#
+# plots to display
+#
 
 gg1<-melt(
     data.table(date=as.Date(rownames(y),format="%Y-%m-%d"),apply(y,2,cumsum)),
@@ -148,25 +184,6 @@ gg3<-melt(
   theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
   ggtitle(paste0(the_manager," : portfolio weights"))
 
-hdrs <- . %>%
-  {attributes(.[["ACT"]])$hdr<-tbl(c("Actual","weights"));.} %>%
-  {attributes(.[["RP"]])$hdr<-tbl(c("Risk","parity"));.} %>%
-  {attributes(.[["EQ"]])$hdr<-tbl(c("Equal","weights"));.} %>%
-  {attributes(.[["ERC"]])$hdr<-tbl(c("Equal","risk","contrib"));.} %>%
-  {attributes(.[["GB"]])$hdr<-tbl(c("Global","min","var"));.} %>%
-  {attributes(.[["MTD"]])$hdr<-tbl(c("Min","tail","dependence"));.} %>%
-  {attributes(.[["MD"]])$hdr<-tbl(c("Most","diversified"));.}
-
-weight_df <- weights%>%{data.table(pair=rownames(.),.)}%>%
-  hdrs
-
-vol_traj_df <- res%>%round(digits=1)%>%{data.table(pair=latexTranslate(rownames(.)),.)}%>%
-  hdrs
-
-vol_df <- (diag(apply(x,2,sd))%*%weights) %>% 
-  round(digits=1) %>%
-  {data.table(pair=latexTranslate(rownames(weights)),.)} %>%
-  hdrs
 
 @
 \documentclass{article}
@@ -194,6 +211,34 @@ vol_df <- (diag(apply(x,2,sd))%*%weights) %>%
 
 \vskip 5mm
 
+\subsection{Scenarios : Pair gross, basis points per pair}
+
+\vskip 5mm
+
+\begin{center}
+\Sexpr{ntable(
+  df=weight_df,
+  add_rownames=FALSE,
+  title="Portfolio sizing scenarios, bps"
+)}
+\end{center}
+
+\vskip 5mm
+
+\subsection{Scenarios : Positions sorted by conviction}
+
+\vskip 5mm
+
+\begin{center}
+\Sexpr{ntable(
+  df=conviction_df,
+  add_rownames=FALSE,
+  title="Positioning conviction"
+)}
+\end{center}
+
+\vskip 5mm
+
 \subsection{Scenarios : Pair volatilities, daily bps per pair}
 
 \vskip 5mm
@@ -206,20 +251,6 @@ vol_df <- (diag(apply(x,2,sd))%*%weights) %>%
 )}
 \end{center}
 
-
-\vskip 5mm
-
-\subsection{Scenarios : Pair gross, basis points per pair}
-
-\vskip 5mm
-
-\begin{center}
-\Sexpr{ntable(
-  df=weight_df,
-  add_rownames=FALSE,
-  title="Portfolio sizing scenarios, bps"
-)}
-\end{center}
 
 \vskip 5mm
 
@@ -237,13 +268,13 @@ vol_df <- (diag(apply(x,2,sd))%*%weights) %>%
 
 \vskip 5mm
 
-\subsection{Scenarios : Look-back performance }
+\subsection{Scenarios : Pair weight plots}
 
 \vskip 5mm
 
 \begin{center}
 \Sexpr{make_plot(
-  plot(gg1),
+  plot(gg3),
   width="15cm",
   height="15cm",
   envir=environment()
@@ -267,19 +298,59 @@ vol_df <- (diag(apply(x,2,sd))%*%weights) %>%
 
 \vskip 5mm
 
-\subsection{Scenarios : Pair weight plots}
+\subsection{Scenarios : Look-back performance }
 
 \vskip 5mm
 
 \begin{center}
 \Sexpr{make_plot(
-  plot(gg3),
+  plot(gg1),
   width="15cm",
   height="15cm",
   envir=environment()
 )}
 \end{center}
 
+\vskip 5mm
+
+\newpage
+\section{Brief summary of portfolio construction techniques}
+
+\vskip 5mm
+
+\noindent In general, there are three ways to construct portfolios:
+
+\vskip 5mm
+
+\begin{itemize}
+\item Fixed allocation, for example a 60/40 equity/fixed-income portfolio
+\item Risk-based allocation, where we want to mitigate risk through diversification
+\item Return-based allocation, where we want to maximize return quality
+\end{itemize}
+
+\vskip 5mm
+
+\noindent We will use risk-based allocation as our benchmark and evaluate actual positioning against that.
+
+\vskip 5mm
+
+\noindent Risk-based allocation attempts to reduce unwanted risk. The main approaches are:
+
+\vskip 5mm
+
+\begin{description}
+\item[Equal Weight] the most basic risk-mitigation approach, the key assumption is that we know
+absolutely nothing about individual assets.
+\item[Risk parity] scales individual positions inversely to some estimate of their risk.
+\item[Equal risk contribution] scales positions inversely to their contribution to some portfolio risk
+measure. This approach incorporates portfolio effects in sizing.
+\item[Minimum variance] Minimizes portfolio variance. This approach sometimes excessively weights 
+low-volatility assets.
+\item[Minum tail dependence] Minimizes co-movement during historical extremes.
+\item[Most diversified] Maximizes the diversification benefit of the portfolio, i.e. volatility 
+reduction due to correlation. This approach is sensitive to realized correlations, which are
+not as stable as volatilities.
+\end{description}
 
 \end{document}
 
