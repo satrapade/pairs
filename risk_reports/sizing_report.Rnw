@@ -1,0 +1,291 @@
+
+
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+# input:
+#
+#  the_manager 
+#
+#
+require(stringi)
+require(data.table)
+require(magrittr)
+require(FRAPO)
+require(clue)
+require(DBI)
+require(magrittr)
+require(gsubfn)
+require(ggplot2)
+require(ggrepel)
+require(Hmisc)
+
+if(!exists("the_manager"))the_manager<-"MC"
+
+x<-list.files(
+  path="figure",
+  pattern="*.pdf",
+  full.names=TRUE
+)
+if(length(x)>0)file.remove(x)
+
+source("https://raw.githubusercontent.com/satrapade/utility/master/utility_functions.R")
+source("https://raw.githubusercontent.com/satrapade/latex_utils/master/latex_helpers_v2.R")
+source("https://raw.githubusercontent.com/satrapade/utility/master/tikz_shape.R")
+source("https://raw.githubusercontent.com/satrapade/utility/master/make_date_range.R")
+
+source("https://raw.githubusercontent.com/satrapade/utility/master/with_columns.R")
+source("https://raw.githubusercontent.com/satrapade/utility/master/nn_cast.R")
+source("https://raw.githubusercontent.com/satrapade/utility/master/make_query.R")
+#
+
+
+
+ptf_vol_sequence<-function(
+  x,
+  x0=x[,order(-apply(x,2,sd))]
+)mapply(
+  .%>%apply(1,sum)%>%sd,
+  mapply(
+    function(i){
+      w<-rep(ncol(x0)-length(i)+1,length(i))
+      d<-diag(c(1,w))[-1,-1]
+      x0[,i,drop=FALSE]%*%d
+    },
+    Reduce(c,1:ncol(x0),accumulate = TRUE)
+  )
+)
+
+
+pair_pnl<-readLines(
+  "https://raw.githubusercontent.com/satrapade/pairs/master/data/duke_pair_local_pnl.csv"
+) %>% paste0(collapse="\n") %>% fread
+
+m<-structure(
+  do.call(cbind,pair_pnl[,-1,with=FALSE]),
+  dimnames=list(pair_pnl$date,names(pair_pnl)[-1])
+)[,grepl(paste0("^",the_manager),names(pair_pnl)[-1])]
+
+pair_exposure<- readLines(
+  "https://raw.githubusercontent.com/satrapade/pairs/master/data/duke_pair_exposure.csv"
+) %>% paste0(collapse="\n") %>% fread %>%
+{ melt(
+  data=.,
+  id.vars = "date",
+  measure.vars = names(.)[-1],
+  variable.name="pair",
+  value.name="exposure"
+)} %>% 
+{.$manager<-gsub("[0-9]+$","",.$pair); .}
+
+
+
+total_gross<-round(pair_exposure[manager==the_manager,sum(abs(exposure))]*10000,digits=1)
+
+gross_fraction<-pair_exposure[manager==the_manager,.(gross=sum(abs(exposure))),keyby=pair] %>%
+{setNames(.$gross,.$pair)} %>%
+{./sum(.)} %>%
+round(digits=2)
+
+x <- m %>% { .%*%diag(10000/(total_gross*gross_fraction))}
+
+weights<-cbind(
+  ACT=round(gross_fraction/sum(gross_fraction),digits=5),
+  RP=(mean(apply(x,2,sd))/apply(x,2,sd))%>%{./sum(.)}, # Risk Parity
+  EQ=rep(1/ncol(x),ncol(x)), # Equal Weight
+  ERC=PERC(Sigma= cov(x) )@weights/100, # Equal Risk Contribution
+  GB=PGMV(Returns=x)@weights/100, # Global Minimum Variance 
+  MTD=PMTD(Returns=x)@weights/100, # Minimum Tail-Dependence 
+  MD=PMD(Returns=x)@weights/100 # Most Diversified
+) %>%
+{ structure(
+  .%*%diag(rep(total_gross,ncol(.))),
+  dimnames=dimnames(.)
+) } %>%
+round(digits=1)
+
+y<-x%*%weights
+
+res<-mapply(
+  ptf_vol_sequence,
+  mapply(.%>%diag%>%{x%*%.},data.table(weights),SIMPLIFY = FALSE)
+) %>%
+{ rownames(.)<-paste0("vol_rank_",1:nrow(.)); . }
+
+gg1<-melt(
+    data.table(date=as.Date(rownames(y),format="%Y-%m-%d"),apply(y,2,cumsum)),
+    id.vars="date",
+    measure.vars=colnames(y),
+    variable.name="pair",
+    value.name="perf"
+  ) %>%
+  ggplot()+
+  geom_line(aes(x=date,y=perf,group=pair,col=pair))+
+  ggtitle(paste0(the_manager," : portfolio performance"))
+
+
+gg2<-melt(
+    data.table(size=1:nrow(res),res),
+    id.vars="size",
+    measure.vars=colnames(res),
+    variable.name="ptf",
+    value.name="vol"
+  ) %>%
+  ggplot()+
+  geom_line(aes(x=size,y=vol,group=ptf,col=ptf)) +
+  ggtitle(paste0(the_manager," : portfolio diversification"))
+
+gg3<-melt(
+    data.table(
+      pair=paste0("pair",stri_pad_left(as.character(seq(nrow(weights))),3,"0")),
+      apply(weights,2,sort)
+    ),
+    id.vars="pair",
+    measure.vars=colnames(weights),
+    variable.name="portfolio",
+    value.name="weight"
+  ) %>%
+  ggplot() +
+  geom_line(aes(x=pair,y=weight,group=portfolio,col=portfolio))+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  ggtitle(paste0(the_manager," : portfolio weights"))
+
+hdrs <- . %>%
+  {attributes(.[["ACT"]])$hdr<-tbl(c("Actual","weights"));.} %>%
+  {attributes(.[["RP"]])$hdr<-tbl(c("Risk","parity"));.} %>%
+  {attributes(.[["EQ"]])$hdr<-tbl(c("Equal","weights"));.} %>%
+  {attributes(.[["ERC"]])$hdr<-tbl(c("Equal","risk","contrib"));.} %>%
+  {attributes(.[["GB"]])$hdr<-tbl(c("Global","min","var"));.} %>%
+  {attributes(.[["MTD"]])$hdr<-tbl(c("Min","tail","dependence"));.} %>%
+  {attributes(.[["MD"]])$hdr<-tbl(c("Most","diversified"));.}
+
+weight_df <- weights%>%{data.table(pair=rownames(.),.)}%>%
+  hdrs
+
+vol_traj_df <- res%>%round(digits=1)%>%{data.table(pair=latexTranslate(rownames(.)),.)}%>%
+  hdrs
+
+vol_df <- (diag(apply(x,2,sd))%*%weights) %>% 
+  round(digits=1) %>%
+  {data.table(pair=latexTranslate(rownames(weights)),.)} %>%
+  hdrs
+
+@
+\documentclass{article}
+
+\usepackage[portrait, headheight = 0cm, margin=0.25cm, top = 0.25cm, nofoot]{geometry} 
+\usepackage[export]{adjustbox} 
+\usepackage{graphicx}
+\usepackage[space]{grffile}
+\usepackage[dvipsnames,table]{xcolor} % [dvipsnames,table] for setting colors \usepackage{amsmath} \usepackage{xfrac}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric}
+\usetikzlibrary{shapes.misc}
+\usetikzlibrary{arrows}
+\usepackage{xfrac}
+\usepackage{hyperref}
+\usepackage{amsmath}
+
+\DeclareRobustCommand\Tstrut{\rule{0pt}{2.6ex}}         % = `top' strut
+\DeclareRobustCommand\Bstrut{\rule[-0.9ex]{0pt}{0pt}}   % = `bottom' strut
+\renewcommand{\familydefault}{\sfdefault}
+
+
+\begin{document}
+\section{\Sexpr{the_manager} : Portfolio construction scenarios}
+
+\vskip 5mm
+
+\subsection{Scenarios : Pair volatilities, daily bps per pair}
+
+\vskip 5mm
+
+\begin{center}
+\Sexpr{ntable(
+  df=vol_df,
+  add_rownames=FALSE,
+  title="Pair daily volatility, bps"
+)}
+\end{center}
+
+
+\vskip 5mm
+
+\subsection{Scenarios : Pair gross, basis points per pair}
+
+\vskip 5mm
+
+\begin{center}
+\Sexpr{ntable(
+  df=weight_df,
+  add_rownames=FALSE,
+  title="Portfolio sizing scenarios, bps"
+)}
+\end{center}
+
+\vskip 5mm
+
+\subsection{Scenarios : Volatility trajectory by adding pairs, most volatile first }
+
+\vskip 5mm
+
+\begin{center}
+\Sexpr{ntable(
+  df=vol_traj_df,
+  add_rownames=FALSE,
+  title="Portfolio vol trajectories, bps"
+)}
+\end{center}
+
+\vskip 5mm
+
+\subsection{Scenarios : Look-back performance }
+
+\vskip 5mm
+
+\begin{center}
+\Sexpr{make_plot(
+  plot(gg1),
+  width="15cm",
+  height="15cm",
+  envir=environment()
+)}
+\end{center}
+
+\vskip 5mm
+
+\subsection{Scenarios : Volatility trajectory plots}
+
+\vskip 5mm
+
+\begin{center}
+\Sexpr{make_plot(
+  plot(gg2),
+  width="15cm",
+  height="15cm",
+  envir=environment()
+)}
+\end{center}
+
+\vskip 5mm
+
+\subsection{Scenarios : Pair weight plots}
+
+\vskip 5mm
+
+\begin{center}
+\Sexpr{make_plot(
+  plot(gg3),
+  width="15cm",
+  height="15cm",
+  envir=environment()
+)}
+\end{center}
+
+
+\end{document}
+
+
+
+
+
+
+
