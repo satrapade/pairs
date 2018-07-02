@@ -1,5 +1,5 @@
 #
-#
+# create parametrized knitr report
 #
 
 create_report<-function(
