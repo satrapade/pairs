@@ -89,8 +89,8 @@ create_report<-function(
   # make on-the run copy
   append2log(paste0(report_name,output_suffix,": copying to latest"))  
   file.copy(paste0(outfn,".pdf"),paste0(report_name,output_suffix,".pdf"))
-  if(!file.exists(paste0(report_name,".pdf"))){
-    append2log(paste0(report_name,output_suffix,": !!!>ERROR<!!! :.pdf file not generated:"))
+  if(!file.exists(paste0(report_name,output_suffix,".pdf"))){
+    append2log(paste0(report_name,output_suffix,": !!!>ERROR<!!! :.pdf file not generated"))
     setwd(wd)
     return(paste0(report_name,output_suffix," error: pdf file not generated"))
   }
