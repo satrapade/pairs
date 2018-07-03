@@ -17,6 +17,17 @@ require(clue)
 require(Rtsne)
 require(RSQLite)
 
+config<-new.env()
+source(
+  file="https://raw.githubusercontent.com/satrapade/pairs/master/configuration/workflow_config.R",
+  local=config
+)
+source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/append2log.R")
+source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/log_code.R")
+
+if(!exists("append2log"))knitr::knit_exit() 
+if(!exists("log_code"))knitr::knit_exit() 
+
 source(
   "https://raw.githubusercontent.com/satrapade/utility/master/utility_functions.R"
 )
@@ -26,10 +37,10 @@ source(
   "https://raw.githubusercontent.com/satrapade/latex_utils/master/latex_helpers_v2.R"
 )
 
-db<-dbConnect(
+log_code(db<-dbConnect(
   SQLite(), 
   dbname="N:/Depts/Share/UK Alpha Team/Analytics/sheet_scrape/sheet_scrapes.sqlite"
-)
+))
 # 
 # query<-function(statement,db=get("db_ss",parent.frame())){
 #   q<-dbSendQuery(conn=db,statement)
@@ -40,7 +51,7 @@ db<-dbConnect(
 
 all_dates<-sort(unique(query("SELECT date FROM sheet_scrape")$date))
 
-open_duke_pnl<-data.table(query(paste0(
+log_code(open_duke_pnl<-data.table(query(paste0(
   "SELECT ",
   "date, pair, ",
   "sum(cast(bps as real)) AS bps, ",
@@ -49,9 +60,9 @@ open_duke_pnl<-data.table(query(paste0(
   "WHERE fund='DUKE' ",
   "AND type='live'",
   "GROUP BY date, pair"
-)))
+))))
 
-closed_duke_pnl<-data.table(query(paste0(
+log_code(closed_duke_pnl<-data.table(query(paste0(
   "SELECT ",
   "date, pair, ",
   "sum(cast(bps as real)) AS bps, ",
@@ -60,30 +71,30 @@ closed_duke_pnl<-data.table(query(paste0(
   "WHERE fund='DUKE' ",
   "AND type='closed'",
   "GROUP BY date, pair"
-)))
+))))
 
-pair_pnl<-apply(rename_colnames(
+log_code(pair_pnl<-apply(rename_colnames(
   dMcast(rbind(open_duke_pnl,closed_duke_pnl),date~pair,value.var = "bps",drop.unused.levels=FALSE),
   "^pair",
   ""
-),2,function(x)x-x[1])
+),2,function(x)x-x[1]))
 
-pair_gross<-rename_colnames(
+log_code(pair_gross<-rename_colnames(
   dMcast(rbind(open_duke_pnl,closed_duke_pnl),date~pair,value.var = "gross",drop.unused.levels=FALSE),
   "^pair",
   ""
-)
+))
 
 recent_days<-nrow(pair_pnl)
 
-recent_pair_pnl<-apply(tail(pair_pnl,recent_days),2,function(x)x-x[1])
-recent_pair_gross<-tail(pair_gross,recent_days)
-recent_live_pairs<-colSums(recent_pair_gross)>0
+log_code(recent_pair_pnl<-apply(tail(pair_pnl,recent_days),2,function(x)x-x[1]))
+log_code(recent_pair_gross<-tail(pair_gross,recent_days))
+log_code(recent_live_pairs<-colSums(recent_pair_gross)>0)
 
-live_pair_ids<-mapply(
+log_code(live_pair_ids<-mapply(
   function(x)colnames(recent_pair_gross)[which(x>0)],
   split(recent_pair_gross,rownames(recent_pair_gross)[row(recent_pair_gross)])
-)
+))
 
 
 rolling_ratios<-function(pnl,w){
@@ -172,12 +183,16 @@ recent_tab1<-function(pnl,gross,who=""){
     "\\multicolumn{1}{c}{",who,":Pair count} \\\\ \n",
     make_plot(
      plot_with_dates(cumprod(diff(rowSums(pnl))/10000+1),divisor=0.001),
-     height="7cm",width="8cm"
+     height="7cm",
+     width="8cm",
+     envir=environment()
     ),"\n", 
     " & \n",
     make_plot(
      plot_with_dates(apply(gross,1,function(x)sum(abs(x)>0)),divisor=1),
-     height="7cm",width="8cm"
+     height="7cm",
+     width="8cm",
+     envir=environment()
     ),"\n", 
     "\\\\ \\\\ \n",
     "\\hline \n",
@@ -195,7 +210,11 @@ recent_tab1<-function(pnl,gross,who=""){
       ylab="bps",
       xlab=paste0("days since T-",nrow(pnl))
      ),
-     height="7cm",width="8cm"),"\n",  
+     height="7cm",
+     width="8cm",
+     envir=environment()
+    ),
+    "\n",  
      " & \n",
      make_plot(
       matplot(
@@ -208,7 +227,11 @@ recent_tab1<-function(pnl,gross,who=""){
        ylab="gross",
        xlab=paste0("days since T-",nrow(pnl))
       ),
-     height="7cm",width="8cm"),"\n",
+     height="7cm",
+     width="8cm",
+     envir=environment()
+    ),
+    "\n",
      "\\\\ \\\\ \n",
      "\\hline \n",
      "\\rowcolor{gray!20} \n",
@@ -226,7 +249,9 @@ recent_tab1<-function(pnl,gross,who=""){
          pch=19,
          col="blue"
       ),
-      height="7cm",width="8cm"
+      height="7cm",
+      width="8cm",
+      envir=environment()
     ),"\n",
     " & \n",
     make_plot(
@@ -241,7 +266,9 @@ recent_tab1<-function(pnl,gross,who=""){
         pch=19,
         col="blue"
       ),
-    height="7cm",width="8cm"),"\n",  
+    height="7cm",
+    width="8cm",
+    envir=environment()),"\n",  
     "\\\\ \n",
     "\\end{tabular} \n",
     "\\end{center} \n"
@@ -275,7 +302,9 @@ recent_tab2<-function(pnl,gross,all_pnl,all_gross,who=""){
       pch=19,
       col="blue"
      ),
-     height="7cm",width="8cm"
+     height="7cm",
+     width="8cm",
+     envir=environment()
     ),"\n", 
     " & \n",
     make_plot(
@@ -291,7 +320,7 @@ recent_tab2<-function(pnl,gross,all_pnl,all_gross,who=""){
        pch=19,
        col="blue"
      ),
-     height="7cm",width="8cm"
+     height="7cm",width="8cm",envir=environment()
     ),"\n", 
     "\\\\ \\\\ \n",
     "\\hline \n",
@@ -317,11 +346,11 @@ recent_tab2<-function(pnl,gross,all_pnl,all_gross,who=""){
       pch=19,
       col="blue"
      ),
-     height="7cm",width="8cm"),"\n",  
+     height="7cm",width="8cm",envir=environment()),"\n",  
      " & \n",
      make_plot(
       plot(NA,type="n",axes=FALSE,xlab="",ylab="",xlim=c(0,1),ylim=c(0,1)),
-     height="7cm",width="8cm"),"\n",
+     height="7cm",width="8cm",envir=environment()),"\n",
      "\\\\ \\\\ \n",
      "\\hline \n",
      "\\rowcolor{gray!20} \n",
@@ -336,7 +365,10 @@ recent_tab2<-function(pnl,gross,all_pnl,all_gross,who=""){
           col="blue"
         ),
         abline(h=0.5,col="red")
-      ),height="7cm",width="8cm",envir=environment()
+      ),
+      height="7cm",
+      width="8cm",
+      envir=environment()
     ),"\n",
     " & \n",
     make_plot(expression(
@@ -348,7 +380,10 @@ recent_tab2<-function(pnl,gross,all_pnl,all_gross,who=""){
         col="blue"
       ),
       abline(h=1,col="red")
-    ),height="7cm",width="8cm"),"\n",  
+    ),
+    height="7cm",
+    width="8cm",
+    envir=environment()),"\n",  
     "\\\\ \n",
     "\\end{tabular} \n",
     "\\end{center} \n"
@@ -356,7 +391,7 @@ recent_tab2<-function(pnl,gross,all_pnl,all_gross,who=""){
 }
 
 
-ratios<-rolling_ratios(tail(pair_pnl,400)[,colSums(tail(pair_gross,400))>0],61)
+log_code(ratios<-rolling_ratios(tail(pair_pnl,400)[,colSums(tail(pair_gross,400))>0],61))
 get_pairs<-function(m,p)m[,grepl(p,colnames(m))]
 
 @
