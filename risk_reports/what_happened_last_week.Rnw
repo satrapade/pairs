@@ -1,7 +1,24 @@
 %
-% scrape status
+% what happened last week
 %
+\documentclass{article}
 
+\usepackage[portrait, headheight = 0cm, margin=0.25cm, top = 0.25cm, nofoot]{geometry} 
+\usepackage[export]{adjustbox} 
+\usepackage{graphicx}
+\usepackage[space]{grffile}
+\usepackage[dvipsnames,table]{xcolor} % [dvipsnames,table] for setting colors \usepackage{amsmath} \usepackage{xfrac}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric}
+\usetikzlibrary{shapes.misc}
+\usetikzlibrary{arrows}
+\usepackage{xfrac}
+
+\DeclareRobustCommand\Tstrut{\rule{0pt}{2.6ex}}         % = `top' strut
+\DeclareRobustCommand\Bstrut{\rule[-0.9ex]{0pt}{0pt}}   % = `bottom' strut
+\renewcommand{\familydefault}{\sfdefault}
+
+\begin{document}
 <<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
 # required packages
 require(Hmisc)
@@ -13,7 +30,19 @@ require(data.table)
 require(Matrix)
 require(Matrix.utils)
 require(clue)
-require(Rtsne)
+require(magrittr)
+require(gsubfn)
+
+config<-new.env()
+source(
+  file="https://raw.githubusercontent.com/satrapade/pairs/master/configuration/workflow_config.R",
+  local=config
+)
+source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/append2log.R")
+source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/log_code.R")
+
+if(!exists("append2log"))knitr::knit_exit() 
+if(!exists("log_code"))knitr::knit_exit() 
 
 source(
   "https://raw.githubusercontent.com/satrapade/utility/master/utility_functions.R"
@@ -295,7 +324,7 @@ backtest_plot_table<-data.table(
         res<-make_plot(expression({
           plot(NA,type="n",xlab="",ylab="",xlim=c(0,1),ylim=c(0,1),axes=FALSE)
           text(0.5,0.5,labels="No data",cex=5)
-        }),width="2cm",height="2cm")
+        }),width="2cm",height="2cm",envir=environment())
         return(res)
       }
       pnls<-cumsum(10000*rowSums(mc(intraday_pair,paste0("^",p))[ndx,,drop=FALSE]))
@@ -337,24 +366,7 @@ db<-dbConnect(
 @
 
 
-\documentclass{article}
 
-\usepackage[portrait, headheight = 0cm, margin=0.25cm, top = 0.25cm, nofoot]{geometry} 
-\usepackage[export]{adjustbox} 
-\usepackage{graphicx}
-\usepackage[space]{grffile}
-\usepackage[dvipsnames,table]{xcolor} % [dvipsnames,table] for setting colors \usepackage{amsmath} \usepackage{xfrac}
-\usepackage{tikz}
-\usetikzlibrary{shapes.geometric}
-\usetikzlibrary{shapes.misc}
-\usetikzlibrary{arrows}
-\usepackage{xfrac}
-
-\DeclareRobustCommand\Tstrut{\rule{0pt}{2.6ex}}         % = `top' strut
-\DeclareRobustCommand\Bstrut{\rule[-0.9ex]{0pt}{0pt}}   % = `bottom' strut
-\renewcommand{\familydefault}{\sfdefault}
-
-\begin{document}
 
 \section{Contents}
 
@@ -505,7 +517,7 @@ backtest_long_vs_short_px_table<-data.table(
         res<-make_plot(expression({
           plot(NA,type="n",xlab="",ylab="",xlim=c(0,1),ylim=c(0,1),axes=FALSE)
           text(0.5,0.5,labels="No data",cex=5)
-        }),width="2cm",height="2cm")
+        }),width="2cm",height="2cm",envir=environment())
         return(res)
       }
       long_pnls<-cumsum(rowSums(mc(intraday_pair_longs,paste0("^",p))[ndx,,drop=FALSE]))
@@ -600,7 +612,7 @@ backtest_long_vs_short_table<-data.table(
         res<-make_plot(expression({
           plot(NA,type="n",xlab="",ylab="",xlim=c(0,1),ylim=c(0,1),axes=FALSE)
           text(0.5,0.5,labels="No data",cex=5)
-        }),width="2cm",height="2cm")
+        }),width="2cm",height="2cm",envir=environment())
         return(res)
       }
       long_pnls<-cumsum(rowSums(mc(intraday_pair_longs,paste0("^",p))[ndx,,drop=FALSE]))
@@ -702,7 +714,7 @@ backtest_return_cross_section_table<-data.table(
         res<-make_plot(expression({
           plot(NA,type="n",xlab="",ylab="",xlim=c(0,1),ylim=c(0,1),axes=FALSE)
           text(0.5,0.5,labels="No data",cex=5)
-        }),width="2cm",height="2cm")
+        }),width="2cm",height="2cm",envir=environment())
         return(res)
       }
       pnls<-colSums(mc(intraday_pair,paste0("^",p))[ndx,,drop=FALSE])
@@ -710,7 +722,7 @@ backtest_return_cross_section_table<-data.table(
         res<-make_plot(expression({
           plot(NA,type="n",xlab="",ylab="",xlim=c(0,1),ylim=c(0,1),axes=FALSE)
           text(0.5,0.5,labels="No data",cex=5)
-        }),width="2cm",height="2cm")
+        }),width="2cm",height="2cm",envir=environment())
         return(res)
       }
       vols<-colSums(mc(abs(intraday_pair),paste0("^",p))[ndx,,drop=FALSE])
@@ -792,7 +804,7 @@ bct_pm<-structure(hdr="{\\bf PM}",paste0("{\\bf ",the_pairs,"}"))
 no_plot<-make_plot(expression({
   plot(NA,type="n",xlab="",ylab="",xlim=c(0,1),ylim=c(0,1),axes=FALSE)
   text(0.5,0.5,labels="No data",cex=5)
-}),width="2cm",height="2cm")
+}),width="2cm",height="2cm",envir=environment())
 
 make_pm_date_cor_plot<-function(the_pm,the_day){
   if(is.na(the_day))return("bad day")
