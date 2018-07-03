@@ -21,6 +21,7 @@ log_code<-function(code){
     append2log(paste0("log_code !!!>ERROR<!!! :",code_lhs))
     stop(paste0("error:",code_lhs))
   }
+  append2log(paste0("log_code success :",code_lhs))
   return(res)
 }
 
