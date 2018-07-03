@@ -17,8 +17,8 @@ log_code<-function(code){
   }
   code_lhs<-as.character(the_code[[2]])
   res<-try(eval(the_code,parent.frame()),silent = TRUE)
-  if(class(res)=="try-error"){
-    append2log(paste0("log_code !!!>ERROR<!!! :",code_lhs))
+  if(any(class(res)=="try-error")){
+    append2log(paste0("log_code !!!>ERROR<!!! :",code_lhs,":",paste0(as.character(res),collapse="")))
     stop(paste0("error:",code_lhs))
   }
   append2log(paste0("log_code success :",code_lhs))
