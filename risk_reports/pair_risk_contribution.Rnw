@@ -343,7 +343,11 @@ log_code(x7<-mapply(sum,split(x6,pair2pm(x6))))
     col="black"
   ),
   par(mai=c(1.02,0.82,0.82,0.42))
-),width="20cm",height="20cm")}
+),
+width="20cm",
+height="20cm",
+envir=environment()
+)}
 \end{tabular}
 \end{center}
 
@@ -393,7 +397,11 @@ log_code(x3<-apply(x2,2,sd))
     cex=1,
     col="black"
   )
-),width="20cm",height="20cm")}
+),
+width="20cm",
+height="20cm",
+envir=environment()
+)}
 \end{center}
 
 
@@ -563,7 +571,7 @@ log_code(mr1_latex<-ntable(
     ylab="Manager pair count",
     xlab="Correlation"
   )
-,width="20cm",height="20cm")}
+,width="20cm",height="20cm",envir=environment())}
 \end{center}
 
 \newpage
@@ -675,7 +683,7 @@ log_code(x4<-pmin(x1*pair_f4v[names(x1)],500))
     pch=15,
     cex=2
   )
-),width="20cm",height="20cm")}
+),width="20cm",height="20cm",envir=environment())}
 \end{center}
 
 <<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
@@ -701,7 +709,7 @@ log_code(x3<-paste0(names(x2),"  ",x2))
     legend=x3,
     fill=pm_col[names(x2)]
   )
-),width="20cm",height="20cm")}
+),width="20cm",height="20cm",envir=environment())}
 \end{center}
 
 
@@ -719,7 +727,7 @@ log_code(x3<-paste0(names(x2),"  ",x2))
     pch=19,
     cex=2
   )
-,width="20cm",height="20cm")}
+,width="20cm",height="20cm",envir=environment())}
 \end{center}
 
 <<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
@@ -754,7 +762,7 @@ log_code(x2<-ifelse(x0>0,x1/x0,0))
     ),
     fill=pm_col[unique(pair2pm(x0))]
   )
-),width="20cm",height="20cm")}
+),width="20cm",height="20cm",envir=environment())}
 \end{center}
 
 
@@ -769,7 +777,7 @@ log_code(x2<-ifelse(x0>0,x1/x0,0))
     pch=19,
     cex=2
   )
-,width="20cm",height="20cm")}
+,width="20cm",height="20cm",envir=environment())}
 \end{center}
 
 
@@ -788,7 +796,7 @@ p_cor_h1<-expression(local({
 }))
 @
 \begin{center}
-\Sexpr{make_plot(p_cor_h1,width="20cm",height="20cm")}
+\Sexpr{make_plot(p_cor_h1,width="20cm",height="20cm",envir=environment())}
 \end{center}
 
 <<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
