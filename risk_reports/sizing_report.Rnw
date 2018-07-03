@@ -1,5 +1,6 @@
 
 
+
 <<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
 # input:
 #
@@ -18,7 +19,7 @@ require(ggplot2)
 require(ggrepel)
 require(Hmisc)
 
-if(!exists("the_manager"))the_manager<-"MC"
+if(!exists("the_manager"))the_manager<-"AC"
 
 x<-list.files(
   path="figure",
@@ -37,22 +38,6 @@ source("https://raw.githubusercontent.com/satrapade/utility/master/nn_cast.R")
 source("https://raw.githubusercontent.com/satrapade/utility/master/make_query.R")
 #
 
-
-
-ptf_vol_sequence<-function(
-  x,
-  x0=x[,order(-apply(x,2,sd))]
-)mapply(
-  .%>%apply(1,sum)%>%sd,
-  mapply(
-    function(i){
-      w<-rep(ncol(x0)-length(i)+1,length(i))
-      d<-diag(c(1,w))[-1,-1]
-      x0[,i,drop=FALSE]%*%d
-    },
-    Reduce(c,1:ncol(x0),accumulate = TRUE)
-  )
-)
 
 
 pair_pnl<-readLines(
@@ -102,11 +87,17 @@ weights<-cbind(
 
 y<-x%*%weights
 
-res<-mapply(
-  ptf_vol_sequence,
-  mapply(.%>%diag%>%{x%*%.},data.table(weights),SIMPLIFY = FALSE)
-) %>%
+# vol trajectories are computed by taking costituents largest vol first
+tri<-function(n,d=1,s=1)(s*row(diag(n))<s*col(diag(n)))+d*diag(n)
+vols<-weights*(cbind(apply(x,2,sd))[,rep(1,ncol(weights))])
+vol_ord<-structure(apply(-vols,2,.%>%rank(ties="f")),dimnames=dimnames(vols))
+res<-mapply(function(ptf){
+  a1<-(weights[,rep(ptf,nrow(weights))]*diag(nrow(vols))[vol_ord[,ptf],]%*%tri(nrow(vols)))
+  a2<-total_gross*a1%*%diag(1/colSums(a1))
+  apply(x%*%a2,2,sd)
+},ptf=colnames(vol_ord))%>%
 { rownames(.)<-paste0("vol_rank_",1:nrow(.)); . }
+
 
 #
 # data tables to display
@@ -357,8 +348,6 @@ More details here}
 \end{description}
 
 \end{document}
-
-
 
 
 
