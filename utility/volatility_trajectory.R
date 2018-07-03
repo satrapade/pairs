@@ -20,7 +20,7 @@ volatility_trajectory<-function(
   mask_matrix <- diag(length(vol))[vol_rank,] %*% tri(length(vol))
   trajectory_matrix <- weight_matrix * mask_matrix
   normalized_trajectory_matrix <- trajectory_matrix %*% diag(sum(ptf)/colSums(trajectory_matrix))
-  apply(returns%*%normalized_trajectory_matrix,2,sd)
+  apply(returns[,names(ptf)]%*%normalized_trajectory_matrix,2,sd)
 }
 
 # order constituents by marginal risk contribution 
@@ -34,6 +34,6 @@ volatility_trajectory_mrc<-function(
   mask_matrix <- diag(length(vol))[vol_rank,] %*% tri(length(vol))
   trajectory_matrix <- weight_matrix * mask_matrix
   normalized_trajectory_matrix <- trajectory_matrix %*% diag(sum(ptf)/colSums(trajectory_matrix))
-  apply(returns%*%normalized_trajectory_matrix,2,sd)
+  apply(returns[,names(ptf)]%*%normalized_trajectory_matrix,2,sd)
 }
 
