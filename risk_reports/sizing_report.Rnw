@@ -19,6 +19,18 @@ require(ggplot2)
 require(ggrepel)
 require(Hmisc)
 
+config<-new.env()
+source(
+  file="https://raw.githubusercontent.com/satrapade/pairs/master/configuration/workflow_config.R",
+  local=config
+)
+source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/append2log.R")
+source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/log_code.R")
+
+if(!exists("append2log"))knitr::knit_exit() 
+if(!exists("log_code"))knitr::knit_exit() 
+
+
 if(!exists("the_manager"))the_manager<-"AC"
 
 x<-list.files(
@@ -40,16 +52,16 @@ source("https://raw.githubusercontent.com/satrapade/utility/master/make_query.R"
 
 
 
-pair_pnl<-readLines(
+log_code(pair_pnl<-readLines(
   "https://raw.githubusercontent.com/satrapade/pairs/master/data/duke_pair_local_pnl.csv"
-) %>% paste0(collapse="\n") %>% fread
+) %>% paste0(collapse="\n") %>% fread)
 
-m<-structure(
+log_code(m<-structure(
   do.call(cbind,pair_pnl[,-1,with=FALSE]),
   dimnames=list(pair_pnl$date,names(pair_pnl)[-1])
-)[,grepl(paste0("^",the_manager),names(pair_pnl)[-1])]
+)[,grepl(paste0("^",the_manager),names(pair_pnl)[-1])])
 
-pair_exposure<- readLines(
+log_code(pair_exposure<- readLines(
   "https://raw.githubusercontent.com/satrapade/pairs/master/data/duke_pair_exposure.csv"
 ) %>% paste0(collapse="\n") %>% fread %>%
 { melt(
@@ -59,19 +71,19 @@ pair_exposure<- readLines(
   variable.name="pair",
   value.name="exposure"
 )} %>% 
-{.$manager<-gsub("[0-9]+$","",.$pair); .}
+{.$manager<-gsub("[0-9]+$","",.$pair); .})
 
 
 
-total_gross<-round(pair_exposure[manager==the_manager,sum(abs(exposure))]*10000,digits=1)
+log_code(total_gross<-round(pair_exposure[manager==the_manager,sum(abs(exposure))]*10000,digits=1))
 
-gross_fraction<-pair_exposure[manager==the_manager,.(gross=sum(abs(exposure))),keyby=pair] %>%
+log_code(gross_fraction<-pair_exposure[manager==the_manager,.(gross=sum(abs(exposure))),keyby=pair] %>%
 {setNames(.$gross,.$pair)} %>%
-{./sum(.)} 
+{./sum(.)})
 
-x <- m %>% { .%*%diag(10000/(total_gross*gross_fraction))}
+log_code(x <- m %>% { .%*%diag(10000/(total_gross*gross_fraction))})
 
-weights<-cbind(
+log_code(weights<-cbind(
   ACT=gross_fraction/sum(gross_fraction),
   RP=(mean(apply(x,2,sd))/apply(x,2,sd))%>%{./sum(.)}, # Risk Parity
   EQ=rep(1/ncol(x),ncol(x)), # Equal Weight
@@ -83,20 +95,20 @@ weights<-cbind(
 {structure(
   .%*%diag(rep(total_gross,ncol(.))),
   dimnames=dimnames(.)
-)}
+)})
 
-y<-x%*%weights
+log_code(y<-x%*%weights)
 
 # vol trajectories are computed by taking costituents largest vol first
 tri<-function(n,d=1,s=1)(s*row(diag(n))<s*col(diag(n)))+d*diag(n)
-vols<-weights*(cbind(apply(x,2,sd))[,rep(1,ncol(weights))])
-vol_ord<-structure(apply(-vols,2,.%>%rank(ties="f")),dimnames=dimnames(vols))
-res<-mapply(function(ptf){
+log_code(vols<-weights*(cbind(apply(x,2,sd))[,rep(1,ncol(weights))]))
+log_code(vol_ord<-structure(apply(-vols,2,.%>%rank(ties="f")),dimnames=dimnames(vols)))
+log_code(res<-mapply(function(ptf){
   a1<-(weights[,rep(ptf,nrow(weights))]*diag(nrow(vols))[vol_ord[,ptf],]%*%tri(nrow(vols)))
   a2<-total_gross*a1%*%diag(1/colSums(a1))
   apply(x%*%a2,2,sd)
 },ptf=colnames(vol_ord))%>%
-{ rownames(.)<-paste0("vol_rank_",1:nrow(.)); . }
+{ rownames(.)<-paste0("vol_rank_",1:nrow(.)); . })
 
 
 #
@@ -112,16 +124,16 @@ hdrs <- . %>%
   {attributes(.[["MTD"]])$hdr<-tbl(c("Min","tail","dependence"));.} %>%
   {attributes(.[["MD"]])$hdr<-tbl(c("Most","diversified"));.}
 
-weight_df <- weights %>% round(digits=1) %>% {data.table(pair=rownames(.),.)} %>% hdrs
+log_code(weight_df <- weights %>% round(digits=1) %>% {data.table(pair=rownames(.),.)} %>% hdrs)
 
-vol_traj_df <- res %>% round(digits=1) %>% {data.table(pair=latexTranslate(rownames(.)),.)} %>% hdrs
+log_code(vol_traj_df <- res %>% round(digits=1) %>% {data.table(pair=latexTranslate(rownames(.)),.)} %>% hdrs)
 
-vol_df <- (diag(apply(x,2,sd))%*%weights) %>% 
+log_code(vol_df <- (diag(apply(x,2,sd))%*%weights) %>% 
   round(digits=1) %>%
   {data.table(pair=latexTranslate(rownames(weights)),.)} %>%
-  hdrs
+  hdrs)
 
-conviction_df <- data.table(
+log_code(conviction_df <- data.table(
   pair=rownames(weights),
   actual=round(weights[,"ACT"],digits=1),
   risk_parity=round(weights[,"RP"],digits=1),
@@ -130,7 +142,7 @@ conviction_df <- data.table(
 {attributes(.[["pair"]])$hdr<-tbl(c(the_manager,"pairs"));.} %>%
 {attributes(.[["actual"]])$hdr<-tbl(c("Actual","gross"));.} %>%
 {attributes(.[["risk_parity"]])$hdr<-tbl(c("Risk","parity","gross"));.} %>%
-{attributes(.[["conviction"]])$hdr<-tbl(c("Conviction","ratio","pct"));.}
+{attributes(.[["conviction"]])$hdr<-tbl(c("Conviction","ratio","pct"));.})
   
 
 #
