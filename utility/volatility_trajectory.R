@@ -5,7 +5,9 @@
 # weighted by ratios in input ptf
 # the resulting curve is a visualization of a portfolio's diversification
 #
+require(FRAPO)
 
+# order constituantes by volatility
 volatility_trajectory<-function(
   returns,
   ptf
@@ -18,3 +20,18 @@ volatility_trajectory<-function(
   normalized_trajectory_matrix <- trajectory_matrix %*% diag(sum(ptf)/colSums(trajectory_matrix))
   apply(returns%*%normalized_trajectory_matrix,2,sd)
 }
+
+# order constituents by marginal risk contribution 
+volatility_trajectory_mrc<-function(
+  returns,
+  ptf
+){
+  vol<-setNames(mrc(ptf,cov(returns[,names(ptf)])),names(ptf))
+  vol_rank=rank(vol,ties.method="first")
+  weight_matrix <- cbind(ptf=ptf)[,rep(1,length(ptf))]
+  mask_matrix <- diag(length(vol))[vol_rank,] %*% tri(length(vol))
+  trajectory_matrix <- weight_matrix * mask_matrix
+  normalized_trajectory_matrix <- trajectory_matrix %*% diag(sum(ptf)/colSums(trajectory_matrix))
+  apply(returns%*%normalized_trajectory_matrix,2,sd)
+}
+
