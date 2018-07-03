@@ -1712,11 +1712,11 @@ require(magrittr)
 
 source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/nn_cast.R")
 
-duke_lt<-fread(
+log_code(duke_lt<-fread(
   "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_manager_look_vs_outright.csv"
-)
+))
 
-duke_lt_matrix<-NNcast(
+log_code(duke_lt_matrix<-NNcast(
   data=duke_lt,
   i_name="SuperSectorIndex",
   j_name="Manager",
@@ -1725,24 +1725,24 @@ duke_lt_matrix<-NNcast(
 ) %>%
 {cbind(.,DUKE=rowSums(.))} %>%
 {rbind(.,NET=colSums(.),GROSS=colSums(abs(.)))} %>%
-round(digits=1)
+round(digits=1))
 
-sector_exposure<- duke_lt_matrix %>% 
-{ data.table(sector=rownames(.),.)} 
+log_code(sector_exposure<- duke_lt_matrix %>% 
+{ data.table(sector=rownames(.),.)})
 
 for(i in setdiff(names(sector_exposure),"sector")){
   attributes(sector_exposure[[i]])$format<-quote(sign_color(n_fmt(this),this))
 }
 
-z<-intraday_managers*10000
+log_code(z<-intraday_managers*10000)
 colnames(z)[1]<-"DUKE"
-z<-z[,colnames(duke_lt_matrix)]
-x<-duke_lt_matrix[grepl("Index$",rownames(duke_lt_matrix)),]
-y<-intraday_sector_indices[,rownames(x)]%*%x
-w<-factor_local_tret[,rownames(x)]%*%x
-v<-manager_local_pnl%>%{cbind(.,DUKE=rowSums(.))[,colnames(y)]}
+log_code(z<-z[,colnames(duke_lt_matrix)])
+log_code(x<-duke_lt_matrix[grepl("Index$",rownames(duke_lt_matrix)),])
+log_code(y<-intraday_sector_indices[,rownames(x)]%*%x)
+log_code(w<-factor_local_tret[,rownames(x)]%*%x)
+log_code(v<-manager_local_pnl%>%{cbind(.,DUKE=rowSums(.))[,colnames(y)]})
 
-explain<-data.table(
+log_code(explain<-data.table(
   pm=structure(colnames(y),hrd="Manger"),
   cor_short=structure(
     round(100*mapply(cor,data.table(y),data.table(z)),digits=1),
@@ -1764,7 +1764,7 @@ explain<-data.table(
     format=quote(sign_color(n_fmt(this),this)),
     hdr=tbl(c("Actual","P\\&L","intraday","2 weeks"))
   )
-)
+))
 
 @
 \newpage
@@ -1808,7 +1808,7 @@ source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/pair_st
 source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/fetch_risk_report.R")
 
 if(exists("db"))dbDisconnect(db)
-db<-dbConnect(
+log_code(db<-dbConnect(
   odbc::odbc(), 
   .connection_string = paste0(
     "driver={SQL Server};",
@@ -1816,20 +1816,20 @@ db<-dbConnect(
     "database=PRDQSTFundPerformance;",
     "trusted_connection=true"
   )
-)
+))
 
-duke<-fetch_bucket_pnl(db)
-res0<-mapply(
+log_code(duke<-fetch_bucket_pnl(db))
+log_code(res0<-mapply(
   function(m)pair_stats(paste0("^",m)),
   duke[,bucket]%>%stri_replace_all("",regex="_PAIR_[0-9]+$")%>%unique%>%sort,
   SIMPLIFY=FALSE
-)
-res1<-mapply(function(x,n)paste0(
+))
+log_code(res1<-mapply(function(x,n)paste0(
   "\\subsection{",n,"}\n",
   "\\vskip 5mm \n",
   ntable(df=x),
   "\\vskip 5mm \n"
-),x=res0,n=names(res0))
+),x=res0,n=names(res0)))
 
 
 @
