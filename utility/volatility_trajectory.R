@@ -7,6 +7,8 @@
 #
 require(FRAPO)
 
+tri<-function(n,d=1,s=1)(s*row(diag(n))<s*col(diag(n)))+d*diag(n)
+
 # order constituantes by volatility
 volatility_trajectory<-function(
   returns,
