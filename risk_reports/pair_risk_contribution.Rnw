@@ -34,8 +34,20 @@ library(clue)
 library(magick)
 library(readxl)
 library(Rtsne)
+library(knitr)
 
+config<-new.env()
+source(
+  file="https://raw.githubusercontent.com/satrapade/pairs/master/configuration/workflow_config.R",
+  local=config
+)
+source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/append2log.R")
+source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/log_code.R")
 
+if(!exists("append2log"))knitr::knit_exit() 
+if(!exists("log_code"))knitr::knit_exit() 
+
+append2log("pair_risk_contribution: start",append=TRUE)
 library(blpapi)
 conn <- new(BlpApiConnection)
 source("https://raw.githubusercontent.com/satrapade/latex_utils/master/latex_helpers_v2.R")
@@ -43,7 +55,11 @@ source("https://raw.githubusercontent.com/satrapade/utility/master/utility_funct
 source("https://raw.githubusercontent.com/satrapade/utility/master/sheet_bbg_functions.R")
 source("https://raw.githubusercontent.com/satrapade/utility/master/sheet_utility_functions.R")
 selected_sheet<-"DUKE"
-x<-list.files(path="N:/Depts/Share/UK Alpha Team/Analytics/risk_reports/figure",pattern="*.pdf",full.names=TRUE)
+x<-list.files(
+  path="N:/Depts/Share/UK Alpha Team/Analytics/risk_reports/figure",
+  pattern="*.pdf",
+  full.names=TRUE
+)
 if(length(x)>0)file.remove(x)
 
 
@@ -82,22 +98,27 @@ plot_tsne_grid<-function(fn,tsne,pictures){
 }
 
 #  
-
+append2log("pair_risk_contribution: reading scrape details",append=TRUE)
 scrape_details<-local({
   dets<-fread("N:/Depts/Share/UK Alpha Team/Analytics/sheet_scrape/scrape_details.csv")
   structure(as.list(dets$values),.Names=dets$names)
 })
 
+append2log("pair_risk_contribution: reading duke position",append=TRUE)
 
 the_duke_position<-fread("N:/Depts/Share/UK Alpha Team/Analytics/sheet_scrape/duke_position.csv")
 the_duke_portfolio<-fread("N:/Depts/Share/UK Alpha Team/Analytics/sheet_scrape/duke_portfolio.csv")
 the_duke_AUM<-as.numeric(scrape_details$duke_aum)
 the_duke_date<-scrape_details$date
 
+append2log("pair_risk_contribution: reading luke position",append=TRUE)
+
 the_luke_position<-fread("N:/Depts/Share/UK Alpha Team/Analytics/sheet_scrape/luke_position.csv")
 the_luke_portfolio<-fread("N:/Depts/Share/UK Alpha Team/Analytics/sheet_scrape/luke_portfolio.csv")
 the_luke_AUM<-as.numeric(scrape_details$luke_aum)
 the_luke_date<-scrape_details$date
+
+append2log("pair_risk_contribution: reading data loaded",append=TRUE)
 
 data_loaded<-fread("N:/Depts/Share/UK Alpha Team/Analytics/market_data/data_loaded.csv")
 
@@ -123,6 +144,8 @@ data_directory<-"N:/Depts/Share/UK Alpha Team/Analytics/duke_summary"
 prefix<-"duke_"
 row_names<-TRUE
 
+append2log("pair_risk_contribution: reading luke pair-level data",append=TRUE)
+
 # pair-level data
 luke_pair_exposure     <- load_matrix(paste0(data_directory,"/",prefix,"pair_exposure.csv"),row_names=row_names)
 luke_pair_days         <- load_matrix(paste0(data_directory,"/",prefix,"pair_days.csv"),row_names=row_names)
@@ -131,17 +154,23 @@ luke_pair_long_pnl     <- load_matrix(paste0(data_directory,"/",prefix,"pair_lon
 luke_pair_short_pnl    <- load_matrix(paste0(data_directory,"/",prefix,"pair_short_pnl.csv"),row_names=row_names)
 luke_drop_one_pair_pnl <- load_matrix(paste0(data_directory,"/",prefix,"drop_one_pair_pnl.csv"),row_names=row_names)
 
+append2log("pair_risk_contribution: reading luke manager-level data",append=TRUE)
+
 # manager-level data
 luke_manager_exposure          <- load_matrix(paste0(data_directory,"/",prefix,"manager_exposure.csv"),row_names=row_names)
 luke_manager_local_pnl         <- load_matrix(paste0(data_directory,"/",prefix,"manager_local_pnl.csv"),row_names=row_names)
 luke_drop_one_manager_pnl      <- load_matrix(paste0(data_directory,"/",prefix,"drop_one_manager_pnl.csv"),row_names=row_names)
 luke_manager_drop_one_pair_pnl <- load_matrix(paste0(data_directory,"/",prefix,"manager_drop_one_pair_pnl.csv"),row_names=row_names)
 
+append2log("pair_risk_contribution: reading luke fund-level data",append=TRUE)
+
 # fund-level data
 luke_exposure        <- load_matrix(paste0(data_directory,"/",prefix,"exposure.csv"),row_names=row_names)
 luke_long_exposure   <- load_matrix(paste0(data_directory,"/",prefix,"long_exposure.csv"),row_names=row_names)
 luke_short_exposure  <- load_matrix(paste0(data_directory,"/",prefix,"short_exposure.csv"),row_names=row_names)
 luke_local_pnl       <- load_matrix(paste0(data_directory,"/",prefix,"local_pnl.csv"),row_names=row_names)
+
+append2log("pair_risk_contribution: reading color assigment",append=TRUE)
 
 # color assigment
 manager_col <- fread("N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/manager_col.csv")
@@ -155,28 +184,43 @@ manager_pairs<-structure(
   dimnames=list(pairs,managers)
 )
 
+append2log("pair_risk_contribution: computing drop_one_pair_exposure",append=TRUE)
 
 drop_one_pair_exposure<-mapply(function(n){
   i<-match(n,colnames(luke_pair_exposure))
   portfolio_local_tret%*%t(t(apply(luke_pair_exposure[,-i],1,sum)))
 },colnames(luke_pair_exposure),SIMPLIFY=FALSE)
 
+append2log("pair_risk_contribution: computing drop_one_manager_exposure",append=TRUE)
+
 drop_one_manager_exposure<-mapply(function(n){
   i<-match(n,colnames(luke_manager_exposure))
   portfolio_local_tret%*%t(t(apply(luke_manager_exposure[,-i],1,sum)))
 },colnames(luke_manager_exposure),SIMPLIFY=FALSE)
 
-
+append2log("pair_risk_contribution: computing luke_local_pnl",append=TRUE)
 luke_local_pnl<-as.matrix(portfolio_local_tret%*%t(t(apply(luke_pair_exposure,1,sum))))
+
+append2log("pair_risk_contribution: computing pair_local_pnl",append=TRUE)
 pair_local_pnl<-as.matrix(portfolio_local_tret%*%luke_pair_exposure)
+
+append2log("pair_risk_contribution: computing manager_local_pnl",append=TRUE)
 manager_local_pnl<-as.matrix(portfolio_local_tret%*%luke_manager_exposure)
 
 
+append2log("pair_risk_contribution: computing luke_gbp_pnl",append=TRUE)
 luke_gbp_pnl<-as.matrix(portfolio_gbp_tret%*%t(t(apply(luke_pair_exposure,1,sum))))
+
+append2log("pair_risk_contribution: computing pair_gbp_pnl",append=TRUE)
 pair_gbp_pnl<-as.matrix(portfolio_gbp_tret%*%luke_pair_exposure)
+
+append2log("pair_risk_contribution: computing manager_gbp_pnl",append=TRUE)
 manager_gbp_pnl<-as.matrix(portfolio_gbp_tret%*%luke_manager_exposure)
 
+append2log("pair_risk_contribution: computing marginal_pair_sd",append=TRUE)
 marginal_pair_sd<-sort(sd(luke_local_pnl)-mapply(sd,drop_one_pair_exposure))
+
+append2log("pair_risk_contribution: computing marginal_manager_sd",append=TRUE)
 marginal_manager_sd<-sort(sd(luke_local_pnl)-mapply(sd,drop_one_manager_exposure))
 
 pair2pm<-function(o){
@@ -206,11 +250,17 @@ weights_for_target_vol<-function(pnl_matrix,target_vol=4){
   res
 }
 
+append2log("pair_risk_contribution: factor_for_four_vol",append=TRUE)
 factor_for_four_vol<-weights_for_target_vol(manager_local_pnl,4)
 
+
+append2log("pair_risk_contribution: pair_f4v",append=TRUE)
 pair_f4v<-weights_for_target_vol(pair_local_pnl,4)
 
+append2log("pair_risk_contribution: manager_col",append=TRUE)
 manager_col<-assign_color(colnames(manager_local_pnl),col_alpha=1)[,.SD,keyby=item]
+
+append2log("pair_risk_contribution: pair_col",append=TRUE)
 pair_col<-assign_color(colnames(pair_local_pnl),col_alpha=1)[,.SD,keyby=item]
 
 @
@@ -224,15 +274,15 @@ pair_col<-assign_color(colnames(pair_local_pnl),col_alpha=1)[,.SD,keyby=item]
 \section{\Sexpr{the_date} \Sexpr{selected_sheet} Managers}
 
 <<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
-x0<-apply(abs(luke_manager_exposure),2,sum)
-i<-order(x0)
-x1<-round(10000*x0[i],digits=0)
-x2<-apply(abs(luke_pair_days),2,max)
-x3<-gsub("[0-9]{1,4}$","",colnames(luke_pair_days))
-x4<-rev(sort(round(mapply(mean,split(x2,x3)),digits=0)))
-x5<-10000*apply(manager_local_pnl,2,sd)
-x6<-10000*apply(pair_local_pnl,2,sd)
-x7<-mapply(sum,split(x6,pair2pm(x6)))
+log_code(x0<-apply(abs(luke_manager_exposure),2,sum))
+log_code(i<-order(x0))
+log_code(x1<-round(10000*x0[i],digits=0))
+log_code(x2<-apply(abs(luke_pair_days),2,max))
+log_code(x3<-gsub("[0-9]{1,4}$","",colnames(luke_pair_days)))
+log_code(x4<-rev(sort(round(mapply(mean,split(x2,x3)),digits=0))))
+log_code(x5<-10000*apply(manager_local_pnl,2,sd))
+log_code(x6<-10000*apply(pair_local_pnl,2,sd))
+log_code(x7<-mapply(sum,split(x6,pair2pm(x6))))
 @
 %
 % manager gross exposure plot
@@ -303,11 +353,11 @@ x7<-mapply(sum,split(x6,pair2pm(x6)))
 % manager risk plot
 %
 <<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
-x0<-apply(manager_local_pnl,2,sd)
-i<-order(x0)
-x1<-10000*x0[i]
-x2<-attributes(weights_for_target_vol(manager_local_pnl,4))$pnl
-x3<-apply(x2,2,sd)
+log_code(x0<-apply(manager_local_pnl,2,sd))
+log_code(i<-order(x0))
+log_code(x1<-10000*x0[i])
+log_code(x2<-attributes(weights_for_target_vol(manager_local_pnl,4))$pnl)
+log_code(x3<-apply(x2,2,sd))
 @
 \begin{center}
 \Sexpr{make_plot(expression(
@@ -350,54 +400,55 @@ x3<-apply(x2,2,sd)
 \newpage
 \section{\Sexpr{the_date} \Sexpr{selected_sheet} Manager risk contributions}
 <<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
-n<-colnames(manager_local_pnl)
-x0<-pnl_stats(rowSums(manager_local_pnl))
-x1excl<-structure(
+log_code(n<-colnames(manager_local_pnl))
+log_code(x0<-pnl_stats(rowSums(manager_local_pnl)))
+log_code(x1excl<-structure(
     t(apply(manager_local_pnl%*%(1-diag(ncol(manager_local_pnl))),2,pnl_stats)),
     dimnames=list(colnames(manager_local_pnl),names(x0))
-)
-x1only<-structure(
+))
+log_code(x1only<-structure(
     t(apply(manager_local_pnl,2,pnl_stats)),
     dimnames=list(colnames(manager_local_pnl),names(x0))
-)
-x2<-(rowSums(cor(manager_local_pnl)-diag(ncol(manager_local_pnl)))/(ncol(manager_local_pnl)-1))[n]
-x3<-table(pair2pm(colnames(pair_local_pnl)))
+))
+log_code(x2<-(rowSums(cor(manager_local_pnl)-diag(ncol(manager_local_pnl)))/(ncol(manager_local_pnl)-1))[n])
+log_code(x3<-table(pair2pm(colnames(pair_local_pnl))))
 
-x4<-apply(abs(luke_manager_exposure),2,sum)[n]
+log_code(x4<-apply(abs(luke_manager_exposure),2,sum)[n])
 
-x5<-split(colnames(luke_pair_days),pair2pm(luke_pair_days))
-x6<-mapply(function(p)abs(luke_pair_days[,p,drop=FALSE]),x5,SIMPLIFY=FALSE)
+log_code(x5<-split(colnames(luke_pair_days),pair2pm(luke_pair_days)))
+log_code(x6<-mapply(function(p)abs(luke_pair_days[,p,drop=FALSE]),x5,SIMPLIFY=FALSE))
 
 nz_fun<-function(fun)function(x)fun(nz(x))
 
-x7<-cor(apply(pair_local_pnl,2,roll_mean,7))
-x8<-mapply(function(pm){
+log_code(x7<-cor(apply(pair_local_pnl,2,roll_mean,7)))
+log_code(x8<-mapply(function(pm){
   i<-which(pair2pm(colnames(x7)) %in% pm)
   mean(x7[i,i][which(row(diag(i))>col(diag(i)),arr.ind = TRUE)])
-},n)[n]
+},n)[n])
 
-x9only<-structure(
+log_code(x9only<-structure(
     t(apply(pair_local_pnl,2,pnl_stats)),
     dimnames=list(colnames(pair_local_pnl),names(x0))
-)
-x10<-mapply(function(pm){
+))
+log_code(x10<-mapply(function(pm){
   i<-which(pair2pm(rownames(x9only)) %in% pm)
   sum(x9only[i,"vol"])
-},n)[n]
+},n)[n])
 
-x11<-mapply(function(p){
+log_code(x11<-mapply(function(p){
   the_pair<-cbind(long=pmax(p,0),short=pmax(-p,0))
   if(!all(colSums(the_pair)>0))return(0)
   pair_perf<-portfolio_local_tret%*%the_pair
   cor(pair_perf)[1,2]
-},data.table(luke_pair_exposure))
-x12<-mapply(mean,split(x11,pair2pm(x11)))[n]
+},data.table(luke_pair_exposure)))
+
+log_code(x12<-mapply(mean,split(x11,pair2pm(x11)))[n])
 
 
-x13<-cbind(rowSums(pmax(luke_pair_exposure,0)),rowSums(pmax(-luke_pair_exposure,0)))
-x14<-portfolio_local_tret%*%x13
+log_code(x13<-cbind(rowSums(pmax(luke_pair_exposure,0)),rowSums(pmax(-luke_pair_exposure,0))))
+log_code(x14<-portfolio_local_tret%*%x13)
 
-manager_risk1<-data.table(
+log_code(manager_risk1<-data.table(
   manager=structure(
     paste0("\\cellcolor{",colnames(manager_local_pnl),"!20}",colnames(manager_local_pnl)),
     hdr="Manager"
@@ -441,12 +492,12 @@ manager_risk1<-data.table(
   cor_LS_mean=do.call(structure,c(list(c(cor_LS_mean,round(mean(cor_LS_mean),digits=1))),attributes(cor_LS_mean))),
   cor_LS_median=do.call(structure,c(list(c(cor_LS_median,round(mean(cor_LS_median),digits=1))),attributes(cor_LS_median))),
   cor_LS_min=do.call(structure,c(list(c(cor_LS_min,round(mean(cor_LS_min),digits=1))),attributes(cor_LS_min)))
-)]
+)])
 
 
-x6max<-mapply(function(m)apply(m,2,max),x6[n],SIMPLIFY=FALSE)
+log_code(x6max<-mapply(function(m)apply(m,2,max),x6[n],SIMPLIFY=FALSE))
 
-manager_risk2<-data.table(
+log_code(manager_risk2<-data.table(
   manager=structure(
     paste0("\\cellcolor{",n,"!20}",n),
     hdr="Manager"
@@ -462,9 +513,9 @@ manager_risk2<-data.table(
   above5_adv=structure(mapply(function(m)sum(m>5),x6max[n]),hdr=tbl(c("5+","days"),align="l")),
   above10_adv=structure(mapply(function(m)sum(m>10),x6max[n]),hdr=tbl(c("10+","days"),align="l")),
   above20_adv=structure(mapply(function(m)sum(m>20),x6max[n]),hdr=tbl(c("20+","days"),align="l"))
-)[rev(order(mean_adv)),]
+)[rev(order(mean_adv)),])
 
-mr1_latex<-ntable(
+log_code(mr1_latex<-ntable(
   df=manager_risk1,
   add_rownames=FALSE,
   title=paste(
@@ -474,7 +525,7 @@ mr1_latex<-ntable(
    ),
   align="l",
   halign="c"
-)
+))
 
 @
 
@@ -565,7 +616,7 @@ fs<-c(
 )
 pic_w<-paste0(round(18/(length(pms)+1),digits=1),"cm")
 pic_h<-paste0(round(21/length(fs),digits=1),"cm")
-split_pics<-data.table(
+log_code(split_pics<-data.table(
     factors=sub("( Index$)|( Equity$)","",fs),
     t(structure(outer(pms,fs,FUN=Vectorize(function(pm,fac){
       res<-make_plot(
@@ -579,7 +630,7 @@ split_pics<-data.table(
       )
       res
     })),dimnames=list(pms,gsub(" Index$","",fs))))
-)
+))
 split_align=paste0("m{",pic_w,"}")
 @
 
@@ -595,11 +646,11 @@ split_align=paste0("m{",pic_w,"}")
 \section{\Sexpr{the_date} \Sexpr{selected_sheet} Pairs}
 
 <<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
-x0<-10000*apply(abs(luke_pair_exposure),2,sum)
-x1<-sort(x0)
-x2<-rev(sort(round(mapply(sum,split(x1,pair2pm(x1))),digits=0)))
-x3<-paste0(names(x2),"  ",x2)
-x4<-pmin(x1*pair_f4v[names(x1)],500)
+log_code(x0<-10000*apply(abs(luke_pair_exposure),2,sum))
+log_code(x1<-sort(x0))
+log_code(x2<-rev(sort(round(mapply(sum,split(x1,pair2pm(x1))),digits=0))))
+log_code(x3<-paste0(names(x2),"  ",x2))
+log_code(x4<-pmin(x1*pair_f4v[names(x1)],500))
 @
 \begin{center}
 \Sexpr{make_plot(expression(
@@ -628,10 +679,10 @@ x4<-pmin(x1*pair_f4v[names(x1)],500)
 \end{center}
 
 <<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
-x0<-apply(abs(luke_pair_days),2,max)
-x1<-gsub("[0-9]{1,4}$","",colnames(luke_pair_days))
-x2<-rev(sort(round(mapply(mean,split(x0,x1)),digits=1)))
-x3<-paste0(names(x2),"  ",x2)
+log_code(x0<-apply(abs(luke_pair_days),2,max))
+log_code(x1<-gsub("[0-9]{1,4}$","",colnames(luke_pair_days)))
+log_code(x2<-rev(sort(round(mapply(mean,split(x0,x1)),digits=1))))
+log_code(x3<-paste0(names(x2),"  ",x2))
 @
 \begin{center}
 \Sexpr{make_plot(expression(
@@ -672,10 +723,10 @@ x3<-paste0(names(x2),"  ",x2)
 \end{center}
 
 <<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
-x0<-10000*apply(abs(luke_pair_exposure),2,sum)
-pair_local_pnl_sd<-apply(pair_local_pnl,2,sd)
-x1<-ifelse(pair_local_pnl_sd>0,10000*pair_local_pnl_sd,0)
-x2<-ifelse(x0>0,x1/x0,0)
+log_code(x0<-10000*apply(abs(luke_pair_exposure),2,sum))
+log_code(pair_local_pnl_sd<-apply(pair_local_pnl,2,sd))
+log_code(x1<-ifelse(pair_local_pnl_sd>0,10000*pair_local_pnl_sd,0))
+log_code(x2<-ifelse(x0>0,x1/x0,0))
 @
 
 \begin{center}
@@ -742,273 +793,275 @@ p_cor_h1<-expression(local({
 
 <<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
 
-force_flag=TRUE
-
-make_factor_split<-function(
-  x,
-  f,
-  factor_state_fun=sign,
-  state_col=rainbow(length(all_states),alpha=0.5)
-){
-  all_states<-sort(unique(factor_state_fun(f)))
-  states<-match(factor_state_fun(f),all_states)
-  the_split<-data.table(
-    state=states,
-    value=x,
-    factor=f,
-    x=do.call(c,split(seq_along(states),states)),
-    y=do.call(c,mapply(cumsum,split(x,states),SIMPLIFY=FALSE)),
-    col=do.call(c,split(state_col[states],states))
-  )
-  the_split
-}
-
-
-pictures<-mapply(function(pair){
-  list(
-    price=plot2matrix(
-          y=cumsum(pair),
-          x=seq_along(pair),
-          col=rep("blue",length(pair))
-    ),
-    ukx_split=local({
-      fs<-make_factor_split(
-        pair,
-        factor_local_tret[,"UKX Index"],
-        state_col=c("red",rgb(0.5,0.5,0.5),"green")
-      )
-      plot2matrix(x=fs$x,y=fs$y,col=fs$col)
-    }),
-    mcx_split=local({
-      fs<-make_factor_split(
-        pair,
-        factor_local_tret[,"MCX Index"],
-        state_col=c("red",rgb(0.5,0.5,0.5),"green")
-      )
-      plot2matrix(x=fs$x,y=fs$y,col=fs$col)
-    }),
-    smx_split=local({
-      fs<-make_factor_split(
-        pair,
-        factor_local_tret[,"SMX Index"],
-        state_col=c("red",rgb(0.5,0.5,0.5),"green")
-      )
-      plot2matrix(x=fs$x,y=fs$y,col=fs$col)
-    }),
-    mseemomo_split=local({
-      fs<-make_factor_split(
-        pair,
-        factor_local_tret[,"MSEEMOMO Index"],
-        state_col=c("red",rgb(0.5,0.5,0.5),"green")
-      )
-      plot2matrix(x=fs$x,y=fs$y,col=fs$col)
-    }),
-    mseeval_split=local({
-      fs<-make_factor_split(
-        pair,
-        factor_local_tret[,"MSEEVAL Index"],
-        state_col=c("red",rgb(0.5,0.5,0.5),"green")
-      )
-      plot2matrix(x=fs$x,y=fs$y,col=fs$col)
-    }),
-    mseegrw_split=local({
-      fs<-make_factor_split(
-        pair,
-        factor_local_tret[,"MSEEGRW Index"],
-        state_col=c("red",rgb(0.5,0.5,0.5),"green")
-      )
-      plot2matrix(x=fs$x,y=fs$y,col=fs$col)
-    }),
-    uso_split=local({
-      fs<-make_factor_split(
-        pair,
-        factor_local_tret[,"USO US Equity"],
-        state_col=c("red",rgb(0.5,0.5,0.5),"green")
-      )
-      plot2matrix(x=fs$x,y=fs$y,col=fs$col)
-    }),
-    tlt_split=local({
-      fs<-make_factor_split(
-        pair,
-        factor_local_tret[,"TLT US Equity"],
-        state_col=c("red",rgb(0.5,0.5,0.5),"green")
-      )
-      plot2matrix(x=fs$x,y=fs$y,col=fs$col)
-    }),
-    msstersi_split=local({
-      fs<-make_factor_split(
-        pair,
-        factor_local_tret[,"MSSTERSI Index"],
-        state_col=c("red",rgb(0.5,0.5,0.5),"green")
-      )
-      plot2matrix(x=fs$x,y=fs$y,col=fs$col)
-    }),
-    coinxbe_split=local({
-      fs<-make_factor_split(
-        pair,
-        factor_local_tret[,"COINXBE SS Equity"],
-        state_col=c("red",rgb(0.5,0.5,0.5),"green")
-      )
-      plot2matrix(x=fs$x,y=fs$y,col=fs$col)
-    }),
-    duke_split=local({
-      fs<-make_factor_split(
-        pair,
-        rowSums(pair_local_pnl),
-        state_col=c("red",rgb(0.5,0.5,0.5),"green")
-      )
-      plot2matrix(x=fs$x,y=fs$y,col=fs$col)
-    })
-  )
-},
-pair=data.table(pair_local_pnl),
-SIMPLIFY=FALSE
-)
-
-features<-mapply(function(p){
-  t(mapply(function(x)as.vector(col2rgb(x[[p]])),pictures))
-},Reduce(union,mapply(names,pictures,SIMPLIFY=FALSE)),SIMPLIFY=FALSE)
-
-tsne<-mapply(function(f){
-  Rtsne(
-    f,
-    perplexity=20,
-    pca=TRUE,
-    stop_lying_iter=10,
-    max_iter=1000,
-    check_duplicates=FALSE
-  )
-},features,SIMPLIFY=FALSE)
-
-
-plot_tsne<-function(
-  fn,
-  tsne,
-  pictures,
-  text_col="red",
-  text_cex=0.75,
-  text_fun=function(x)gsub("_","\n",x)
-){
-  k<-sqrt(floor(sqrt(nrow(tsne$Y))+1)^2)
-  m<-diag(k)
-  gx<-as.vector(col(m))
-  gy<-as.vector(row(m))
-  tx<-rescale(tsne$Y[,1],range(gx))
-  ty<-rescale(tsne$Y[,2],range(gy))
-  tsnex<-matrix(tx,ncol=1)[,rep(1,length(gx))]
-  tsney<-matrix(ty,ncol=1)[,rep(1,length(gx))]
-  gridx<-matrix(gx,nrow=1)[rep(1,length(tx)),]
-  gridy<-matrix(gy,nrow=1)[rep(1,length(tx)),]
-  dx<-(tsnex-gridx)^2
-  dy<-(tsney-gridy)^2
-  d<-dx+dy
-  t2g <- solve_LSAP(d)
-  par(mai=c(0,0,0,0))
-  plot(
-    x=c(0.75,gx,ncol(m)+0.25),
-    y=c(0.75,gy,nrow(m)+.25),
-    col="white",
-    axes=FALSE,
-    xlab="",
-    ylab="",
-    main=""
-  )
-  for(i in seq_along(pictures))rasterImage(
-    image=pictures[[i]][[fn]],
-    xleft=gx[t2g[i]]-0.49,
-    ybottom=gy[t2g[i]]-0.49,
-    xright=gx[t2g[i]]+0.49,
-    ytop=gy[t2g[i]]+0.49,
-    interpolate=TRUE
-  )
-  abline(
-    h=setdiff(unique(gx),range(gx)[1])-0.5,
-    v=setdiff(unique(gy),range(gy)[1])-0.5,
-    col=rgb(0.5,0.5,0.5,1)
-  )
-  if(!is.null(text_col))text(
-    x=gx[t2g]-0.49,
-    y=gy[t2g]+0.49,
-    labels=text_fun(names(pictures)),
-    cex=text_cex,
-    col=text_col,
-    adj=c(0,1)
-  )
-}
-
-make_tsne_latex_table<-function(title,fn,tsne,pictures,text_col="blue")paste0(
-  "\\begin{center}\n",
-  "\\begin{tabular}{ m{1cm} | m{19cm} |}\n",
-  "\\hline\n",
-  "\\rotatebox{90}{\\bf ",
-  tbl(title)
-  ,"} & \n",
-  make_plot(
-    plot_tsne(fn,tsne[[fn]],pictures,text_col=text_col),
-    width="19cm",
-    height="19cm",
-    envir=environment()
-  ),
-  "\\\\ \n",
-  "\\hline\n",
-  "\\end{tabular}\n",
-  "\\end{center}\n",
-  collapse=""
-)
-
-all_feature_tables<-paste(mapply(function(f,tsne,pictures){
-  make_tsne_latex_table(
-    title=latexTranslate(f),
-    fn=f,
-    tsne=tsne,
-    pictures=pictures,
-    text_col="black")
-},names(tsne),MoreArgs = list(tsne=tsne,pictures=pictures)),collapse="\n")
-
-
-
-all_pictures<-mapply(
-  function(i){
-    parts<-strsplit(i,"_",fixed=TRUE)[[1]]
-    list(all=pictures[[c(parts[1],paste0(tail(parts,-1),collapse="_"))]])
-  },
-  kronecker(
-    names(pictures),
-    Reduce(union,mapply(names,pictures,SIMPLIFY=FALSE)),
-    FUN=function(x,y)paste(x,y,sep="_")
-  ),
-  SIMPLIFY=FALSE
-)
-all_features<-do.call(rbind,mapply(function(x)as.vector(col2rgb(x$all)),all_pictures,SIMPLIFY = FALSE))
-all_tsne<-Rtsne(
-    all_features,
-    perplexity=20,
-    pca=TRUE,
-    stop_lying_iter=10,
-    max_iter=1000,
-    check_duplicates=FALSE
-)
+# force_flag=TRUE
+# 
+# make_factor_split<-function(
+#   x,
+#   f,
+#   factor_state_fun=sign,
+#   state_col=rainbow(length(all_states),alpha=0.5)
+# ){
+#   all_states<-sort(unique(factor_state_fun(f)))
+#   states<-match(factor_state_fun(f),all_states)
+#   the_split<-data.table(
+#     state=states,
+#     value=x,
+#     factor=f,
+#     x=do.call(c,split(seq_along(states),states)),
+#     y=do.call(c,mapply(cumsum,split(x,states),SIMPLIFY=FALSE)),
+#     col=do.call(c,split(state_col[states],states))
+#   )
+#   the_split
+# }
+# 
+# 
+# log_code(pictures<-mapply(function(pair){
+#   list(
+#     price=plot2matrix(
+#           y=cumsum(pair),
+#           x=seq_along(pair),
+#           col=rep("blue",length(pair))
+#     ),
+#     ukx_split=local({
+#       fs<-make_factor_split(
+#         pair,
+#         factor_local_tret[,"UKX Index"],
+#         state_col=c("red",rgb(0.5,0.5,0.5),"green")
+#       )
+#       plot2matrix(x=fs$x,y=fs$y,col=fs$col)
+#     }),
+#     mcx_split=local({
+#       fs<-make_factor_split(
+#         pair,
+#         factor_local_tret[,"MCX Index"],
+#         state_col=c("red",rgb(0.5,0.5,0.5),"green")
+#       )
+#       plot2matrix(x=fs$x,y=fs$y,col=fs$col)
+#     }),
+#     smx_split=local({
+#       fs<-make_factor_split(
+#         pair,
+#         factor_local_tret[,"SMX Index"],
+#         state_col=c("red",rgb(0.5,0.5,0.5),"green")
+#       )
+#       plot2matrix(x=fs$x,y=fs$y,col=fs$col)
+#     }),
+#     mseemomo_split=local({
+#       fs<-make_factor_split(
+#         pair,
+#         factor_local_tret[,"MSEEMOMO Index"],
+#         state_col=c("red",rgb(0.5,0.5,0.5),"green")
+#       )
+#       plot2matrix(x=fs$x,y=fs$y,col=fs$col)
+#     }),
+#     mseeval_split=local({
+#       fs<-make_factor_split(
+#         pair,
+#         factor_local_tret[,"MSEEVAL Index"],
+#         state_col=c("red",rgb(0.5,0.5,0.5),"green")
+#       )
+#       plot2matrix(x=fs$x,y=fs$y,col=fs$col)
+#     }),
+#     mseegrw_split=local({
+#       fs<-make_factor_split(
+#         pair,
+#         factor_local_tret[,"MSEEGRW Index"],
+#         state_col=c("red",rgb(0.5,0.5,0.5),"green")
+#       )
+#       plot2matrix(x=fs$x,y=fs$y,col=fs$col)
+#     }),
+#     uso_split=local({
+#       fs<-make_factor_split(
+#         pair,
+#         factor_local_tret[,"USO US Equity"],
+#         state_col=c("red",rgb(0.5,0.5,0.5),"green")
+#       )
+#       plot2matrix(x=fs$x,y=fs$y,col=fs$col)
+#     }),
+#     tlt_split=local({
+#       fs<-make_factor_split(
+#         pair,
+#         factor_local_tret[,"TLT US Equity"],
+#         state_col=c("red",rgb(0.5,0.5,0.5),"green")
+#       )
+#       plot2matrix(x=fs$x,y=fs$y,col=fs$col)
+#     }),
+#     msstersi_split=local({
+#       fs<-make_factor_split(
+#         pair,
+#         factor_local_tret[,"MSSTERSI Index"],
+#         state_col=c("red",rgb(0.5,0.5,0.5),"green")
+#       )
+#       plot2matrix(x=fs$x,y=fs$y,col=fs$col)
+#     }),
+#     coinxbe_split=local({
+#       fs<-make_factor_split(
+#         pair,
+#         factor_local_tret[,"COINXBE SS Equity"],
+#         state_col=c("red",rgb(0.5,0.5,0.5),"green")
+#       )
+#       plot2matrix(x=fs$x,y=fs$y,col=fs$col)
+#     }),
+#     duke_split=local({
+#       fs<-make_factor_split(
+#         pair,
+#         rowSums(pair_local_pnl),
+#         state_col=c("red",rgb(0.5,0.5,0.5),"green")
+#       )
+#       plot2matrix(x=fs$x,y=fs$y,col=fs$col)
+#     })
+#   )
+# },
+# pair=data.table(pair_local_pnl),
+# SIMPLIFY=FALSE
+# ))
+# 
+# log_code(features<-mapply(function(p){
+#   t(mapply(function(x)as.vector(col2rgb(x[[p]])),pictures))
+# },Reduce(union,mapply(names,pictures,SIMPLIFY=FALSE)),SIMPLIFY=FALSE))
+# 
+# log_code(tsne<-mapply(function(f){
+#   Rtsne(
+#     f,
+#     perplexity=20,
+#     pca=TRUE,
+#     stop_lying_iter=10,
+#     max_iter=1000,
+#     check_duplicates=FALSE
+#   )
+# },features,SIMPLIFY=FALSE))
+# 
+# 
+# plot_tsne<-function(
+#   fn,
+#   tsne,
+#   pictures,
+#   text_col="red",
+#   text_cex=0.75,
+#   text_fun=function(x)gsub("_","\n",x)
+# ){
+#   k<-sqrt(floor(sqrt(nrow(tsne$Y))+1)^2)
+#   m<-diag(k)
+#   gx<-as.vector(col(m))
+#   gy<-as.vector(row(m))
+#   tx<-rescale(tsne$Y[,1],range(gx))
+#   ty<-rescale(tsne$Y[,2],range(gy))
+#   tsnex<-matrix(tx,ncol=1)[,rep(1,length(gx))]
+#   tsney<-matrix(ty,ncol=1)[,rep(1,length(gx))]
+#   gridx<-matrix(gx,nrow=1)[rep(1,length(tx)),]
+#   gridy<-matrix(gy,nrow=1)[rep(1,length(tx)),]
+#   dx<-(tsnex-gridx)^2
+#   dy<-(tsney-gridy)^2
+#   d<-dx+dy
+#   t2g <- solve_LSAP(d)
+#   par(mai=c(0,0,0,0))
+#   plot(
+#     x=c(0.75,gx,ncol(m)+0.25),
+#     y=c(0.75,gy,nrow(m)+.25),
+#     col="white",
+#     axes=FALSE,
+#     xlab="",
+#     ylab="",
+#     main=""
+#   )
+#   for(i in seq_along(pictures))rasterImage(
+#     image=pictures[[i]][[fn]],
+#     xleft=gx[t2g[i]]-0.49,
+#     ybottom=gy[t2g[i]]-0.49,
+#     xright=gx[t2g[i]]+0.49,
+#     ytop=gy[t2g[i]]+0.49,
+#     interpolate=TRUE
+#   )
+#   abline(
+#     h=setdiff(unique(gx),range(gx)[1])-0.5,
+#     v=setdiff(unique(gy),range(gy)[1])-0.5,
+#     col=rgb(0.5,0.5,0.5,1)
+#   )
+#   if(!is.null(text_col))text(
+#     x=gx[t2g]-0.49,
+#     y=gy[t2g]+0.49,
+#     labels=text_fun(names(pictures)),
+#     cex=text_cex,
+#     col=text_col,
+#     adj=c(0,1)
+#   )
+# }
+# 
+# make_tsne_latex_table<-function(title,fn,tsne,pictures,text_col="blue")paste0(
+#   "\\begin{center}\n",
+#   "\\begin{tabular}{ m{1cm} | m{19cm} |}\n",
+#   "\\hline\n",
+#   "\\rotatebox{90}{\\bf ",
+#   tbl(title)
+#   ,"} & \n",
+#   make_plot(
+#     plot_tsne(fn,tsne[[fn]],pictures,text_col=text_col),
+#     width="19cm",
+#     height="19cm",
+#     envir=environment()
+#   ),
+#   "\\\\ \n",
+#   "\\hline\n",
+#   "\\end{tabular}\n",
+#   "\\end{center}\n",
+#   collapse=""
+# )
+# 
+# all_feature_tables<-paste(mapply(function(f,tsne,pictures){
+#   make_tsne_latex_table(
+#     title=latexTranslate(f),
+#     fn=f,
+#     tsne=tsne,
+#     pictures=pictures,
+#     text_col="black")
+# },names(tsne),MoreArgs = list(tsne=tsne,pictures=pictures)),collapse="\n")
+# 
+# 
+# 
+# log_code(all_pictures<-mapply(
+#   function(i){
+#     parts<-strsplit(i,"_",fixed=TRUE)[[1]]
+#     list(all=pictures[[c(parts[1],paste0(tail(parts,-1),collapse="_"))]])
+#   },
+#   kronecker(
+#     names(pictures),
+#     Reduce(union,mapply(names,pictures,SIMPLIFY=FALSE)),
+#     FUN=function(x,y)paste(x,y,sep="_")
+#   ),
+#   SIMPLIFY=FALSE
+# ))
+# 
+# log_code(all_features<-do.call(rbind,mapply(function(x)as.vector(col2rgb(x$all)),all_pictures,SIMPLIFY = FALSE)))
+# 
+# log_code(all_tsne<-Rtsne(
+#     all_features,
+#     perplexity=20,
+#     pca=TRUE,
+#     stop_lying_iter=10,
+#     max_iter=1000,
+#     check_duplicates=FALSE
+# ))
 
 @
 
-\newpage
-\section{\Sexpr{the_date} \Sexpr{selected_sheet} Pair layout}
+%\newpage
+%\section{\Sexpr{the_date} \Sexpr{selected_sheet} Pair layout}
 
 <<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
 @
 
-\Sexpr{all_feature_tables}
+%\Sexpr{all_feature_tables}
 
 
 <<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
 @
 
-\newpage
-\section{\Sexpr{the_date} \Sexpr{selected_sheet} everything}
+%\newpage
+%\section{\Sexpr{the_date} \Sexpr{selected_sheet} everything}
 
-\begin{center}
-\Sexpr{make_plot(plot_tsne("all",all_tsne,all_pictures,text_cex=0.2,text_col="black"),width="20cm",height="20cm")}
-\end{center}
+%\begin{center}
+%\Sexpr{make_plot(plot_tsne("all",all_tsne,all_pictures,text_cex=0.2,text_col="black"),width="20cm",height="20cm")}
+%\end{center}
 
 
 \end{document}
