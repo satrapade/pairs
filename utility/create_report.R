@@ -1,5 +1,15 @@
 #
-# create parametrized knitr report
+# create report
+# the report is located in the risk_reports directory of the repo
+# configuration is in the configuration directory of the repo
+# variables that need to be passed to the report should be placed in the envir argument
+# if we need produce multiple outputs from a single report controlled by input variables
+# we use the output_suffix argument to prevent individual outputs from overwriting 
+# other versions
+#
+# Example:
+#
+# create_report(report_name="sizing_report",output_suffix="_AC",envir=list2env(list(the_manager="AC")))
 #
 require(magrittr)
 require(timeDate)
@@ -25,7 +35,7 @@ create_report<-function(
   envir=new.env()
 )
 {
-  wd<-getwd()
+ wd<-getwd()
   setwd(config$risk_report_directory)
   
   res<-try(fetch_risk_report(report_name),silent=TRUE)
