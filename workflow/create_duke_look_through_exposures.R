@@ -97,6 +97,11 @@ duke_index_look_through<-do.call(rbind,mapply(function(ndx,exposure){
   res
 },duke_index_exposure$Ticker,duke_index_exposure$Exposure,SIMPLIFY = FALSE))
 
+fwrite(
+  duke_index_look_through,
+  "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_index_look_through.csv"
+)
+
 duke_look_through_exposure<-rbind(
   duke_equity_exposure[,c("Source","IndexTicker"):=list("Outright","None")],
   duke_index_look_through[,"Source":="LookThrough"][,.(Ticker,Exposure,Source,IndexTicker)]
@@ -120,6 +125,12 @@ duke_look_vs_outright<-duke_aggregated_look_through_exposure[,.(
     res[Ticker,"ICB_SECTOR_NAME"]
   })
 ]
+
+fwrite(
+  duke_look_vs_outright,
+  "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_look_vs_outright.csv"
+)
+
 
 #
 # manager look-through
@@ -224,17 +235,118 @@ duke_manager_look_vs_outright<-duke_manager_aggregated_look_through_exposure[,.(
 ]
 
 fwrite(
-  duke_look_vs_outright,
-  "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_look_vs_outright.csv"
-)
-
-fwrite(
-  duke_index_look_through,
-  "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_index_look_through.csv"
-)
-
-fwrite(
   duke_manager_look_vs_outright,
   "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_manager_look_vs_outright.csv"
 )
+
+
+#
+# pair look-through
+#
+
+duke_pair_exposure<-fread(
+  "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_pair_exposure.csv"
+) %>% {
+  names(.)[1]<-"Ticker"
+  .
+} %>% data.table::melt(
+  id.vars="Ticker",
+  measure.vars=tail(colnames(.),-1),
+  variable.name="Pair",
+  value.name="Exposure"
+) %>% {
+  .[abs(Exposure)>0]
+} %>% {
+  .[,.(Pair,Ticker,Exposure)]
+}
+
+duke_pair_index_exposure<-duke_pair_exposure[ticker_class(Ticker)=="index|nomatch"]
+duke_pair_equity_exposure<-duke_pair_exposure[ticker_class(Ticker)=="equity|nomatch"]
+
+duke_pair_index_look_through<-do.call(rbind,mapply(function(ndx,pair,exposure){
+  res<-fetch_index_weights(ndx)[,"Exposure":=exposure*Weight/sum(Weight)] 
+  bbg_ticker<-Rblpapi::bdp(paste0("/buid/",res$UniqueId),"PARSEKYABLE_DES")
+  res$Ticker<-bbg_ticker[paste0("/buid/",res$UniqueId),"PARSEKYABLE_DES"]
+  res$Pair<-pair
+  res[,.(IndexTicker, Pair,Ticker,Exposure)]
+},
+duke_pair_index_exposure$Ticker,
+duke_pair_index_exposure$Pair,
+duke_pair_index_exposure$Exposure,
+SIMPLIFY = FALSE
+))
+
+duke_pair_look_through_exposure<-rbind(
+  duke_pair_equity_exposure[,c("Source","IndexTicker"):=list("Outright","None")],
+  duke_pair_index_look_through[,"Source":="LookThrough"][,.(Pair,Ticker,Exposure,Source,IndexTicker)]
+)[,.(
+  Pair=Pair,
+  Ticker=Ticker,
+  Exposure=round(10000*Exposure,digits=1),
+  Source=Source,
+  IndexTicker=IndexTicker
+)][abs(Exposure)>0]
+
+duke_pair_aggregated_look_through_exposure<-duke_pair_look_through_exposure[,.(
+  Exposure=sum(Exposure)
+),keyby=c("Pair","Ticker","Source")]
+
+duke_pair_look_vs_outright<-duke_pair_aggregated_look_through_exposure[,.(
+  Outright=sum(Exposure[Source=="Outright"]),
+  LookThrough=sum(Exposure[Source=="LookThrough"])
+),keyby=c("Pair","Ticker")][,
+ c(
+   "Sector",
+   "SuperSector",
+   "Industry",
+   "Return"
+  ):=list(
+    Sector=local({
+      res<-Rblpapi::bdp(unique(Ticker),"ICB_SECTOR_NAME")
+      res[Ticker,"ICB_SECTOR_NAME"]
+    }),
+    SuperSector=local({
+      res<-Rblpapi::bdp(unique(Ticker),"ICB_SUPERSECTOR_NAME")
+      res[Ticker,"ICB_SUPERSECTOR_NAME"]
+    }),
+    Industry=local({
+      res<-Rblpapi::bdp(unique(Ticker),"ICB_INDUSTRY_NAME")
+      res[Ticker,"ICB_INDUSTRY_NAME"]
+    }),
+    Return=local({
+      res<-Rblpapi::bdp(unique(Ticker),"DAY_TO_DAY_TOT_RETURN_GROSS_DVDS")
+      scrub(res[Ticker,"DAY_TO_DAY_TOT_RETURN_GROSS_DVDS"])
+    })
+ )
+][,
+  c(
+    "SuperSectorIndex",
+    "SuperSectorIndexReturn"
+  ):=list(
+    SuperSectorIndex=local({
+      i<-match(SuperSector,super_sector_index_map$NAME)
+      res<-ifelse(
+        is.na(i),
+        "",
+        paste0(super_sector_index_map$INDEX[i],"P Index")  
+      )
+    }),
+    SuperSectorIndexReturn=local({
+      i<-match(SuperSector,super_sector_index_map$NAME)
+      res<-ifelse(
+        is.na(i),
+        0,
+        super_sector_index_map$P_Index[i]
+      )
+    })
+  )
+]
+
+fwrite(
+  duke_pair_look_vs_outright,
+  "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_pair_look_vs_outright.csv"
+)
+
+
+
 
