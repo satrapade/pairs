@@ -321,29 +321,39 @@ backtest_plot_table<-data.table(
       if(is.na(the_day))return(0)
       ndx<-bar_intervals$date==the_day & bar_intervals$day>0
       if(sum(ndx)<1){
-        res<-make_plot(expression({
-          plot(NA,type="n",xlab="",ylab="",xlim=c(0,1),ylim=c(0,1),axes=FALSE)
-          text(0.5,0.5,labels="No data",cex=5)
-        }),width="2cm",height="2cm",envir=environment())
+        res<-make_plot(
+          expression({
+            plot(NA,type="n",xlab="",ylab="",xlim=c(0,1),ylim=c(0,1),axes=FALSE)
+            text(0.5,0.5,labels="No data",cex=5)
+          }),
+          width="2cm",
+          height="2cm",
+          envir=environment()
+        )
         return(res)
       }
       pnls<-cumsum(10000*rowSums(mc(intraday_pair,paste0("^",p))[ndx,,drop=FALSE]))
       all_pnls<-cumsum(10000*rowSums(mc(intraday_pair,paste0("^",p))))
       day_pnl<-round(tail(pnls,1),digits=1)
       ylim<-c(min(pnls),max(pnls))
-      make_plot(expression({
-        par(mai=c(0,0,0,0))
-        plot(pnls,type="l",xlab="",ylab="",axes=FALSE,lwd=30,col=rgb(0,0,1,0.33),ylim=ylim)
-        abline(h=0,col="red")
-        text(
-          x=length(pnls)/2,
-          y=mean(ylim),
-          labels=ifelse(day_pnl>0,paste0("+",day_pnl),paste0("-",abs(day_pnl))),
-          col=ifelse(day_pnl>0,rgb(0,0.5,0),rgb(0.5,0,0)),
-          font=2,
-          cex=10
-        )
-      }),width="2cm",height="2cm",envir=environment())
+      make_plot(
+        expression({
+          par(mai=c(0,0,0,0))
+          plot(pnls,type="l",xlab="",ylab="",axes=FALSE,lwd=30,col=rgb(0,0,1,0.33),ylim=ylim)
+          abline(h=0,col="red")
+          text(
+            x=length(pnls)/2,
+            y=mean(ylim),
+            labels=ifelse(day_pnl>0,paste0("+",day_pnl),paste0("-",abs(day_pnl))),
+            col=ifelse(day_pnl>0,rgb(0,0.5,0),rgb(0.5,0,0)),
+            font=2,
+            cex=10
+          )
+        }),
+        width="2cm",
+        height="2cm",
+        envir=environment()
+      )
     },p=the_pairs)
   ),days_in_data,SIMPLIFY=FALSE))
 )
@@ -714,7 +724,10 @@ backtest_return_cross_section_table<-data.table(
         res<-make_plot(expression({
           plot(NA,type="n",xlab="",ylab="",xlim=c(0,1),ylim=c(0,1),axes=FALSE)
           text(0.5,0.5,labels="No data",cex=5)
-        }),width="2cm",height="2cm",envir=environment())
+        }),
+        width="2cm",
+        height="2cm",
+        envir=environment())
         return(res)
       }
       pnls<-colSums(mc(intraday_pair,paste0("^",p))[ndx,,drop=FALSE])
@@ -746,8 +759,11 @@ backtest_return_cross_section_table<-data.table(
           col=ifelse(sort(pnls)>0,rgb(0,1,0,0.5),rgb(1,0,0,0.5))
         )
         abline(h=0,v=findInterval(0,sort(pnls)),col=rgb(0,0,1,0.25),lwd=10)
-      }),width="2cm",height="2cm",envir=environment())
-    },p=the_pairs)
+      }),
+      width="2cm",
+      height="2cm",
+      envir=environment()
+    )},p=the_pairs)
   ),days_in_data,SIMPLIFY=FALSE))
 )
 
@@ -821,19 +837,23 @@ make_pm_date_cor_plot<-function(the_pm,the_day){
       sr<-sector_spreads[ndx,si,drop=FALSE]
       if(length(sr)!=length(pnls))return("pnls, sr have different lengths")
       make_plot(expression({
-        par(mai=c(0,0,0,0))
-        plot(pnls,sr,type="p",xlab="",ylab="",axes=FALSE,lwd=20,pch=19,col=rgb(0,0,1,0.2))
-        abline(h=0,col=rgb(1,0,0,0.2),lwd=20)
-        abline(v=0,col=rgb(1,0,0,0.2),lwd=20)
-        text(
-          x=mean(range(pnls)),
-          y=mean(range(sr)),
-          labels=paste0(gsub(" Index","",si),"\n",cm[si]),
-          col=ifelse(cm[si]>0,rgb(0,0.33,0),rgb(0.33,0,0)),
-          font=2,
-          cex=5
-        )
-      }),width="2cm",height="2cm",envir=environment())
+          par(mai=c(0,0,0,0))
+          plot(pnls,sr,type="p",xlab="",ylab="",axes=FALSE,lwd=20,pch=19,col=rgb(0,0,1,0.2))
+          abline(h=0,col=rgb(1,0,0,0.2),lwd=20)
+          abline(v=0,col=rgb(1,0,0,0.2),lwd=20)
+          text(
+            x=mean(range(pnls)),
+            y=mean(range(sr)),
+            labels=paste0(gsub(" Index","",si),"\n",cm[si]),
+            col=ifelse(cm[si]>0,rgb(0,0.33,0),rgb(0.33,0,0)),
+            font=2,
+            cex=5
+          )
+        }),
+        width="2cm",
+        height="2cm",
+        envir=environment()
+      )
   },silent=FALSE)
   if(class(res)=="try-error")return(latexTranslate(as.character(res)))
   res
