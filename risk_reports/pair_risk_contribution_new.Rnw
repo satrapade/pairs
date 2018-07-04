@@ -51,14 +51,15 @@ source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/log_cod
 if(!exists("append2log"))knitr::knit_exit() 
 if(!exists("log_code"))knitr::knit_exit() 
 
-append2log("pair_risk_contribution: start",append=TRUE)
+#append2log("pair_risk_contribution: start",append=TRUE)
 
 source("https://raw.githubusercontent.com/satrapade/latex_utils/master/latex_helpers_v2.R")
 source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/volatility_trajectory.R")
 source("https://raw.githubusercontent.com/satrapade/utility/master/nn_cast.R")
 
 pair_pnl<-readLines(
-  "https://raw.githubusercontent.com/satrapade/pairs/master/data/duke_pair_local_pnl.csv"
+  #"https://raw.githubusercontent.com/satrapade/pairs/master/data/duke_pair_local_pnl.csv"
+  "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_pair_local_pnl.csv"
 ) %>% paste0(collapse="\n") %>% fread
 
 pair_pnl_matrix<-structure(
@@ -66,8 +67,38 @@ pair_pnl_matrix<-structure(
   dimnames=list(pair_pnl$date,names(pair_pnl)[-1])
 )
 
+factor_tret<-readLines(
+  #"https://raw.githubusercontent.com/satrapade/pairs/master/data/factor_local_tret.csv"
+  "N:/Depts/Share/UK Alpha Team/Analytics/market_data/factor_local_tret.csv"
+) %>% paste0(collapse="\n") %>% fread
+
+factor_tret_matrix<-structure(
+  do.call(cbind,factor_tret[,-1,with=FALSE]),
+  dimnames=list(factor_tret$date,names(factor_tret)[-1])
+)
+
+duke_pair_look_vs_outright<-readLines(
+  "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_pair_look_vs_outright.csv"
+) %>% paste0(collapse="\n") %>% fread
+
+look_through_pair_exposure<-duke_pair_look_vs_outright[
+  TRUE,
+  .(
+    Exposure=sum(Outright+LookThrough)
+  ),
+  keyby=c("Pair","SuperSectorIndex")
+]
+
+pair_lt_matrix<-NNcast(
+  look_through_pair_exposure,
+  i_name="Pair",
+  j_name="gsub(' Index','',SuperSectorIndex)%>%{ifelse(.=='','Unknown',.)}",
+  v_name="Exposure"
+)%>%{.[,colnames(.)!="Unknown"]}
+
 pair_exposure<- readLines(
-  "https://raw.githubusercontent.com/satrapade/pairs/master/data/duke_pair_exposure.csv"
+  #"https://raw.githubusercontent.com/satrapade/pairs/master/data/duke_pair_exposure.csv"
+  "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_pair_exposure.csv"
 ) %>% 
   paste0(collapse="\n") %>% 
   fread %>% 
@@ -88,6 +119,8 @@ gross_fraction <- pair_exposure[,.(gross=sum(abs(exposure))),keyby=pair] %>%
   {setNames(.$gross,.$pair)} %>%
   {./sum(.)}
 
+pair_weights<-total_gross*gross_fraction
+
 stopifnot(all(names(gross_fraction)==colnames(pair_pnl_matrix)))
 
 pair_tret <- pair_pnl_matrix%*%diag(10000/(total_gross*gross_fraction)) %>%
@@ -99,40 +132,97 @@ pair_stats<-data.table(
   gross_fraction=structure(
     100*gross_fraction,
     format=quote(round(this,digits=1)),
-    hdr=tbl(c("Gross","pct","total"),align="l")
+    hdr=tbl(c("GRS","pct","tot"),align="l")
   ),
   gross=structure(
     total_gross*gross_fraction,
     format=quote(round(this,digits=1)),
-    hdr=tbl(c("Gross","basis","points"),align="l")
+    hdr=tbl(c("ACT","gross","bps"),align="l")
+  ),
+  rp_gross=structure(
+    (mean(apply(pair_tret,2,sd))/apply(pair_tret,2,sd))%>%{total_gross*./sum(.)}, # risk parity
+    format=quote(n_fmt(round(this,digits=1))),
+    hdr=tbl(c("RP","gross","bps"),align="l")
+  ),
+  gmv_gross=structure(
+    solve(cov(pair_tret), numeric(ncol(pair_tret)) + 1) %>% {total_gross*./sum(.)}, # global mean variance
+    format=quote(n_fmt(round(this,digits=1))),
+    hdr=tbl(c("GMV","gross","bps"),align="l")
   ),
   marginal_risk_contribution=structure(
     mrc(total_gross*gross_fraction,cov(pair_tret)),
-    format=quote(round(this,digits=1)),
-    hdr=tbl(c("Marginal","risk","pct","total"),align="l")
+    format=quote(n_fmt(round(this,digits=1))),
+    hdr=tbl(c("MRC","risk","cntr","pct"),align="l")
   ),
   volatility=structure(
     apply(pair_pnl_matrix,2,sd)*10000,
     format=quote(round(this,digits=1)),
-    hdr=tbl(c("Volatility","daily","bps"),align="l")
+    hdr=tbl(c("Vol","daily","bps"),align="l")
   )
 )[order(-marginal_risk_contribution)][TRUE,
   c(
     "cum_marginal_risk",
-    "volatility_trajectory"
+    "volatility_trajectory",
+    "SX3P",
+    "SX4P",
+    "SX7P",
+    "SX86P",
+    "SX8P",
+    "SXAP",
+    "SXDP",
+    "SXEP",
+    "SXFP",
+    "SXIP",
+    "SXKP",
+    "SXMP",
+    "SXNP",
+    "SXOP",
+    "SXPP",
+    "SXQP",
+    "SXRP",
+    "SXTP",
+    "GROSS"
   ):=list(
     structure(
       cumsum(marginal_risk_contribution),
       format=quote(round(this,digits=1)),
-      hdr=tbl(c("Cummulative","marginal","risk","pct"),align="l") 
+      hdr=tbl(c("Cum","marg","risk","pct"),align="l") 
     ),
     structure(
       volatility_trajectory_mrc(pair_tret,setNames(gross,pair)),
       format=quote(round(this,digits=2)),
-      hdr=tbl(c("Volatility","trajectory","marginal","risk","sequence"),align="l") 
-    )
+      hdr=tbl(c("Vol","traj","marg","risk","seq"),align="l") 
+    ),
+    structure(pair_lt_matrix[pair,"SX3P"],format=quote(scol(n_fmt(round(this,digits=0)),this))),
+    structure(pair_lt_matrix[pair,"SX4P"],format=quote(scol(n_fmt(round(this,digits=0)),this))),
+    structure(pair_lt_matrix[pair,"SX7P"],format=quote(scol(n_fmt(round(this,digits=0)),this))),
+    structure(pair_lt_matrix[pair,"SX86P"],format=quote(scol(n_fmt(round(this,digits=0)),this))),
+    structure(pair_lt_matrix[pair,"SX8P"],format=quote(scol(n_fmt(round(this,digits=0)),this))),
+    structure(pair_lt_matrix[pair,"SXAP"],format=quote(scol(n_fmt(round(this,digits=0)),this))),
+    structure(pair_lt_matrix[pair,"SXDP"],format=quote(scol(n_fmt(round(this,digits=0)),this))),
+    structure(pair_lt_matrix[pair,"SXEP"],format=quote(scol(n_fmt(round(this,digits=0)),this))),
+    structure(pair_lt_matrix[pair,"SXFP"],format=quote(scol(n_fmt(round(this,digits=0)),this))),
+    structure(pair_lt_matrix[pair,"SXIP"],format=quote(scol(n_fmt(round(this,digits=0)),this))),
+    structure(pair_lt_matrix[pair,"SXKP"],format=quote(scol(n_fmt(round(this,digits=0)),this))),
+    structure(pair_lt_matrix[pair,"SXMP"],format=quote(scol(n_fmt(round(this,digits=0)),this))),
+    structure(pair_lt_matrix[pair,"SXNP"],format=quote(scol(n_fmt(round(this,digits=0)),this))),
+    structure(pair_lt_matrix[pair,"SXOP"],format=quote(scol(n_fmt(round(this,digits=0)),this))),
+    structure(pair_lt_matrix[pair,"SXPP"],format=quote(scol(n_fmt(round(this,digits=0)),this))),
+    structure(pair_lt_matrix[pair,"SXQP"],format=quote(scol(n_fmt(round(this,digits=0)),this))),
+    structure(pair_lt_matrix[pair,"SXRP"],format=quote(scol(n_fmt(round(this,digits=0)),this))),
+    structure(pair_lt_matrix[pair,"SXTP"],format=quote(scol(n_fmt(round(this,digits=0)),this))),
+    structure(rowSums(abs(pair_lt_matrix[pair,])),format=quote(scol(n_fmt(round(this,digits=0)),this,100)))
   )
 ]
+a1<-solve(cov(pair_tret), numeric(ncol(pair_tret)) + 1) %>% {total_gross*./sum(.)}
+
+scol<-function(t,s,th=50){
+  r1<-ifelse(s<(-th),paste0("\\textcolor{red}{\\bf ",t,"}"),"")
+  r2<-ifelse(s>(+th),paste0("\\textcolor{black}{\\bf ",t,"}"),"")
+  r3<-ifelse(abs(s)<=th,t,"")
+  paste0(r1,r2,r3)
+}
+
 
 #plot(volatility_trajectory(pair_tret,total_gross*gross_fraction))
 
@@ -146,10 +236,11 @@ pair_stats<-data.table(
 \begin{center}
 \Sexpr{ntable(
   df=pair_stats,
-  scale="0.66"
+  scale="0.50"
 )}
 \end{center}
 
+\newpage
 \section{Pair diversification}
 
 \vskip 5mm
@@ -179,3 +270,4 @@ This plot illustrates the impact of diversification on DUKE's daily volatility.
 )}
 \end{center}
 \end{document}
+
