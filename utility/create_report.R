@@ -1,29 +1,47 @@
 #
 # create parametrized knitr report
 #
+require(magrittr)
+require(timeDate)
 require(stringi)
+require(knitr)
 
 create_report<-function(
   report_name,
   output_suffix="",
   push_to_directory=NULL,
-  config=get("config",parent.frame()),
+  config=local({
+    is(exists("config",parent.frame())){
+      get("config",parent.frame())
+    }else{
+      config<-new.env()
+      source(
+        file="https://raw.githubusercontent.com/satrapade/pairs/master/configuration/workflow_config.R",
+        local=config
+      )
+      config
+   }  
+  }),
   envir=new.env()
 )
 {
   wd<-getwd()
   setwd(config$risk_report_directory)
+  
   res<-try(fetch_risk_report(report_name),silent=TRUE)
+  
   if(any(class(res) %in% "try-error")){
     append2log(paste0("!!!>ERROR<!!! fetch:",report_name))
     setwd(wd)
     return(paste0(report_name,": error: cant fetch report"))
   }
+  
   if(!file.exists(paste0(report_name,".Rnw"))){
     append2log(paste0("!!!>ERROR<!!! report does not exist:",report_name))
     setwd(wd)
     return(paste0(report_name,": error: report does not exist"))
   }
+  
   append2log(paste0(report_name,output_suffix,": creating report"))
   
   # remove figures 
@@ -40,9 +58,12 @@ create_report<-function(
   
   # knit .Rnw file
   append2log(paste0(report_name,": knitting Rnw:"))
+  knitr_fn<-paste0(config$risk_report_directory,"/",report_name,".Rnw")
+  tex_fn<-paste0(config$risk_report_directory,"/",report_name,output_suffix,".tex")
+  
   res<-try(knit(
-    input=paste0(config$risk_report_directory,"/",report_name,".Rnw"),
-    output=paste0(config$risk_report_directory,"/",report_name,output_suffix,".tex"),
+    input=knitr_fn,
+    output=tex_fn,
     envir=envir
   ),silent = TRUE)
   
