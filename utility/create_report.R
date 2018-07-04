@@ -11,7 +11,7 @@ create_report<-function(
   output_suffix="",
   push_to_directory=NULL,
   config=local({
-    is(exists("config",parent.frame())){
+    if(exists("config",parent.frame())){
       get("config",parent.frame())
     }else{
       config<-new.env()
