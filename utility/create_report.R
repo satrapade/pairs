@@ -1,6 +1,7 @@
 #
 # create parametrized knitr report
 #
+require(stringi)
 
 create_report<-function(
   report_name,
