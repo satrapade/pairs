@@ -59,8 +59,8 @@ source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/volatil
 source("https://raw.githubusercontent.com/satrapade/utility/master/nn_cast.R")
 
 pair_pnl<-readLines(
-  "https://raw.githubusercontent.com/satrapade/pairs/master/data/duke_pair_local_pnl.csv"
-  #"N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_pair_local_pnl.csv"
+  #"https://raw.githubusercontent.com/satrapade/pairs/master/data/duke_pair_local_pnl.csv"
+  "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_pair_local_pnl.csv"
 ) %>% paste0(collapse="\n") %>% fread
 
 pair_pnl_matrix<-structure(
@@ -69,8 +69,8 @@ pair_pnl_matrix<-structure(
 )
 
 factor_tret<-readLines(
-  "https://raw.githubusercontent.com/satrapade/pairs/master/data/factor_local_tret.csv"
-  #"N:/Depts/Share/UK Alpha Team/Analytics/market_data/factor_local_tret.csv"
+  #"https://raw.githubusercontent.com/satrapade/pairs/master/data/factor_local_tret.csv"
+  "N:/Depts/Share/UK Alpha Team/Analytics/market_data/factor_local_tret.csv"
 ) %>% paste0(collapse="\n") %>% fread
 
 factor_tret_matrix<-structure(
@@ -80,8 +80,8 @@ factor_tret_matrix<-structure(
 {colnames(.)<-gsub("( Index)|( Equity)","",colnames(.));.}
 
 duke_pair_look_vs_outright<-readLines(
-  #"N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_pair_look_vs_outright.csv"
-  "https://raw.githubusercontent.com/satrapade/pairs/master/data/duke_pair_look_vs_outright.csv"
+  "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_pair_look_vs_outright.csv"
+  #"https://raw.githubusercontent.com/satrapade/pairs/master/data/duke_pair_look_vs_outright.csv"
 ) %>% paste0(collapse="\n") %>% fread
 
 look_through_pair_exposure<-duke_pair_look_vs_outright[
@@ -100,8 +100,8 @@ pair_lt_matrix<-NNcast(
 )%>%{.[,colnames(.)!="Unknown"]}
 
 pair_exposure<- readLines(
-  "https://raw.githubusercontent.com/satrapade/pairs/master/data/duke_pair_exposure.csv"
-  #"N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_pair_exposure.csv"
+  #"https://raw.githubusercontent.com/satrapade/pairs/master/data/duke_pair_exposure.csv"
+  "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_pair_exposure.csv"
 ) %>% 
   paste0(collapse="\n") %>% 
   fread %>% 
