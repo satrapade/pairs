@@ -1,0 +1,15 @@
+item,name,r_color,latex_col,latex_col_def
+ABC,ABC,#FF0000FF,FF0000,"\definecolor{ABC}{HTML}{FF0000}
+"
+AC,AC,#FFDB00FF,FFDB00,"\definecolor{AC}{HTML}{FFDB00}
+"
+DH,DH,#49FF00FF,49FF00,"\definecolor{DH}{HTML}{49FF00}
+"
+GJ,GJ,#00FF92FF,00FF92,"\definecolor{GJ}{HTML}{00FF92}
+"
+IB,IB,#0092FFFF,0092FF,"\definecolor{IB}{HTML}{0092FF}
+"
+JR,JR,#4900FFFF,4900FF,"\definecolor{JR}{HTML}{4900FF}
+"
+MC,MC,#FF00DBFF,FF00DB,"\definecolor{MC}{HTML}{FF00DB}
+"
