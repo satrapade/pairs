@@ -45,6 +45,7 @@ source(
   file="https://raw.githubusercontent.com/satrapade/pairs/master/configuration/workflow_config.R",
   local=config
 )
+source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/fetch_risk_report.R")
 source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/append2log.R")
 source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/log_code.R")
 source("https://raw.githubusercontent.com/satrapade/utility/master/ticker_class.R")
@@ -58,9 +59,41 @@ source("https://raw.githubusercontent.com/satrapade/latex_utils/master/latex_hel
 source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/volatility_trajectory.R")
 source("https://raw.githubusercontent.com/satrapade/utility/master/nn_cast.R")
 
+off_site=FALSE
+
+bar_intervals<-readLines(
+  if(off_site){
+    "https://raw.githubusercontent.com/satrapade/pairs/master/data/bar_intervals.csv"
+  }else{
+  "N:/Depts/Share/UK Alpha Team/Analytics/market_data/bar_intervals.csv"
+  }
+) %>% paste0(collapse="\n") %>% fread
+
+intraday_perf<-readLines(
+  if(off_site){
+    "https://raw.githubusercontent.com/satrapade/pairs/master/data/intraday_perf.csv"
+  } else {
+    "N:/Depts/Share/UK Alpha Team/Analytics/market_data/intraday_perf.csv"
+  }
+) %>% paste0(collapse="\n") %>% fread %>% {.[bar_intervals$day>0]} %>%
+as.matrix
+
+intraday_pair<-readLines(
+  if(off_site){
+    "https://raw.githubusercontent.com/satrapade/pairs/master/data/intraday_pair.csv"
+  } else {
+    "N:/Depts/Share/UK Alpha Team/Analytics/market_data/intraday_pair.csv"
+  }
+) %>% paste0(collapse="\n") %>% fread %>%  {.[bar_intervals$day>0]} %>%
+as.matrix
+
+
 pair_pnl<-readLines(
-  #"https://raw.githubusercontent.com/satrapade/pairs/master/data/duke_pair_local_pnl.csv"
-  "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_pair_local_pnl.csv"
+  if(off_site){
+    "https://raw.githubusercontent.com/satrapade/pairs/master/data/duke_pair_local_pnl.csv"
+  } else {
+    "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_pair_local_pnl.csv"
+  }
 ) %>% paste0(collapse="\n") %>% fread
 
 pair_pnl_matrix<-structure(
@@ -69,8 +102,19 @@ pair_pnl_matrix<-structure(
 )
 
 factor_tret<-readLines(
-  #"https://raw.githubusercontent.com/satrapade/pairs/master/data/factor_local_tret.csv"
-  "N:/Depts/Share/UK Alpha Team/Analytics/market_data/factor_local_tret.csv"
+  if(off_site){
+    "https://raw.githubusercontent.com/satrapade/pairs/master/data/factor_local_tret.csv"
+  } else {
+    "N:/Depts/Share/UK Alpha Team/Analytics/market_data/factor_local_tret.csv"
+  }
+) %>% paste0(collapse="\n") %>% fread
+
+portfolio_local_tret<-readLines(
+  if(off_site){
+    "https://raw.githubusercontent.com/satrapade/pairs/master/data/portfolio_local_tret.csv"
+  } else {
+    "N:/Depts/Share/UK Alpha Team/Analytics/market_data/portfolio_local_tret.csv"
+  }
 ) %>% paste0(collapse="\n") %>% fread
 
 factor_tret_matrix<-structure(
@@ -80,9 +124,23 @@ factor_tret_matrix<-structure(
 {colnames(.)<-gsub("( Index)|( Equity)","",colnames(.));.}
 
 duke_pair_look_vs_outright<-readLines(
-  "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_pair_look_vs_outright.csv"
-  #"https://raw.githubusercontent.com/satrapade/pairs/master/data/duke_pair_look_vs_outright.csv"
+  if(off_site){
+    "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_pair_look_vs_outright.csv"
+  } else {
+  "https://raw.githubusercontent.com/satrapade/pairs/master/data/duke_pair_look_vs_outright.csv"
+  }
 ) %>% paste0(collapse="\n") %>% fread
+
+duke_pair_look_vs_outright[
+  TRUE,
+  .(
+    long_exposure=sum(pmax(Outright,0)+pmax(LookThrough,0)),
+    short_exposure=sum(pmax(-Outright,0)+pmax(-LookThrough,0))
+  ),
+  keyby=c("SuperSectorIndex")
+]
+
+
 
 look_through_pair_exposure<-duke_pair_look_vs_outright[
   TRUE,
@@ -99,9 +157,21 @@ pair_lt_matrix<-NNcast(
   v_name="Exposure"
 )%>%{.[,colnames(.)!="Unknown"]}
 
+
+intraday_sector<-grepl(
+    paste0("(^",colnames(pair_lt_matrix),")",collapse = "|"),
+    colnames(intraday_perf)
+  ) %>% 
+  {colnames(intraday_perf)[.]} %>%
+  {intraday_perf[,.]} %>%
+  {colnames(.)<-gsub(" Index","",colnames(.));.}
+
 pair_exposure<- readLines(
-  #"https://raw.githubusercontent.com/satrapade/pairs/master/data/duke_pair_exposure.csv"
-  "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_pair_exposure.csv"
+  if(off_site){
+    "https://raw.githubusercontent.com/satrapade/pairs/master/data/duke_pair_exposure.csv"
+  } else {
+    "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_pair_exposure.csv"
+  }
 ) %>% 
   paste0(collapse="\n") %>% 
   fread %>% 
@@ -128,6 +198,7 @@ stopifnot(all(names(gross_fraction)==colnames(pair_pnl_matrix)))
 
 pair_tret <- pair_pnl_matrix%*%diag(10000/(total_gross*gross_fraction)) %>%
 {dimnames(.)<-dimnames(pair_pnl_matrix);.}
+
 
 #
 # display stuff
@@ -187,7 +258,8 @@ pair_stats<-data.table(
     "volatility_trajectory",
     names(plt),
     "GROSS",
-    "CORR"
+    "corr_day",
+    "corr_10min"
   ):=list(structure(
       cumsum(marginal_risk_contribution),
       format=quote(round(this,digits=1)),
@@ -206,10 +278,18 @@ pair_stats<-data.table(
       data.table(pair_tret[,pair]),
       data.table(factor_tret_matrix[,colnames(pair_lt_matrix)]%*%t(pair_lt_matrix[pair,]))
     ),
-    format=quote(s1col(n_fmt(round(this,digits=0)),this,50))
+    format=quote(s1col(n_fmt(round(this,digits=0)),this,50)),
+    hdr=tbl(c("COR","2","yr","daily"),align="@{}l@{}") 
+ )))%>%c(list(structure(
+    100*mapply(
+      cor,
+      data.table(intraday_pair[,pair]),
+      data.table(intraday_sector[,colnames(pair_lt_matrix)]%*%t(pair_lt_matrix[pair,]))
+    ),
+    format=quote(s1col(n_fmt(round(this,digits=0)),this,50)),
+    hdr=tbl(c("COR","2","wk","10min"),align="@{}l@{}") 
  )))
 ]
-a1<-solve(cov(pair_tret), numeric(ncol(pair_tret)) + 1) %>% {total_gross*./sum(.)}
 
 s1col<-function(t,s,th=50){
   r1<-ifelse(s>(+th),paste0("\\textcolor{red}{\\bf ",t,"}"),"")
@@ -223,14 +303,6 @@ scol<-function(t,s,th=50){
   r3<-ifelse(abs(s)<=th,t,"")
   paste0(r1,r2,r3)
 }
-
-pair<-rownames(pair_lt_matrix)
-
-mapply(
- cor,
- data.table(pair_tret),
- data.table(factor_tret_matrix[,colnames(pair_lt_matrix)]%*%t(pair_lt_matrix))
-)
 
 
 @
@@ -290,13 +362,6 @@ that some group of pairs might hurt portfolio diversification
 <<,cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
 pair_gross<-total_gross*gross_fraction
 pair_sd<-apply(pair_tret%*%diag(pair_gross),2,sd)
-
-pair_sd[order(-pair_sd)] %>%
-  cumsum %>%
-  {./seq_along(.)}
-
-returns=pair_tret
-ptf=pair_gross
 
 tri<-function(n,d=1,s=1)(s*row(diag(n))<s*col(diag(n)))+d*diag(n)
 volatility_trajectory<-function(
@@ -409,4 +474,5 @@ the count of pairs in the portfolio.
 
 
 \end{document}
+
 
