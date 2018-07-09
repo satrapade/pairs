@@ -59,7 +59,7 @@ source("https://raw.githubusercontent.com/satrapade/latex_utils/master/latex_hel
 source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/volatility_trajectory.R")
 source("https://raw.githubusercontent.com/satrapade/utility/master/nn_cast.R")
 
-off_site=FALSE
+off_site=TRUE
 
 bar_intervals<-readLines(
   if(off_site){
