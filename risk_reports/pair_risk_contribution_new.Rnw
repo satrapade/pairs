@@ -49,6 +49,7 @@ source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/fetch_r
 source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/append2log.R")
 source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/log_code.R")
 source("https://raw.githubusercontent.com/satrapade/utility/master/ticker_class.R")
+source("https://raw.githubusercontent.com/satrapade/utility/master/scrub.R")
 
 if(!exists("append2log"))knitr::knit_exit() 
 if(!exists("log_code"))knitr::knit_exit() 
@@ -59,7 +60,7 @@ source("https://raw.githubusercontent.com/satrapade/latex_utils/master/latex_hel
 source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/volatility_trajectory.R")
 source("https://raw.githubusercontent.com/satrapade/utility/master/nn_cast.R")
 
-off_site=TRUE
+off_site=FALSE
 
 bar_intervals<-readLines(
   if(off_site){
@@ -101,6 +102,32 @@ pair_pnl_matrix<-structure(
   dimnames=list(pair_pnl$date,names(pair_pnl)[-1])
 )
 
+pair_long_pnl<-readLines(
+  if(off_site){
+    "https://raw.githubusercontent.com/satrapade/pairs/master/data/duke_pair_long_pnl.csv"
+  } else {
+    "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_pair_local_pnl.csv"
+  }
+) %>% paste0(collapse="\n") %>% fread
+
+pair_long_pnl_matrix<-structure(
+  do.call(cbind,pair_long_pnl[,-1,with=FALSE]),
+  dimnames=list(pair_long_pnl$date,names(pair_long_pnl)[-1])
+)
+
+pair_short_pnl<-readLines(
+  if(off_site){
+    "https://raw.githubusercontent.com/satrapade/pairs/master/data/duke_pair_short_pnl.csv"
+  } else {
+    "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_pair_local_pnl.csv"
+  }
+) %>% paste0(collapse="\n") %>% fread
+
+pair_short_pnl_matrix<-structure(
+  do.call(cbind,pair_short_pnl[,-1,with=FALSE]),
+  dimnames=list(pair_short_pnl$date,names(pair_short_pnl)[-1])
+)
+
 factor_tret<-readLines(
   if(off_site){
     "https://raw.githubusercontent.com/satrapade/pairs/master/data/factor_local_tret.csv"
@@ -125,20 +152,12 @@ factor_tret_matrix<-structure(
 
 duke_pair_look_vs_outright<-readLines(
   if(off_site){
-    "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_pair_look_vs_outright.csv"
+    "https://raw.githubusercontent.com/satrapade/pairs/master/data/duke_pair_look_vs_outright.csv"
   } else {
-  "https://raw.githubusercontent.com/satrapade/pairs/master/data/duke_pair_look_vs_outright.csv"
+    "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_pair_look_vs_outright.csv"
   }
 ) %>% paste0(collapse="\n") %>% fread
 
-duke_pair_look_vs_outright[
-  TRUE,
-  .(
-    long_exposure=sum(pmax(Outright,0)+pmax(LookThrough,0)),
-    short_exposure=sum(pmax(-Outright,0)+pmax(-LookThrough,0))
-  ),
-  keyby=c("SuperSectorIndex")
-]
 
 
 
@@ -155,6 +174,20 @@ pair_lt_matrix<-NNcast(
   i_name="Pair",
   j_name="gsub(' Index','',SuperSectorIndex)%>%{ifelse(.=='','Unknown',.)}",
   v_name="Exposure"
+)%>%{.[,colnames(.)!="Unknown"]}
+
+pair_ltlong_matrix<-NNcast(
+  look_through_pair_exposure,
+  i_name="Pair",
+  j_name="gsub(' Index','',SuperSectorIndex)%>%{ifelse(.=='','Unknown',.)}",
+  v_name="pmax(Exposure,0)"
+)%>%{.[,colnames(.)!="Unknown"]}
+
+pair_ltshort_matrix<-NNcast(
+  look_through_pair_exposure,
+  i_name="Pair",
+  j_name="gsub(' Index','',SuperSectorIndex)%>%{ifelse(.=='','Unknown',.)}",
+  v_name="pmax(-Exposure,0)"
 )%>%{.[,colnames(.)!="Unknown"]}
 
 
@@ -193,6 +226,8 @@ gross_fraction <- pair_exposure[,.(gross=sum(abs(exposure))),keyby=pair] %>%
   {./sum(.)}
 
 pair_weights<-total_gross*gross_fraction
+
+pair_gross<-total_gross*gross_fraction
 
 stopifnot(all(names(gross_fraction)==colnames(pair_pnl_matrix)))
 
@@ -317,38 +352,358 @@ scol<-function(t,s,th=50){
 )}
 \end{center}
 
+
+
+<<,cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+lt_tret_matrix<-factor_tret_matrix[,colnames(pair_lt_matrix)]
+pair_mrc<--sort(setNames(-mrc(pair_gross,cov(pair_tret)),colnames(pair_tret)))
+
+all_contributions<-list(
+  DUKE50=which(cumsum(pair_mrc)<=50),
+  DUKE75=which(cumsum(pair_mrc)<=75),
+  DUKE90=which(cumsum(pair_mrc)<=90),
+  DUKE10=which(cumsum(pair_mrc)>90),
+  "DUKE\\_ALL"=cumsum(pair_mrc*0+1)
+) %>%
+{mapply(function(n)paste(paste0("(",names(pair_mrc)[n],")"),collapse="|"),.)} 
+
+all_managers<-colnames(pair_pnl_matrix) %>%
+  { gsub("[0-9]+$","",.) } %>%
+  unique %>%
+  sort %>%
+  {setNames(paste0("^",.),.)} %>%
+  {c(.,ALL="*")}
+
+all_sectors<-duke_pair_look_vs_outright[abs(Outright)>0,.(
+  gross=sum(abs(Outright))
+),keyby=list(
+  pair=Pair,
+  sector=gsub(" Index","",SuperSectorIndex)%>%{ifelse(.=="","NONE",.)}
+)] %>%
+ {mapply(
+   function(the_sector).[sector==the_sector,sort(unique(pair))],
+   the_sector=gsub(" Index","",sort(unique(.$sector))),
+   SIMPLIFY=FALSE
+ )} %>%
+{mapply(function(n)paste(paste0("(",n,")"),collapse="|"),.)} 
+
+
+all_subsets<-colnames(pair_pnl_matrix) %>%
+  { gsub("[0-9]+$","",.) } %>%
+  unique %>%
+  sort %>%
+  {setNames(paste0("^",.),.)} %>%
+  {c(.,ALL="*")}
+
+pair2subset<-function(all_subsets)mapply(
+  . %>%
+    {setNames(grepl(.,colnames(pair_pnl_matrix)),colnames(pair_pnl_matrix))},
+  all_subsets
+)
+      
+# actual all, long, short P&Ls
+subset_pnl<-function(all_subsets)pair_pnl_matrix%*%pair2subset(all_subsets) 
+subset_long_pnl<-function(all_subsets)pair_long_pnl_matrix%*%pair2subset(all_subsets) 
+subset_short_pnl<-function(all_subsets)pair_short_pnl_matrix%*%pair2subset(all_subsets) 
+# look-through all, long, short P&Ls
+subset_lt_pnl<-function(all_subsets)lt_tret_matrix%*%(t(pair_lt_matrix)%*%pair2subset(all_subsets))
+subset_ltlong_pnl<-function(all_subsets)lt_tret_matrix%*%(t(pair_ltlong_matrix)%*%pair2subset(all_subsets))
+subset_ltshort_pnl<-function(all_subsets)lt_tret_matrix%*%(t(pair_ltshort_matrix)%*%pair2subset(all_subsets))
+
+subset_exposure_df<-function(all_subsets)duke_pair_look_vs_outright[
+  TRUE,
+  list(
+    super_sector=structure(
+      SuperSector[1],
+      format=quote(abbreviate(ifelse(this=="","None",latexTranslate(this)),8)),
+      hdr=tbl(c("Sector"),align="@{}l@{}")
+    )
+  )%>%c(setNames(mapply(function(subset_name,subset,direction){
+        dir<-if(direction=="Long"){+1}else{-1}
+        include_pair=grepl(subset,Pair)
+        structure(
+          sum(pmax(dir*Outright[include_pair],0)+pmax(dir*LookThrough[include_pair],0)),
+          format=quote(comma(this,digits=0)),
+          hdr=tbl(c(subset_name,direction,"{\\tiny OR+LT}"),align="@{}l@{}")
+        )
+      },
+      subset_name=rep(names(all_subsets),each=2),
+      subset=rep(all_subsets,each=2),
+      direction=rep(c("Long","Short"),times=length(all_subsets)),
+      SIMPLIFY=FALSE
+    ),
+    paste0(rep(names(all_subsets),each=2),"_",rep(c("long","short"),times=length(all_subsets)))
+  )),
+  keyby=list(super_sector_index=structure(
+    gsub(" Index$","",SuperSectorIndex),
+    hdr=tbl(c("Sector","Index"),align="@{}l@{}")
+  ))
+]
+
+
+#
+# look through vs actual correlations for long and short leg
+#
+
+
+safe_cor<-function(x,y)if(any(mapply(sd,list(x,y))<1e-10)){"-"}else{
+  paste0(round(100*cor(x,y),digits=0))
+}
+
+subset_fn<-list(
+  sum_risk_contribution = . %>% pair2subset %>% 
+    {setNames(mrc(pair_gross,cov(pair_tret)),rownames(.)) %*% .} %>%
+    drop %>% round(digits=1),
+  gross_fraction =.%>% {drop((100*pair_gross/total_gross)%*%pair2subset(.))} %>% 
+    {setNames(comma(.,digits=0),names(.))},
+  sum_gross =.%>% {drop(pair_gross%*%pair2subset(.))} %>% {setNames(comma(.,digits=0),names(.))},
+  count_pair= . %>% pair2subset %>% colSums,
+  count_pm=function(all_subsets)mapply(
+    function(p){
+      ndx<-duke_pair_look_vs_outright[TRUE,grepl(p,Pair)&abs(Outright)>0]
+      pairs<-duke_pair_look_vs_outright[ndx,Pair]
+      length(unique(gsub("[0-9]+$","",pairs)))
+    },
+    all_subsets
+  ),
+  count_ticker=function(all_subsets)mapply(
+    function(p){
+      ndx<-duke_pair_look_vs_outright[TRUE,grepl(p,Pair)&abs(Outright)>0]
+      tickers<-duke_pair_look_vs_outright[ndx,Ticker]
+      length(unique(tickers))
+    },
+    all_subsets
+  ),
+  count_long_ticker=function(all_subsets)mapply(
+    function(p){
+      ndx<-duke_pair_look_vs_outright[TRUE,grepl(p,Pair) & Outright>0]
+      tickers<-duke_pair_look_vs_outright[ndx,Ticker]
+      length(unique(tickers))
+    },
+    all_subsets
+  ),
+  count_short_ticker=function(all_subsets)mapply(
+    function(p){
+      ndx<-duke_pair_look_vs_outright[TRUE,grepl(p,Pair) & Outright<0]
+      tickers<-duke_pair_look_vs_outright[ndx,Ticker]
+      length(unique(tickers))
+    },
+    all_subsets
+  ),
+  cor_long_vs_short =.%>% {mapply(safe_cor,data.table(subset_long_pnl(.)),data.table(subset_short_pnl(.)))},
+  cor_all_vs_LT_all =.%>% {mapply(safe_cor,data.table(subset_pnl(.)),data.table(subset_lt_pnl(.)))},
+  cor_long_vs_LT_long =.%>% {mapply(safe_cor,data.table(subset_long_pnl(.)),data.table(subset_ltlong_pnl(.)))},
+  cor_short_vs_LT_short =.%>% {mapply(safe_cor,data.table(subset_short_pnl(.)),data.table(subset_ltshort_pnl(.)))}
+)
+
+# Reduce(function(a,b)b(a),functions(lt_cor_fn[[1]])[1:2],init=all_subsets)
+
+mapply(do.call,what=subset_fn,MoreArgs = list(args=list(all_subsets)),SIMPLIFY = TRUE)
+
+make_subset_stats<- function(all_subsets){
+  res<-t(mapply(do.call,what=subset_fn,MoreArgs = list(args=list(all_subsets))))
+  res1<-data.table(
+    calculation=structure(rownames(res),format=quote(latexTranslate(this))),
+    res,
+    check.names=TRUE
+  )
+  res1
+}
+excl<-function(subset,excl_names)subset[!grepl(excl_names,names(subset))]
+
+@
+\newpage
+\section{Exposure: ``single manager'', ``top risk contribution'' and ``containing position in sector'' subsets}
+
+\vskip 5mm
+We select the largest pair subsets having a single manager:
+\vskip 5mm
+
+\begin{center}
+\Sexpr{ntable(
+  df=subset_exposure_df(all_managers),
+  scale="0.75",
+  add_rownames=FALSE,
+  align=c(rep(c("|l","l"),times=length(all_managers)),c("|l","l|")),
+  halign=c(rep(c("l","l"),times=length(all_managers)),c("l","l")),
+  title="``single manager'' subsets: sector exposures"
+)}
+\end{center}
+
+\vskip 5mm
+\noindent We identify the smallest pair subsets with marginal risk contributions of 50, 75 and 90 percent. 
+We also select the largest pair subset covering 10 percent of total risk:
+\vskip 5mm
+
+\begin{center}
+\Sexpr{ntable(
+  df=subset_exposure_df(all_contributions),
+  scale="0.75",
+  add_rownames=FALSE,
+  align=c(rep(c("|l","l"),times=length(all_contributions)),c("|l","l|")),
+  halign=c(rep(c("l","l"),times=length(all_contributions)),c("l","l")),
+  title="``top risk contribution'' subsets: sector exposures"
+)}
+\end{center}
+
+<<,cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+all_subsets<-c(excl(c(all_managers,all_contributions),"ALL$"),ALL="*")
+ss1<- all_subsets %>%
+  make_subset_stats %>%
+  {.[,.SD,keyby=calculation]} # subset stats
+
+@
+\vskip 5mm
+\noindent DUKE90 has {\bf \Sexpr{ss1["gross_fraction",DUKE90]}} percent of gross, and contributes 
+{\bf \Sexpr{ss1["sum_risk_contribution",DUKE90]}} percent of risk. DUKE10, on the other hand, accounts for 
+{\bf \Sexpr{ss1["gross_fraction",DUKE10]}} percent of gross while contributing only 
+{\bf \Sexpr{ss1["sum_risk_contribution",DUKE10]}} percent of risk. Further characteristics of selected pair subsets:
+\vskip 5mm
+
+\begin{center}
+\Sexpr{ntable(
+  df=make_subset_stats(all_subsets),
+  scale="0.75",
+  add_rownames=FALSE,
+  align="l",
+  halign="c",
+  title="``single manager'', ``top contribution'' subsets: portfolio statistics"
+)}
+\end{center}
+
+\newpage
+
+\vskip 5mm
+We select the largest pair subsets having outright positions in each sector:
+\vskip 5mm
+
+\begin{center}
+\Sexpr{ntable(
+  df=subset_exposure_df(head(all_sectors,length(all_sectors)/2)),
+  scale="0.7",
+  add_rownames=FALSE,
+  align=c(rep(c("|l","l"),times=length(all_managers)),c("|l","l|")),
+  halign=c(rep(c("l","l"),times=length(all_managers)),c("l","l")),
+  title="``containing position in sector'' subsets: sector exposures"
+)}
+\end{center}
+
+\vskip 5mm 
+
+\begin{center}
+\Sexpr{ntable(
+  df=subset_exposure_df(tail(all_sectors,length(all_sectors)/2)),
+  scale="0.7",
+  add_rownames=FALSE,
+  align=c(rep(c("|l","l"),times=length(all_managers)),c("|l","l|")),
+  halign=c(rep(c("l","l"),times=length(all_managers)),c("l","l")),
+  title="``containing position in sector'' subsets: sector exposures"
+)}
+\end{center}
+
+\vskip 5mm 
+
+\begin{center}
+\Sexpr{ntable(
+  df=make_subset_stats(all_sectors),
+  scale="0.7",
+  add_rownames=FALSE,
+  align="l",
+  halign="c",
+  title="``containing position in sector'' subsets: portfolio statistics"
+)}
+\end{center}
+
+
 \newpage
 \section{Pair correlation}
 <<,cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
-cm<-cor(pair_tret) %>%
-{.*(1-diag(ncol(.)))}
+pair_mrc<--sort(setNames(-mrc(pair_gross,cov(pair_tret)),colnames(pair_tret)))
 
-gm<- cov(pair_pnl_matrix) %>% 
-  {.*(1-diag(ncol(.)))} %>%
-  {rescale(.,from=max(abs(.))*c(-1,1),to=max(abs(cm))*c(-1,1))}
+pair_subsets <- c(length(pair_mrc),30,10) %>%
+  setNames(paste0("DUKE",.))
 
-g1<-ggplot(data=rbind(
-  data.table(type="COR",value=as.vector(cm)%>%{.[abs(.)>quantile(abs(.),0.001)]}),
-  data.table(type="COV",value=as.vector(gm)%>%{.[abs(.)>quantile(abs(.),0.33)]})
-)) + 
-geom_histogram(aes(x=value,fill=type,group=type),breaks=seq(-0.5, 0.5, length.out=500))+
-labs(title="Histogram of pair-to-pair correlations, covariances") +
-labs(x="Correlation/Covariance", y="Frequency") 
+pair_correls<-mapply(function(n){
+  ndx<-names(pair_mrc)[1:n]
+  tret<-pair_tret[,ndx,drop=FALSE]
+  cm<-100*cor(tret)%>%
+  {.[which(row(.)!=col(.),arr.ind = TRUE)]}
+  cm
+},
+n=pair_subsets,
+SIMPLIFY=FALSE
+)
+
+subset_stats<-data.table(
+  subset=structure(
+    names(pair_subsets),
+    hdr=tbl(c("Subset","name"),align="@{}l@{}")
+  ),
+  pairs=structure(
+    pair_subsets,
+    hdr=tbl(c("Pair","count"),align="@{}l@{}")
+  ),
+  correlations=structure(
+    mapply(length,pair_correls),
+    format=quote(round(this,digits=1)),
+    hdr=tbl(c("Correlation","count"),align="@{}l@{}")
+  ),
+  mean=structure(
+    mapply(mean,pair_correls),
+    format=quote(round(this,digits=1)),
+    hdr=tbl(c("Mean","subset","correlation"),align="@{}l@{}")
+  ),
+  mrc=structure(
+    mapply(function(n)sum(pair_mrc[1:n]),pair_subsets),
+    format=quote(round(this,digits=1)),
+    hdr=tbl(c("Sum","subset","risk","contribution","fraction"),align="@{}l@{}")
+  ),
+  gross=structure(
+    mapply(function(n)sum(pair_gross[names(pair_mrc)[1:n]]),pair_subsets),
+    format=quote(comma(this,digits=0)),
+    hdr=tbl(c("Sum","subset","gross"),align="@{}l@{}")
+  ),
+  gross_fraction=structure(
+    mapply(function(n)sum(pair_gross[names(pair_mrc)[1:n]]),pair_subsets),
+    format=quote(round(100*this/total_gross,digits=0)),
+    hdr=tbl(c("Sum","subset","gross","fraction"),align="@{}l@{}")
+  )
+)[,.SD,keyby=subset]
+
+g1<-rbind(
+    data.table(subset=subset_stats$subset[1],value=pair_correls[[subset_stats$subset[1]]]),
+    data.table(subset=subset_stats$subset[2],value=pair_correls[[subset_stats$subset[2]]]),
+    data.table(subset=subset_stats$subset[3],value=pair_correls[[subset_stats$subset[3]]])
+) %>% ggplot() +
+xlim(
+    quantile(do.call(c,pair_correls),0.01),
+    quantile(do.call(c,pair_correls),0.99)
+) +
+geom_histogram(
+  aes(x=value,y = stat(ndensity),fill=subset,group=subset),
+  position="identity",
+  breaks=seq(
+    quantile(do.call(c,pair_correls),0.01),
+    quantile(do.call(c,pair_correls),0.99), 
+    length.out=25
+  ),
+  alpha=0.66
+)+
+labs(title="Histogram of pair-to-pair correlations for selected subsets") +
+labs(x="Correlation", y="Density") 
+
 
 @
 
 \vskip 5mm
 
+\begin{center}
+\Sexpr{ntable(
+  df=subset_stats[TRUE,.(subset,pairs,correlations,mean,gross,gross_fraction,mrc)]
+)}
+\end{center}
 
-\begin{description}
-\item[COR] off-diagonal pair-to-pair correlations. the problem we have here is that 
-some large(or very volatile) pairs might be very correlated, which might cause 
-the average correlation to be misleading.
-\item[COV] off-diagonal pair-to-pair covariances, which will have higher value for
-pairs with higher gross/higher vol. We normalize these covariances to cover the same range
-as our correlations and we look for any significant ``clump'' of outliers that might suggest
-that some group of pairs might hurt portfolio diversification
-\end{description}
+\vskip 5mm
 
 \begin{center}
 \Sexpr{make_plot(
@@ -358,6 +713,8 @@ that some group of pairs might hurt portfolio diversification
   envir=environment()
 )}
 \end{center}
+
+
 
 <<,cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
 pair_gross<-total_gross*gross_fraction
@@ -464,15 +821,11 @@ the count of pairs in the portfolio.
 
 \begin{center}
 \Sexpr{ntable(
-  df=traj_df(10),
-  scale="1.00",
+  df=traj_df(25),
+  scale="0.5",
   add_rownames=FALSE,
-  title="Trajectory detail : first 10 points of volatility trajectory"
+  title="Trajectory detail : first 25 points of volatility trajectory"
 )}
 \end{center}
 
-
-
 \end{document}
-
-
