@@ -20,22 +20,16 @@ create_report<-function(
   report_name,
   output_suffix="",
   push_to_directory=NULL,
-  config=local({
-    if(exists("config",parent.frame())){
-      get("config",parent.frame())
-    }else{
-      config<-new.env()
-      source(
-        file="https://raw.githubusercontent.com/satrapade/pairs/master/configuration/workflow_config.R",
-        local=config
-      )
-      config
-   }  
-  }),
   envir=new.env()
 )
 {
- wd<-getwd()
+  
+  config<-new.env()
+  source(
+    file="https://raw.githubusercontent.com/satrapade/pairs/master/configuration/workflow_config.R",
+    local=config
+  )
+  wd<-getwd()
   setwd(config$risk_report_directory)
   
   res<-try(fetch_risk_report(report_name),silent=TRUE)
