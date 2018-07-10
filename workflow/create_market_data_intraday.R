@@ -46,6 +46,8 @@ bars<-mapply(function(ticker){
 append2log("create_market_data_intraday: save market_data/intraday.csv")
 intraday<-do.call(rbind,bars[mapply(nrow,bars)>0])
 fwrite(intraday,"N:/Depts/Share/UK Alpha Team/Analytics/market_data/intraday.csv")
+intraday<-fread("N:/Depts/Share/UK Alpha Team/Analytics/market_data/intraday.csv")
+write(compress(intraday),"N:/Depts/Share/UK Alpha Team/Analytics/market_data/compressed_intraday.txt")
 
 row_size2universe<-function(x,u){
   m<-matrix(0,nrow=length(u),ncol=ncol(x),dimnames=list(u,colnames(x)))
@@ -130,6 +132,11 @@ bar_intervals<-data.table(
 
 append2log("create_market_data_intraday: save market_data/intraday_perf.csv")
 fwrite(data.table(intraday_perf),"N:/Depts/Share/UK Alpha Team/Analytics/market_data/intraday_perf.csv")
+write(
+  compress(intraday_perf),
+  "N:/Depts/Share/UK Alpha Team/Analytics/market_data/compressed_intraday_perf.txt"
+)
+
 append2log("create_market_data_intraday: save market_data/bar_intervals.csv")
 fwrite(data.table(bar_intervals),"N:/Depts/Share/UK Alpha Team/Analytics/market_data/bar_intervals.csv")
 
@@ -194,9 +201,25 @@ intraday_pair_shorts<-structure(
 )
 append2log("create_market_data_intraday: save market_data/intraday_pair.csv")
 fwrite(data.table(intraday_pair),"N:/Depts/Share/UK Alpha Team/Analytics/market_data/intraday_pair.csv")
+write(
+  compress(intraday_pair),
+  "N:/Depts/Share/UK Alpha Team/Analytics/market_data/compressed_intraday_pair.txt"
+)
+
+
 append2log("create_market_data_intraday: market_data/intraday_pair_longs.csv")
 fwrite(data.table(intraday_pair_longs),"N:/Depts/Share/UK Alpha Team/Analytics/market_data/intraday_pair_longs.csv")
+write(
+  compress(intraday_pair_longs),
+  "N:/Depts/Share/UK Alpha Team/Analytics/market_data/compressed_intraday_pair_longs.txt"
+)
+
 append2log("create_market_data_intraday: market_data/intraday_pair_shorts.csv")
 fwrite(data.table(intraday_pair_shorts),"N:/Depts/Share/UK Alpha Team/Analytics/market_data/intraday_pair_shorts.csv")
+write(
+  compress(intraday_pair_shorts),
+  "N:/Depts/Share/UK Alpha Team/Analytics/market_data/compressed_intraday_pair_shorts.txt"
+)
+
 
 
