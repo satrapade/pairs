@@ -15,6 +15,11 @@ source_workflow_step<-function(
   )
   
  append2log(paste0(workflow_step,": starting"))
+ config<-new.env()
+ source(
+    file="https://raw.githubusercontent.com/satrapade/pairs/master/configuration/workflow_config.R",
+    local=config
+ )
  source(workflow_url)
   
 }
