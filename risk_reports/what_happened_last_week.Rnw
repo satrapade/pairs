@@ -1857,11 +1857,17 @@ require(magrittr)
 
 source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/nn_cast.R")
 
-log_code(duke_lt<-fread(
-  "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_manager_look_vs_outright.csv"
-))
 
-log_code(duke_lt_matrix<-NNcast(
+duke_lt <- (if(off_site){
+  "https://raw.githubusercontent.com/satrapade/pairs/master/data/duke_manager_look_vs_outright.csv"
+} else {
+  "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_manager_look_vs_outright.csv"
+}) %>% 
+  readLines %>% 
+  paste0(collapse="\n") %>% 
+  fread
+
+duke_lt_matrix<-NNcast(
   data=duke_lt,
   i_name="SuperSectorIndex",
   j_name="Manager",
@@ -1870,7 +1876,7 @@ log_code(duke_lt_matrix<-NNcast(
 ) %>%
 {cbind(.,DUKE=rowSums(.))} %>%
 {rbind(.,NET=colSums(.),GROSS=colSums(abs(.)))} %>%
-round(digits=1))
+round(digits=1)
 
 log_code(sector_exposure<- duke_lt_matrix %>% 
 { data.table(sector=rownames(.),.)})
