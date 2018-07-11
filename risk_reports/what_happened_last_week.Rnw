@@ -519,7 +519,7 @@ if(!off_site){
     ),2,latexTranslate)
   )
   
-  db_update_latex<=ntable(
+  db_update_latex<-ntable(
     df=apply(as.data.table(
       t(query("
           select Top 1        
