@@ -306,7 +306,10 @@ pair_stats<-data.table(
  ))) %>%c(
      plt[match(pair,rownames(pair_lt_matrix))]
  )%>%c(list(
-      structure(rowSums(abs(pair_lt_matrix[pair,])),format=quote(scol(n_fmt(round(this,digits=0)),this,100)))
+      structure(
+        rowSums(abs(pair_lt_matrix[pair,])),
+        format=quote(scol(n_fmt(round(this,digits=0)),this,100))
+      )
  ))%>%c(list(structure(
     100*mapply(
       cor,
@@ -339,17 +342,17 @@ scol<-function(t,s,th=50){
   paste0(r1,r2,r3)
 }
 
-
+latex_pair_stats<-ntable(
+  df=pair_stats,
+  scale="0.50",
+  add_rownames=TRUE
+)
 @
 
 \section{Pair risk contribution}
 
 \begin{center}
-\Sexpr{ntable(
-  df=pair_stats,
-  scale="0.50",
-  add_rownames=TRUE
-)}
+\Sexpr{latex_pair_stats}
 \end{center}
 
 
