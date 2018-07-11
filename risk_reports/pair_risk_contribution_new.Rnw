@@ -106,7 +106,7 @@ pair_long_pnl<-readLines(
   if(off_site){
     "https://raw.githubusercontent.com/satrapade/pairs/master/data/duke_pair_long_pnl.csv"
   } else {
-    "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_pair_local_pnl.csv"
+    "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_pair_long_pnl.csv"
   }
 ) %>% paste0(collapse="\n") %>% fread
 
@@ -119,7 +119,7 @@ pair_short_pnl<-readLines(
   if(off_site){
     "https://raw.githubusercontent.com/satrapade/pairs/master/data/duke_pair_short_pnl.csv"
   } else {
-    "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_pair_local_pnl.csv"
+    "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_pair_short_pnl.csv"
   }
 ) %>% paste0(collapse="\n") %>% fread
 
@@ -403,15 +403,48 @@ pair2subset<-function(all_subsets)mapply(
     {setNames(grepl(.,colnames(pair_pnl_matrix)),colnames(pair_pnl_matrix))},
   all_subsets
 )
-      
+
+#      
+safe_cor<-function(x,y)if(any(mapply(sd,list(x,y))<1e-10)){"-"}else{
+  paste0(round(100*cor(x,y),digits=0))
+}
+
 # actual all, long, short P&Ls
 subset_pnl<-function(all_subsets)pair_pnl_matrix%*%pair2subset(all_subsets) 
 subset_long_pnl<-function(all_subsets)pair_long_pnl_matrix%*%pair2subset(all_subsets) 
 subset_short_pnl<-function(all_subsets)pair_short_pnl_matrix%*%pair2subset(all_subsets) 
+
 # look-through all, long, short P&Ls
 subset_lt_pnl<-function(all_subsets)lt_tret_matrix%*%(t(pair_lt_matrix)%*%pair2subset(all_subsets))
 subset_ltlong_pnl<-function(all_subsets)lt_tret_matrix%*%(t(pair_ltlong_matrix)%*%pair2subset(all_subsets))
 subset_ltshort_pnl<-function(all_subsets)lt_tret_matrix%*%(t(pair_ltshort_matrix)%*%pair2subset(all_subsets))
+
+# correlations 
+
+cor_long_vs_short <- function(s){
+  subset_matrix<-pair2subset(s)
+  long_pnl<-pair_long_pnl_matrix%*%subset_matrix
+  short_pnl<-pair_short_pnl_matrix%*%subset_matrix
+  cm<-try(cor(long_pnl,short_pnl),silent=TRUE)
+  diag(cm)
+}
+
+cor_all_vs_LT_all <- function(s){
+  subset_matrix<-pair2subset(s)
+  lt_matrix<-t(pair_lt_matrix) %*% subset_matrix
+  pnl<-pair_pnl_matrix%*%subset_matrix
+  lt_pnl<-lt_tret_matrix%*%lt_matrix
+  cm<-try(cor(pnl,lt_pnl),silent=TRUE)
+  diag(cm)
+}
+
+cor_long_vs_LT_long <- . %>% 
+{mapply(safe_cor,data.table(subset_long_pnl(.)),data.table(subset_ltlong_pnl(.)))}
+
+cor_short_vs_LT_short <- . %>% 
+{mapply(safe_cor,data.table(subset_short_pnl(.)),data.table(subset_ltshort_pnl(.)))}
+
+
 
 subset_exposure_df<-function(all_subsets)duke_pair_look_vs_outright[
   TRUE,
@@ -449,9 +482,7 @@ subset_exposure_df<-function(all_subsets)duke_pair_look_vs_outright[
 #
 
 
-safe_cor<-function(x,y)if(any(mapply(sd,list(x,y))<1e-10)){"-"}else{
-  paste0(round(100*cor(x,y),digits=0))
-}
+
 
 subset_fn<-list(
   sum_risk_contribution = . %>% pair2subset %>% 
