@@ -32,9 +32,12 @@ require(Matrix.utils)
 require(clue)
 require(magrittr)
 require(gsubfn)
+require(FRAPO)
 
-off_site<-if(Sys.info()["sysname"]=="Windows"){FALSE}else{TRUE}
+off_site=TRUE
 
+source("https://raw.githubusercontent.com/satrapade/utility/master/utility_functions.R")
+source("https://raw.githubusercontent.com/satrapade/latex_utils/master/latex_helpers_v2.R")
 
 config<-new.env()
 source(
@@ -43,16 +46,10 @@ source(
 )
 source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/append2log.R")
 source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/log_code.R")
+source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/nn_cast.R")
 
 if(!exists("append2log"))knitr::knit_exit() 
 if(!exists("log_code"))knitr::knit_exit() 
-
-source(
-  "https://raw.githubusercontent.com/satrapade/utility/master/utility_functions.R"
-)
-source(
-  "https://raw.githubusercontent.com/satrapade/latex_utils/master/latex_helpers_v2.R"
-)
 
 x<-list.files(
   path="N:/Depts/Share/UK Alpha Team/Analytics/risk_reports/figure",
@@ -61,153 +58,119 @@ x<-list.files(
 )
 if(length(x)>0)file.remove(x)
 
-#
-# daily data
-#
+@
+
+
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
 
 table2matrix<- . %>% 
   paste0(collapse="\n") %>% 
   fread %>%
   {m<-as.matrix(.[,-1]); rownames(m)<-.[[1]]; m }
 
-factor_local_tret<-readLines(
-  if(off_site){
-    "https://raw.githubusercontent.com/satrapade/pairs/master/data/factor_local_tret.csv"
-  } else {
-    "N:/Depts/Share/UK Alpha Team/Analytics/market_data/factor_local_tret.csv"
-  }
-) %>% table2matrix
+@
 
 
-pair_exposure<-readLines(
-  if(off_site){
-    "https://raw.githubusercontent.com/satrapade/pairs/master/data/duke_pair_exposure.csv"
-  } else {
-    "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_pair_exposure.csv"
-  }
-) %>% table2matrix
-
-pair_days<-readLines(
-  if(off_site){
-    "https://raw.githubusercontent.com/satrapade/pairs/master/data/duke_pair_days.csv"
-  } else {
-    "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_pair_days.csv"
-  }
-) %>% table2matrix
-
-pair_local_pnl<-readLines(
-  if(off_site){
-    "https://raw.githubusercontent.com/satrapade/pairs/master/data/duke_pair_local_pnl.csv"
-  } else {
-    "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_pair_local_pnl.csv"
-  }
-) %>% table2matrix
-
-pair_long_pnl<-readLines(
-  if(off_site){
-    "https://raw.githubusercontent.com/satrapade/pairs/master/data/duke_pair_long_pnl.csv"
-  } else {
-    "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_pair_long_pnl.csv"
-  }
-) %>% table2matrix
-
-pair_short_pnl<-readLines(
-  if(off_site){
-    "https://raw.githubusercontent.com/satrapade/pairs/master/data/duke_pair_short_pnl.csv"
-  } else {
-    "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_pair_short_pnl.csv"
-  }
-) %>% table2matrix
-
-drop_one_pair_pnl<-readLines(
-  if(off_site){
-    "https://raw.githubusercontent.com/satrapade/pairs/master/data/duke_drop_one_pair_pnl.csv"
-  } else {
-    "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_drop_one_pair_pnl.csv"
-  }
-) %>% table2matrix
-
-manager_exposure<-readLines(
-  if(off_site){
-    "https://raw.githubusercontent.com/satrapade/pairs/master/data/duke_manager_exposure.csv"
-  } else {
-    "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_manager_exposure.csv"
-  }
-) %>% table2matrix
-
-manager_local_pnl<-readLines(
-  if(off_site){
-    "https://raw.githubusercontent.com/satrapade/pairs/master/data/duke_manager_local_pnl.csv"
-  } else {
-    "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_manager_local_pnl.csv"
-  }
-) %>% table2matrix
-
-drop_one_manager_pnl<-readLines(
-  if(off_site){
-    "https://raw.githubusercontent.com/satrapade/pairs/master/data/duke_drop_one_manager_pnl.csv"
-  } else {
-    "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_drop_one_manager_pnl.csv"
-  }
-) %>% table2matrix
-
-manager_drop_one_pair_pnl<-readLines(
-  if(off_site){
-    "https://raw.githubusercontent.com/satrapade/pairs/master/data/duke_manager_drop_one_pair_pnl.csv"
-  } else {
-    "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_manager_drop_one_pair_pnl.csv"
-  }
-) %>% table2matrix
-
-exposure<-readLines(
-  if(off_site){
-    "https://raw.githubusercontent.com/satrapade/pairs/master/data/duke_exposure.csv"
-  } else {
-    "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_exposure.csv"
-  }
-) %>% table2matrix
-
-long_exposure<-readLines(
-  if(off_site){
-    "https://raw.githubusercontent.com/satrapade/pairs/master/data/duke_long_exposure.csv"
-  } else {
-    "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_long_exposure.csv"
-  }
-) %>% table2matrix
-
-short_exposure<-readLines(
-  if(off_site){
-    "https://raw.githubusercontent.com/satrapade/pairs/master/data/duke_short_exposure.csv"
-  } else {
-    "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_short_exposure.csv"
-  }
-) %>% table2matrix
-
-local_pnl<-readLines(
-  if(off_site){
-    "https://raw.githubusercontent.com/satrapade/pairs/master/data/duke_local_pnl.csv"
-  } else {
-    "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_local_pnl.csv"
-  }
-) %>% table2matrix
-
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
 #
 # daily data
 #
 
-#determine pairs, managers and pair-to-manager mapping
-pairs<-sort(unique(colnames(pair_exposure)))
-managers<-sort(unique(colnames(manager_exposure)))
-manager_pairs<-structure(
-  diag(length(managers))[match(gsub("[0-9]+","",pairs),managers),],
-  dimnames=list(pairs,managers)
-)
+# look-through super sector exposures
+duke_lt <- (if(off_site){
+  "https://raw.githubusercontent.com/satrapade/pairs/master/data/duke_pair_look_vs_outright.csv"
+} else {
+  "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_pair_look_vs_outright.csv"
+}) %>% readLines %>% paste0(collapse="\n") %>% fread
 
+# local returns of relevant factors
+factor_local_tret<-(if(off_site){
+  "https://raw.githubusercontent.com/satrapade/pairs/master/data/factor_local_tret.csv"
+} else {
+  "N:/Depts/Share/UK Alpha Team/Analytics/market_data/factor_local_tret.csv"
+}) %>% readLines %>% table2matrix
+
+# pair exposures in basis points
+pair_exposure<-(if(off_site){
+    "https://raw.githubusercontent.com/satrapade/pairs/master/data/duke_pair_exposure.csv"
+  } else {
+    "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_pair_exposure.csv"
+  }) %>% readLines %>% table2matrix
+
+
+# pair pnl 
+pair_local_pnl<-(if(off_site){
+    "https://raw.githubusercontent.com/satrapade/pairs/master/data/duke_pair_local_pnl.csv"
+  } else {
+    "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_pair_local_pnl.csv"
+  }) %>% readLines %>% table2matrix
+
+# pair long leg pnl
+pair_long_pnl<-(if(off_site){
+    "https://raw.githubusercontent.com/satrapade/pairs/master/data/duke_pair_long_pnl.csv"
+  } else {
+    "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_pair_long_pnl.csv"
+  }) %>% readLines %>% table2matrix
+
+# pair short leg pnl
+pair_short_pnl<-(if(off_site){
+    "https://raw.githubusercontent.com/satrapade/pairs/master/data/duke_pair_short_pnl.csv"
+  } else {
+    "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_pair_short_pnl.csv"
+  }) %>% readLines %>% table2matrix
+
+manager_exposure<-(if(off_site){
+    "https://raw.githubusercontent.com/satrapade/pairs/master/data/duke_manager_exposure.csv"
+  } else {
+    "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_manager_exposure.csv"
+  }) %>%readLines %>% table2matrix
+
+manager_local_pnl<-(if(off_site){
+    "https://raw.githubusercontent.com/satrapade/pairs/master/data/duke_manager_local_pnl.csv"
+  } else {
+    "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_manager_local_pnl.csv"
+  }) %>% readLines %>% table2matrix
+
+drop_one_manager_pnl<-(if(off_site){
+    "https://raw.githubusercontent.com/satrapade/pairs/master/data/duke_drop_one_manager_pnl.csv"
+  } else {
+    "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_drop_one_manager_pnl.csv"
+  }) %>% readLines %>% table2matrix
+
+exposure<-(if(off_site){
+    "https://raw.githubusercontent.com/satrapade/pairs/master/data/duke_exposure.csv"
+  } else {
+    "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_exposure.csv"
+  }) %>% readLines %>% table2matrix
+
+long_exposure<-(if(off_site){
+    "https://raw.githubusercontent.com/satrapade/pairs/master/data/duke_long_exposure.csv"
+  } else {
+    "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_long_exposure.csv"
+  }) %>% readLines %>% table2matrix
+
+short_exposure<-(if(off_site){
+    "https://raw.githubusercontent.com/satrapade/pairs/master/data/duke_short_exposure.csv"
+  } else {
+    "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_short_exposure.csv"
+  }) %>% readLines %>% table2matrix
+
+local_pnl<-(if(off_site){
+    "https://raw.githubusercontent.com/satrapade/pairs/master/data/duke_local_pnl.csv"
+  } else {
+    "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_local_pnl.csv"
+  }) %>% readLines %>% table2matrix
+
+@
+
+
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
 #
 # intraday data
 #
 
-intraday<-if(off_site){
+# raw intraday data
+intraday<-if(off_site){ 
   "https://raw.githubusercontent.com/satrapade/pairs/master/data/compressed_intraday.txt" %>%
   scan(character()) %>%
   decompress
@@ -218,6 +181,15 @@ intraday<-if(off_site){
   fread
 }
 
+# bar properties
+bar_intervals<-(if(off_site){ 
+    "https://raw.githubusercontent.com/satrapade/pairs/master/data/bar_intervals.csv"
+} else {
+    "N:/Depts/Share/UK Alpha Team/Analytics/market_data/bar_intervals.csv"
+}) %>% readLines %>% paste0(collapse="\n") %>% fread
+
+
+# 10min bar performance
 intraday_perf<-if(off_site){
   "https://raw.githubusercontent.com/satrapade/pairs/master/data/compressed_intraday_perf.txt"%>%
   scan(character()) %>%
@@ -229,17 +201,8 @@ intraday_perf<-if(off_site){
   fread %>% 
   as.matrix
 }
-  
 
-bar_intervals<-readLines(
-  if(off_site){
-    "https://raw.githubusercontent.com/satrapade/pairs/master/data/bar_intervals.csv"
-  } else {
-    "N:/Depts/Share/UK Alpha Team/Analytics/market_data/bar_intervals.csv"
-  }
-) %>% paste0(collapse="\n") %>%  fread
-
-
+# intraday pair 10min returns
 intraday_pair<-if(off_site){
   "https://raw.githubusercontent.com/satrapade/pairs/master/data/compressed_intraday_pair.txt"%>%
   scan(character()) %>%
@@ -251,7 +214,8 @@ intraday_pair<-if(off_site){
   fread %>% 
   as.matrix
 }
-  
+
+# intraday pair long 10min returns
 intraday_pair_longs<-if(off_site){
   "https://raw.githubusercontent.com/satrapade/pairs/master/data/compressed_intraday_pair_longs.txt"%>%
   scan(character()) %>%
@@ -264,6 +228,7 @@ intraday_pair_longs<-if(off_site){
   as.matrix
 }
 
+# intraday pair short 10min returns
 intraday_pair_shorts<-if(off_site){
   "https://raw.githubusercontent.com/satrapade/pairs/master/data/compressed_intraday_pair_shorts.txt"%>%
   scan(character()) %>%
@@ -276,49 +241,104 @@ intraday_pair_shorts<-if(off_site){
   as.matrix
 }
 
+@
+
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+#
+# pair properties
+#
+pair_mrc<--sort(setNames(-mrc(rep(1,ncol(pair_local_pnl)),cov(pair_local_pnl)),colnames(pair_local_pnl)))
 
 
-last_bar<-tail(which(bar_intervals$day==max(bar_intervals$day)),1)
-first_bar<-head(which(bar_intervals$day==max(bar_intervals$day)),1)
+@
 
-row_size2universe<-function(x,u){
-  m<-matrix(0,nrow=length(u),ncol=ncol(x),dimnames=list(u,colnames(x)))
-  i<-match(rownames(x),u)
-  j<-match(colnames(x),colnames(m))
-  m[i,j]<-as.matrix(x)
-  m
-}
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+#
+# pair subsets
+#
 
-mc<-function(x,p="*",rows=1:nrow(x),cols=which(grepl(p,colnames(x))))x[rows,cols,drop=FALSE]
+all_contributions<-list( # risk contribution percentage subsets
+  DUKE50=which(cumsum(pair_mrc)<=50),
+  DUKE75=which(cumsum(pair_mrc)<=75),
+  DUKE90=which(cumsum(pair_mrc)<=90),
+  DUKE10=which(cumsum(pair_mrc)>90),
+  DUKE_ALL=cumsum(pair_mrc*0+1)
+) %>%
+{mapply(function(n)paste(paste0("(",names(pair_mrc)[n],")"),collapse="|"),.)} 
 
-make_pair<-function(
-  w,
-  intraday_perf=get("intraday_perf",envir=.GlobalEnv)
+all_managers<-colnames(pair_local_pnl) %>% # manager subsets
+  { gsub("[0-9]+$","",.) } %>%
+  unique %>%
+  sort %>%
+  {setNames(paste0("^",.),.)} %>%
+  {c(.,ALL="*")}
+
+all_sectors<-duke_lt[abs(Outright)>0,.( # sector subsets
+  gross=sum(abs(Outright))
+),keyby=list(
+  pair=Pair,
+  sector=gsub(" Index","",SuperSectorIndex)%>%{ifelse(.=="","NONE",.)}
+)] %>%
+ {mapply(
+   function(the_sector).[sector==the_sector,sort(unique(pair))],
+   the_sector=gsub(" Index","",sort(unique(.$sector))),
+   SIMPLIFY=FALSE
+ )} %>%
+ {mapply(function(n)paste(paste0("(",n,")"),collapse="|"),.)} 
+
+
+# pair subset to pair matrix
+pair2subset<-function(all_subsets)mapply(
+  . %>%
+    {setNames(grepl(.,colnames(pair_pnl_matrix)),colnames(pair_pnl_matrix))},
+  all_subsets
+)
+
+
+@
+
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+
+plot_subset_pnl<-function(
+  pm=c(ALL="*"),
+  intraday_pair=get("intraday_pair",envir=.GlobalEnv),
+  bar_intervals=get("bar_intervals",envir=.GlobalEnv),
+  now=max(intraday$times),
+  ndx=grepl(paste0("^",pm),colnames(intraday_pair)),
+  bars=which(bar_intervals$day>0),
+  ylab="P&L (bps)",
+  do_plot=TRUE
 ){
-  new_pair<-matrix(
+  pnl<-10000*rowSums(intraday_pair[bars,ndx,drop=FALSE])
+  cumpnl<-cumsum(pnl)
+  if(!do_plot)return(structure(pnl,.Names=attributes(intraday_pair)$datetime))
+  plot(
     0,
-    nrow=ncol(intraday_perf),
-    ncol=1,
-    dimnames=list(colnames(intraday_perf),NULL)
+    type="n",
+    xlim=c(1,length(pnl)),
+    ylim=c(min(cumpnl),max(cumpnl)),
+    axes=FALSE,
+    main=paste(names(pm),":",round(sum(pnl),digits=0)),
+    ylab=ylab,
+    xlab=paste("period ending",now)
   )
-  res<-do.call(rbind,mapply(function(n,w){
-    i<-which(grepl(paste0("^",n),rownames(new_pair)))
-    j<-rep(1,length(i))
-    ij<-structure(
-      cbind(i,j,rep(w,length(i))),
-      dimnames=list(rownames(new_pair)[i],c("i","j","w"))
-    )
-    ij
-  },n=names(w),w=w,SIMPLIFY=FALSE))
-  new_pair[res[,c(1,2)]]<-res[,3]
-  pnl<-structure(
-    intraday_perf%*%new_pair,
-    dimnames=list(rownames(intraday_perf),"new_pair")
-  )
-  structure(pnl,.Names=attributes(intraday_perf)$datetime)
+  lines(cumpnl,lwd=3,col=rgb(0,0,1,0.33))
+  day_edge<-which(abs(diff(bar_intervals$day[bars]))>0)+1
+  if(length(day_edge)>0)abline(v=day_edge,col=rgb(1,0,0,0.25))
+  day_name<-stri_sub(weekdays(as.Date(bar_intervals$date[bars])),1,3)
+  if(length(day_edge)>0){
+    day_loc<-day_edge-c(day_edge[1]/2,diff(day_edge)/2)
+    axis(1,at=day_loc,labels=day_name[day_loc])
+  }else{
+    axis(1,at=length(bars)/2,labels = day_name[1])
+  }
+  axis(2)
 }
 
 
+@
+
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
 plot_intraday_pnl<-function(
   pm="*",
   intraday_pair=get("intraday_pair",envir=.GlobalEnv),
@@ -353,8 +373,61 @@ plot_intraday_pnl<-function(
     axis(1,at=length(bars)/2,labels = day_name[1])
   }
   axis(2)
-  #structure(pnl,.Names=attributes(intraday_pair)$datetime)
 }
+
+
+@
+
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+
+
+
+#determine pairs, managers and pair-to-manager mapping
+pairs<-sort(unique(colnames(pair_exposure)))
+managers<-sort(unique(colnames(manager_exposure)))
+manager_pairs<-structure(
+  diag(length(managers))[match(gsub("[0-9]+","",pairs),managers),],
+  dimnames=list(pairs,managers)
+)
+
+
+mc<-function(x,p="*",rows=1:nrow(x),cols=which(grepl(p,colnames(x))))x[rows,cols,drop=FALSE]
+
+# plot_intraday_pnl<-function(
+#   pm="*",
+#   intraday_pair=get("intraday_pair",envir=.GlobalEnv),
+#   bar_intervals=get("bar_intervals",envir=.GlobalEnv),
+#   now=max(intraday$times),
+#   ndx=grepl(paste0("^",pm),colnames(intraday_pair)),
+#   bars=which(bar_intervals$day>0),
+#   ylab="P&L (bps)",
+#   do_plot=TRUE
+# ){
+#   pnl<-10000*rowSums(intraday_pair[bars,ndx,drop=FALSE])
+#   cumpnl<-cumsum(pnl)
+#   if(!do_plot)return(structure(pnl,.Names=attributes(intraday_pair)$datetime))
+#   plot(
+#     0,
+#     type="n",
+#     xlim=c(1,length(pnl)),
+#     ylim=c(min(cumpnl),max(cumpnl)),
+#     axes=FALSE,
+#     main=paste(pm,":",round(sum(pnl),digits=0)),
+#     ylab=ylab,
+#     xlab=paste("period ending",now)
+#   )
+#   lines(cumpnl,lwd=3,col=rgb(0,0,1,0.33))
+#   day_edge<-which(abs(diff(bar_intervals$day[bars]))>0)+1
+#   if(length(day_edge)>0)abline(v=day_edge,col=rgb(1,0,0,0.25))
+#   day_name<-stri_sub(weekdays(as.Date(bar_intervals$date[bars])),1,3)
+#   if(length(day_edge)>0){
+#     day_loc<-day_edge-c(day_edge[1]/2,diff(day_edge)/2)
+#     axis(1,at=day_loc,labels=day_name[day_loc])
+#   }else{
+#     axis(1,at=length(bars)/2,labels = day_name[1])
+#   }
+#   axis(2)
+# }
 
 the_pairs<-c("*",colnames(manager_exposure))
 
@@ -489,9 +562,6 @@ backtest_plot_table<-data.table(
 
 @
 
-
-
-
 \section{Contents}
 
 \vskip 5mm
@@ -529,14 +599,14 @@ if(!off_site){
     )
   )
   
-  db_sheet_latex<-ntable(
+  db_sheets_latex<-ntable(
     df=apply(as.data.table(
       t(query("SELECT date, fname FROM sheet_scrape ORDER BY DATE DESC LIMIT 1",db_sheets)),
       keep.rownames=TRUE
     ),2,latexTranslate)
   )
   
-  db_update_latex<-ntable(
+  db_update_latex<=ntable(
     df=apply(as.data.table(
       t(query("
           select Top 1        
@@ -552,7 +622,7 @@ if(!off_site){
     ),2,latexTranslate)
   )
   
-  latest_date_latex<-query("
+  latext_date_latex<-query("
       SELECT MAX(HistoricalDate) 
       FROM tHistoricalBucketHolding 
       WHERE tHistoricalBucketHolding.ProductId = 7 
@@ -1873,22 +1943,10 @@ or manager-level overlays can be constructed using this information.
 require(data.table)
 require(magrittr)
 
-source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/nn_cast.R")
-
-
-duke_lt <- (if(off_site){
-  "https://raw.githubusercontent.com/satrapade/pairs/master/data/duke_manager_look_vs_outright.csv"
-} else {
-  "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_manager_look_vs_outright.csv"
-}) %>% 
-  readLines %>% 
-  paste0(collapse="\n") %>% 
-  fread
-
 duke_lt_matrix<-NNcast(
   data=duke_lt,
   i_name="SuperSectorIndex",
-  j_name="Manager",
+  j_name="gsub('[0-9]+$','',Pair)",
   v_name="LookThrough+Outright",
   fun=function(x)round(sum(x),digits=1)
 ) %>%
@@ -1896,22 +1954,22 @@ duke_lt_matrix<-NNcast(
 {rbind(.,NET=colSums(.),GROSS=colSums(abs(.)))} %>%
 round(digits=1)
 
-log_code(sector_exposure<- duke_lt_matrix %>% 
-{ data.table(sector=rownames(.),.)})
+sector_exposure<- duke_lt_matrix %>% 
+{ data.table(sector=rownames(.),.)}
 
 for(i in setdiff(names(sector_exposure),"sector")){
   attributes(sector_exposure[[i]])$format<-quote(sign_color(n_fmt(this),this))
 }
 
-log_code(z<-intraday_managers*10000)
+z<-intraday_managers*10000
 colnames(z)[1]<-"DUKE"
-log_code(z<-z[,colnames(duke_lt_matrix)])
-log_code(x<-duke_lt_matrix[grepl("Index$",rownames(duke_lt_matrix)),])
-log_code(y<-intraday_sector_indices[,rownames(x)]%*%x)
-log_code(w<-factor_local_tret[,rownames(x)]%*%x)
-log_code(v<-manager_local_pnl%>%{cbind(.,DUKE=rowSums(.))[,colnames(y)]})
+z<-z[,colnames(duke_lt_matrix)]
+x<-duke_lt_matrix[grepl("Index$",rownames(duke_lt_matrix)),]
+y<-intraday_sector_indices[,rownames(x)]%*%x
+w<-factor_local_tret[,rownames(x)]%*%x
+v<-manager_local_pnl%>%{cbind(.,DUKE=rowSums(.))[,colnames(y)]}
 
-log_code(explain<-data.table(
+explain<-data.table(
   pm=structure(colnames(y),hrd="Manger"),
   cor_short=structure(
     round(100*mapply(cor,data.table(y),data.table(z)),digits=1),
@@ -1933,7 +1991,7 @@ log_code(explain<-data.table(
     format=quote(sign_color(n_fmt(this),this)),
     hdr=tbl(c("Actual","P\\&L","intraday","2 weeks"))
   )
-))
+)
 
 @
 \newpage
@@ -1979,7 +2037,7 @@ source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/fetch_r
 if(!off_site){
   
   if(exists("db"))dbDisconnect(db)
-  log_code(db<-dbConnect(
+  db<-dbConnect(
     odbc::odbc(), 
     .connection_string = paste0(
       "driver={SQL Server};",
@@ -1987,20 +2045,20 @@ if(!off_site){
       "database=PRDQSTFundPerformance;",
       "trusted_connection=true"
     )
-  ))
+  )
   
-  log_code(duke<-fetch_bucket_pnl(db))
-  log_code(res0<-mapply(
+  duke<-fetch_bucket_pnl(db)
+  res0<-mapply(
     function(m)pair_stats(paste0("^",m)),
     duke[,bucket]%>%stri_replace_all("",regex="_PAIR_[0-9]+$")%>%unique%>%sort,
     SIMPLIFY=FALSE
-  ))
-  log_code(res1<-mapply(function(x,n)paste0(
+  )
+  res1<-mapply(function(x,n)paste0(
     "\\subsection{",n,"}\n",
     "\\vskip 5mm \n",
     ntable(df=x),
     "\\vskip 5mm \n"
-  ),x=res0,n=names(res0)))
+  ),x=res0,n=names(res0))
   
 } else {
   duke<-data.table(
@@ -2069,4 +2127,5 @@ if(!off_site){
 @
 
 \end{document}
+
 
