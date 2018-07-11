@@ -16,6 +16,11 @@ require(timeDate)
 require(stringi)
 require(knitr)
 
+if(!exists("fetch_risk_report")){
+  source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/fetch_risk_report.R")
+}
+
+
 create_report<-function(
   report_name,
   output_suffix="",
