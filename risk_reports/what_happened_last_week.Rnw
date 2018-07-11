@@ -33,7 +33,8 @@ require(clue)
 require(magrittr)
 require(gsubfn)
 
-off_site=TRUE
+# runinning on my mac?
+off_site<-if(Sys.info()["sysname"]=="Windows"){FALSE}else{TRUE}
 
 config<-new.env()
 source(
