@@ -512,7 +512,7 @@ if(!off_site){
     )
   )
   
-  db_sheets_latex<-ntable(
+  db_sheet_latex<-ntable(
     df=apply(as.data.table(
       t(query("SELECT date, fname FROM sheet_scrape ORDER BY DATE DESC LIMIT 1",db_sheets)),
       keep.rownames=TRUE
@@ -535,7 +535,7 @@ if(!off_site){
     ),2,latexTranslate)
   )
   
-  latext_date_latex<-query("
+  latest_date_latex<-query("
       SELECT MAX(HistoricalDate) 
       FROM tHistoricalBucketHolding 
       WHERE tHistoricalBucketHolding.ProductId = 7 
