@@ -16,6 +16,7 @@ require(timeDate)
 require(stringi)
 require(knitr)
 
+# required functions
 if(!exists("fetch_risk_report")){
   source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/fetch_risk_report.R")
 }
