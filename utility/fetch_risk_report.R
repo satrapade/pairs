@@ -1,7 +1,8 @@
 
 fetch_risk_report<-function(
   report_name="what_happened_last_week",
-  target_directory=config$risk_report_directory
+  target_directory=config$risk_report_directory,
+  config=get("config",parent.frame())
 ){
 
   report_url<-paste0(
