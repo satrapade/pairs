@@ -1979,7 +1979,7 @@ source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/fetch_r
 if(!off_site){
   
   if(exists("db"))dbDisconnect(db)
-  log_code(db<-dbConnect(
+  db<-dbConnect(
     odbc::odbc(), 
     .connection_string = paste0(
       "driver={SQL Server};",
@@ -1987,20 +1987,20 @@ if(!off_site){
       "database=PRDQSTFundPerformance;",
       "trusted_connection=true"
     )
-  ))
+  )
   
-  log_code(duke<-fetch_bucket_pnl(db))
-  log_code(res0<-mapply(
+  duke<-fetch_bucket_pnl(db)
+  res0<-mapply(
     function(m)pair_stats(paste0("^",m)),
     duke[,bucket]%>%stri_replace_all("",regex="_PAIR_[0-9]+$")%>%unique%>%sort,
     SIMPLIFY=FALSE
-  ))
-  log_code(res1<-mapply(function(x,n)paste0(
+  )
+  res1<-mapply(function(x,n)paste0(
     "\\subsection{",n,"}\n",
     "\\vskip 5mm \n",
     ntable(df=x),
     "\\vskip 5mm \n"
-  ),x=res0,n=names(res0)))
+  ),x=res0,n=names(res0))
   
 } else {
   duke<-data.table(
