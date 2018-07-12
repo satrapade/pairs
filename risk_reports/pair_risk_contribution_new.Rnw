@@ -347,6 +347,9 @@ latex_pair_stats<-ntable(
   scale="0.50",
   add_rownames=TRUE
 )
+
+log_code(class(latex_pair_stats)=="character")
+
 @
 
 \section{Pair risk contribution}
