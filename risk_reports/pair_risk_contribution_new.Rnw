@@ -275,25 +275,25 @@ log_code(pair_stats$pair<-names(gross_fraction))
 
 log_code(pair_stats$stock<-pair_constituents[names(gross_fraction),stock_most])
 
-log_code(pair_stats$gross_fraction=structure(
+log_code(pair_stats$gross_fraction<-structure(
     100*gross_fraction,
     format=quote(round(this,digits=1)),
     hdr=tbl(c("GRS","pct","tot"),align="@{}l@{}")
 ))
 
-log_code(pair_stats$gross=structure(
+log_code(pair_stats$gross<-structure(
     total_gross*gross_fraction,
     format=quote(round(this,digits=0)),
     hdr=tbl(c("ACT","gross","bps"),align="@{}l@{}")
 ))
 
-log_code(pair_stats$rp_gross=structure(
+log_code(pair_stats$rp_gross<-structure(
     apply(pair_tret,2,sd)%>%{mean(.)/.}%>%{total_gross*./sum(.)}, # risk parity
     format=quote(n_fmt(round(this,digits=0))),
     hdr=tbl(c("RP","gross","bps"),align="@{}l@{}")
 ))
 
-log_code(pair_stats$volatility=structure(
+log_code(pair_stats$volatility<-structure(
     apply(pair_pnl_matrix,2,sd)*10000,
     format=quote(round(this,digits=1)),
     hdr=tbl(c("Vol","daily","bps"),align="l")
