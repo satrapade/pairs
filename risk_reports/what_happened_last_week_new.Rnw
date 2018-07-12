@@ -34,7 +34,7 @@ require(magrittr)
 require(gsubfn)
 require(FRAPO)
 
-off_site=TRUE
+off_site<-if(Sys.info()["sysname"]=="Windows"){FALSE}else{TRUE}
 
 source("https://raw.githubusercontent.com/satrapade/utility/master/utility_functions.R")
 source("https://raw.githubusercontent.com/satrapade/latex_utils/master/latex_helpers_v2.R")
@@ -268,7 +268,8 @@ all_contributions<-list(
   DUKE50=which(cumsum(pair_mrc)<=50),
   DUKE75=which(cumsum(pair_mrc)<=75),
   DUKE90=which(cumsum(pair_mrc)<=90),
-  DUKE10=which(cumsum(pair_mrc)>90)
+  DUKE10=which(cumsum(pair_mrc)>90),
+  ALL=seq_along(pair_mrc)
 ) %>%
 {mapply(function(n)paste(paste0("(",names(pair_mrc)[n],")"),collapse="|"),.)} 
 
@@ -320,6 +321,7 @@ pair2subset<-function(all_subsets,pair_names){
   apply(res,1,function(r)paste(r[nchar(r)>0],collapse="|"))
 }
 
+
 @
 
 <<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
@@ -341,7 +343,30 @@ WHLW<-bar_intervals[day>0,.(
   {data.table(.,manager_subsets=pair2subset(all_managers,.$pair))} %>%
   {data.table(.,contribution_subsets=pair2subset(all_contributions,.$pair))} %>%
   {data.table(.,sector_subsets=pair2subset(all_sectors,.$pair))}
-  
+ 
+
+#
+# WHLW aggregation
+#
+group_WHLW_by_subset<-function(
+  subset_name="contribution_subsets",
+  field_name="pnl"
+){
+  w1<-WHLW[TRUE,list(
+   subset=strsplit(get(subset_name),"|",fixed=TRUE)[[1]],
+   value=get(field_name)
+  ),keyby=c(subset_name,"pair","date")]
+  w2<-w1[TRUE,.(pair,date,subset,value)]
+  x2<-NNcast(
+    data=w2,
+    i_name="subset",
+    j_name="date",
+    v_name="value"
+  ) %>% 
+    {data.table(subset=rownames(.),round(.,digits=0),period=round(rowSums(.),digits=0))}
+  for(i in 2:ncol(x2))x2[[i]]<-structure(x2[[i]],format=quote(n_fmt(this)))
+  x2
+}
 
 @
 
@@ -607,14 +632,14 @@ if(!off_site){
     )
   )
   
-  db_sheets_latex<-ntable(
+  db_sheet_latex<-ntable(
     df=apply(as.data.table(
       t(query("SELECT date, fname FROM sheet_scrape ORDER BY DATE DESC LIMIT 1",db_sheets)),
       keep.rownames=TRUE
     ),2,latexTranslate)
   )
   
-  db_update_latex<=ntable(
+  db_update_latex<-ntable(
     df=apply(as.data.table(
       t(query("
           select Top 1        
@@ -630,7 +655,7 @@ if(!off_site){
     ),2,latexTranslate)
   )
   
-  latext_date_latex<-query("
+  latest_date_latex<-query("
       SELECT MAX(HistoricalDate) 
       FROM tHistoricalBucketHolding 
       WHERE tHistoricalBucketHolding.ProductId = 7 
@@ -668,32 +693,11 @@ to occur in the near past (couple of days). Latest bucket day in LUKE:
 {\bf \Sexpr{latest_date_latex}}
 
 <<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
-x1<-NNcast(
-  data=WHLW,
-  i_name="manager_subsets",
-  j_name="date",
-  v_name="pnl"
-) %>% 
-  round(digits=0) %>%
-  {data.table(subset=rownames(.),.)}
 
-clean_contribution_names<-function(x){
-  strsplit(x,"|",fixed=TRUE)[[1]][1]
-}
-
-x2<-NNcast(
-  data=WHLW,
-  i_name="contribution_subsets",
-  j_name="date",
-  v_name="pnl"
-) %>% 
-  round(digits=0) %>%
-  {data.table(subset=rownames(.),.)}
-
-
-x3<-rbind(x1,x2)
-x3[[1]]<-mapply(clean_contribution_names,x3[[1]])
-for(i in 2:ncol(x3))x3[[i]]<-structure(x3[[i]],format=quote(n_fmt(this)))
+subset_perf_table<-rbind(
+  group_WHLW_by_subset("manager_subsets","pnl"),
+  group_WHLW_by_subset("contribution_subsets","pnl")
+)
 
 @
 \newpage 
@@ -702,8 +706,42 @@ for(i in 2:ncol(x3))x3[[i]]<-structure(x3[[i]],format=quote(n_fmt(this)))
 \vskip 5mm
 
 \begin{center}
-\Sexpr{ntable(df=x3,scale="0.75")}
+\Sexpr{ntable(
+  df=rbind(
+    group_WHLW_by_subset("manager_subsets","pnl"),
+    group_WHLW_by_subset("contribution_subsets","pnl")
+  ),
+  scale="0.75",
+  title="pair subset daily pnl"
+)}
 \end{center}
+
+\vskip 5mm 
+
+\begin{center}
+\Sexpr{ntable(
+  df=rbind(
+    group_WHLW_by_subset("manager_subsets","pnl_long"),
+    group_WHLW_by_subset("contribution_subsets","pnl_long")
+  ),
+  scale="0.75",
+  title="pair subset daily long pnl"
+)}
+\end{center}
+
+\vskip 5mm 
+
+\begin{center}
+\Sexpr{ntable(
+  df=rbind(
+    group_WHLW_by_subset("manager_subsets","pnl_short"),
+    group_WHLW_by_subset("contribution_subsets","pnl_short")
+  ),
+  scale="0.75",
+  title="pair subset daily short pnl"
+)}
+\end{center}
+
 
 \vskip 5mm
 
