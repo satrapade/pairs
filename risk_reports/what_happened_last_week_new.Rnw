@@ -97,7 +97,6 @@ pair_exposure<-(if(off_site){
     "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_pair_exposure.csv"
   }) %>% readLines %>% table2matrix
 
-
 # pair pnl 
 pair_local_pnl<-(if(off_site){
     "https://raw.githubusercontent.com/satrapade/pairs/master/data/duke_pair_local_pnl.csv"
@@ -244,8 +243,9 @@ intraday_pair_shorts<-if(off_site){
 @
 
 <<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+#######################################################################################
 #
-# pair properties
+# pair properties used to form subsets
 #
 pair_mrc<--sort(setNames(-mrc(rep(1,ncol(pair_local_pnl)),cov(pair_local_pnl)),colnames(pair_local_pnl)))
 
@@ -253,26 +253,39 @@ pair_mrc<--sort(setNames(-mrc(rep(1,ncol(pair_local_pnl)),cov(pair_local_pnl)),c
 @
 
 <<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+#######################################################################################
 #
 # pair subsets
 #
+#######################################################################################
 
-all_contributions<-list( # risk contribution percentage subsets
+
+#######################################################################################
+#
+# risk contribution percentage subsets
+#
+all_contributions<-list( 
   DUKE50=which(cumsum(pair_mrc)<=50),
   DUKE75=which(cumsum(pair_mrc)<=75),
   DUKE90=which(cumsum(pair_mrc)<=90),
-  DUKE10=which(cumsum(pair_mrc)>90),
-  DUKE_ALL=cumsum(pair_mrc*0+1)
+  DUKE10=which(cumsum(pair_mrc)>90)
 ) %>%
 {mapply(function(n)paste(paste0("(",names(pair_mrc)[n],")"),collapse="|"),.)} 
 
+#######################################################################################
+#
+# single manager subsets
+#
 all_managers<-colnames(pair_local_pnl) %>% # manager subsets
   { gsub("[0-9]+$","",.) } %>%
   unique %>%
   sort %>%
-  {setNames(paste0("^",.),.)} %>%
-  {c(.,ALL="*")}
+  {setNames(paste0("^",.),.)} 
 
+#######################################################################################
+#
+# exposed to sector subsets
+#
 all_sectors<-duke_lt[abs(Outright)>0,.( # sector subsets
   gross=sum(abs(Outright))
 ),keyby=list(
@@ -285,15 +298,50 @@ all_sectors<-duke_lt[abs(Outright)>0,.( # sector subsets
    SIMPLIFY=FALSE
  )} %>%
  {mapply(function(n)paste(paste0("(",n,")"),collapse="|"),.)} 
+@
 
 
-# pair subset to pair matrix
-pair2subset<-function(all_subsets)mapply(
-  . %>%
-    {setNames(grepl(.,colnames(pair_pnl_matrix)),colnames(pair_pnl_matrix))},
-  all_subsets
-)
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+#######################################################################################
+#
+# convert a sector subset to a matrix
+#
 
+pair2subset<-function(all_subsets,pair_names){
+  res<-mapply(
+    function(s,n){
+      is_member<-grepl(s,pair_names)
+      membership_tag<-ifelse(is_member,n,"")
+      setNames(membership_tag,names(pair_names))
+    },
+    s=all_subsets,
+    n=names(all_subsets)
+  )
+  apply(res,1,function(r)paste(r[nchar(r)>0],collapse="|"))
+}
+
+@
+
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+#######################################################################################
+#
+# the key table 
+#
+
+WHLW<-bar_intervals[day>0,.(
+  pair=colnames(intraday_pair),
+  date=unique(date),
+  intraday_pnl=colSums(intraday_pair[which(bar_intervals[["day"]]==day),])*10000,
+  intraday_pnl_long=colSums(intraday_pair_longs[which(bar_intervals[["day"]]==day),])*10000,
+  intraday_pnl_short=colSums(intraday_pair_shorts[which(bar_intervals[["day"]]==day),])*10000,
+  pnl=pair_local_pnl[unique(date),colnames(intraday_pair)]*10000,
+  pnl_long=pair_long_pnl[unique(date),colnames(intraday_pair)]*10000,
+  pnl_short=(-1)*pair_short_pnl[unique(date),colnames(intraday_pair)]*10000
+),keyby=day] %>%
+  {data.table(.,manager_subsets=pair2subset(all_managers,.$pair))} %>%
+  {data.table(.,contribution_subsets=pair2subset(all_contributions,.$pair))} %>%
+  {data.table(.,sector_subsets=pair2subset(all_sectors,.$pair))}
+  
 
 @
 
@@ -378,9 +426,8 @@ plot_intraday_pnl<-function(
 
 @
 
+
 <<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
-
-
 
 #determine pairs, managers and pair-to-manager mapping
 pairs<-sort(unique(colnames(pair_exposure)))
@@ -390,47 +437,8 @@ manager_pairs<-structure(
   dimnames=list(pairs,managers)
 )
 
-
 mc<-function(x,p="*",rows=1:nrow(x),cols=which(grepl(p,colnames(x))))x[rows,cols,drop=FALSE]
-
-# plot_intraday_pnl<-function(
-#   pm="*",
-#   intraday_pair=get("intraday_pair",envir=.GlobalEnv),
-#   bar_intervals=get("bar_intervals",envir=.GlobalEnv),
-#   now=max(intraday$times),
-#   ndx=grepl(paste0("^",pm),colnames(intraday_pair)),
-#   bars=which(bar_intervals$day>0),
-#   ylab="P&L (bps)",
-#   do_plot=TRUE
-# ){
-#   pnl<-10000*rowSums(intraday_pair[bars,ndx,drop=FALSE])
-#   cumpnl<-cumsum(pnl)
-#   if(!do_plot)return(structure(pnl,.Names=attributes(intraday_pair)$datetime))
-#   plot(
-#     0,
-#     type="n",
-#     xlim=c(1,length(pnl)),
-#     ylim=c(min(cumpnl),max(cumpnl)),
-#     axes=FALSE,
-#     main=paste(pm,":",round(sum(pnl),digits=0)),
-#     ylab=ylab,
-#     xlab=paste("period ending",now)
-#   )
-#   lines(cumpnl,lwd=3,col=rgb(0,0,1,0.33))
-#   day_edge<-which(abs(diff(bar_intervals$day[bars]))>0)+1
-#   if(length(day_edge)>0)abline(v=day_edge,col=rgb(1,0,0,0.25))
-#   day_name<-stri_sub(weekdays(as.Date(bar_intervals$date[bars])),1,3)
-#   if(length(day_edge)>0){
-#     day_loc<-day_edge-c(day_edge[1]/2,diff(day_edge)/2)
-#     axis(1,at=day_loc,labels=day_name[day_loc])
-#   }else{
-#     axis(1,at=length(bars)/2,labels = day_name[1])
-#   }
-#   axis(2)
-# }
-
 the_pairs<-c("*",colnames(manager_exposure))
-
 days_in_data<-sort(unique(bar_intervals$date[bar_intervals$day>0]))
 
 summary_table<-data.table(
@@ -659,6 +667,45 @@ position bucketing will lag product positions. We would expect the latest bucket
 to occur in the near past (couple of days). Latest bucket day in LUKE: 
 {\bf \Sexpr{latest_date_latex}}
 
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+x1<-NNcast(
+  data=WHLW,
+  i_name="manager_subsets",
+  j_name="date",
+  v_name="pnl"
+) %>% 
+  round(digits=0) %>%
+  {data.table(subset=rownames(.),.)}
+
+clean_contribution_names<-function(x){
+  strsplit(x,"|",fixed=TRUE)[[1]][1]
+}
+
+x2<-NNcast(
+  data=WHLW,
+  i_name="contribution_subsets",
+  j_name="date",
+  v_name="pnl"
+) %>% 
+  round(digits=0) %>%
+  {data.table(subset=rownames(.),.)}
+
+
+x3<-rbind(x1,x2)
+x3[[1]]<-mapply(clean_contribution_names,x3[[1]])
+for(i in 2:ncol(x3))x3[[i]]<-structure(x3[[i]],format=quote(n_fmt(this)))
+
+@
+\newpage 
+\section{Summary: Recent performance of \underline{current} portfolio holdings}
+
+\vskip 5mm
+
+\begin{center}
+\Sexpr{ntable(df=x3,scale="0.75")}
+\end{center}
+
+\vskip 5mm
 
 \newpage 
 \section{Summary: Recent performance of \underline{current} portfolio holdings}
@@ -2127,5 +2174,3 @@ if(!off_site){
 @
 
 \end{document}
-
-
