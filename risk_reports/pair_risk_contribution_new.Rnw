@@ -259,58 +259,69 @@ pair_constituents<-pair_exposure[,.(
   })
 ),keyby=pair]
 
-pair_stats<-data.table(
+#
+# pair_stats is the main pair stats table
+#
+
+log_code(pair_stats<-data.table(
   marginal_risk_contribution=structure(
     mrc(total_gross*gross_fraction,cov(pair_tret)),
     format=quote(n_fmt(round(this,digits=1))),
     hdr=tbl(c("MRC","risk","cntr","pct"),align="@{}l@{}")
-  ),
-  pair=names(gross_fraction),
-  stock=pair_constituents[names(gross_fraction),stock_most],
-  gross_fraction=structure(
+)))
+  
+log_code(pair_stats$pair<-names(gross_fraction))
+
+
+log_code(pair_stats$stock<-pair_constituents[names(gross_fraction),stock_most])
+
+log_code(pair_stats$gross_fraction=structure(
     100*gross_fraction,
     format=quote(round(this,digits=1)),
     hdr=tbl(c("GRS","pct","tot"),align="@{}l@{}")
-  ),
-  gross=structure(
+))
+
+log_code(pair_stats$gross=structure(
     total_gross*gross_fraction,
     format=quote(round(this,digits=0)),
     hdr=tbl(c("ACT","gross","bps"),align="@{}l@{}")
-  ),
-  rp_gross=structure(
+))
+
+log_code(pair_stats$rp_gross=structure(
     apply(pair_tret,2,sd)%>%{mean(.)/.}%>%{total_gross*./sum(.)}, # risk parity
     format=quote(n_fmt(round(this,digits=0))),
     hdr=tbl(c("RP","gross","bps"),align="@{}l@{}")
-  ),
-  volatility=structure(
+))
+
+log_code(pair_stats$volatility=structure(
     apply(pair_pnl_matrix,2,sd)*10000,
     format=quote(round(this,digits=1)),
     hdr=tbl(c("Vol","daily","bps"),align="l")
-  )
-)[order(-marginal_risk_contribution)][TRUE,
-  c(
-    "cum_marginal_risk",
-    "volatility_trajectory",
-    names(plt),
-    "GROSS",
-    "corr_day",
-    "corr_10min"
-  ):=list(structure(
+))
+
+log_code(pair_stats<-pair_stats[order(-marginal_risk_contribution)])
+
+log_code(pair_stats$cum_marginal_risk<-pair_stats[
+  TRUE,
+  structure(
       cumsum(marginal_risk_contribution),
       format=quote(round(this,digits=1)),
       hdr=tbl(c("Cum","marg","risk","pct"),align="@{}l@{}") 
- )) %>%c(list(structure(
-      volatility_trajectory_mrc(pair_tret,setNames(gross,pair)),
-      format=quote(round(this,digits=2)),
-      hdr=tbl(c("Vol","traj","marg","risk","seq"),align="@{}l@{}") 
- ))) %>%c(
-     plt[match(pair,rownames(pair_lt_matrix))]
- )%>%c(list(
-      structure(
-        rowSums(abs(pair_lt_matrix[pair,])),
-        format=quote(scol(n_fmt(round(this,digits=0)),this,100))
-      )
- ))%>%c(list(structure(
+)])
+
+log_code(pair_stats$volatility_trajectory<-pair_stats[
+  TRUE,
+  structure(
+    volatility_trajectory_mrc(pair_tret,setNames(gross,pair)),
+    format=quote(round(this,digits=2)),
+    hdr=tbl(c("Vol","traj","marg","risk","seq"),align="@{}l@{}")
+)])
+
+log_code(pair_stats<-data.table(pair_stats,plt[match(pair,rownames(pair_lt_matrix))]))
+
+log_code(pair_stats$corr_day<-pair_stats[
+  TRUE,
+  structure(
     100*mapply(
       cor,
       data.table(pair_tret[,pair]),
@@ -318,7 +329,12 @@ pair_stats<-data.table(
     ),
     format=quote(s1col(n_fmt(round(this,digits=0)),this,50)),
     hdr=tbl(c("COR","2","yr","daily"),align="@{}l@{}") 
- )))%>%c(list(structure(
+ )
+])
+
+log_code(pair_stats$corr_10min<-pair_stats[
+  TRUE,
+  structure(
     100*mapply(
       cor,
       data.table(intraday_pair[,pair]),
@@ -326,9 +342,10 @@ pair_stats<-data.table(
     ),
     format=quote(s1col(n_fmt(round(this,digits=0)),this,50)),
     hdr=tbl(c("COR","2","wk","10min"),align="@{}l@{}") 
- )))
-]
+ )
+])
 
+  
 s1col<-function(t,s,th=50){
   r1<-ifelse(s>(+th),paste0("\\textcolor{red}{\\bf ",t,"}"),"")
   r2<-ifelse(s<=th,t,"")
