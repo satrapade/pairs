@@ -20,6 +20,9 @@ if(!exists("fetch_risk_report")){
   source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/fetch_risk_report.R")
 }
 
+if(!exists("append2log")){
+  source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/append2log.R")
+}
 
 create_report<-function(
   report_name,
