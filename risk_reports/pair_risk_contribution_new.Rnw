@@ -348,7 +348,7 @@ latex_pair_stats<-ntable(
   add_rownames=TRUE
 )
 
-log_code(class(latex_pair_stats)=="character")
+log_code(chk1<-class(latex_pair_stats))
 
 @
 
