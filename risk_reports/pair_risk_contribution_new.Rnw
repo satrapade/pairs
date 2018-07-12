@@ -317,7 +317,7 @@ log_code(pair_stats$volatility_trajectory<-pair_stats[
     hdr=tbl(c("Vol","traj","marg","risk","seq"),align="@{}l@{}")
 )])
 
-log_code(pair_stats<-data.table(pair_stats,plt[match(pair,rownames(pair_lt_matrix))]))
+log_code(pair_stats<-data.table(pair_stats,plt[match(pair_stats$pair,rownames(pair_lt_matrix))]))
 
 log_code(pair_stats$corr_day<-pair_stats[
   TRUE,
