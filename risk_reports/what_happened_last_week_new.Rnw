@@ -2106,6 +2106,66 @@ can be attributed to sector exposures.
 
 <<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
 
+pair_stats<-function(the_subset,cutoff="2018-07-01"){
+  res0<-the_subset[,c("pair","final_pnl_mtd","final_pnl_ytd","final_pnl_ltd")]
+  res1<-mapply(function(x)data.table(
+    SUM=sum(x),
+    HITRATIO=round(100*sum(pmax(sign(x),0))/max(length(x),1),digits=1),
+    WINLOSSRATIO=round(100*scrub(sum(pmax(x,0))/sum(pmax(-x,0))),digits=1)
+  ),res0[,c("final_pnl_mtd","final_pnl_ytd","final_pnl_ltd")]) %>%
+  {data.table(pair=rownames(.),.)}
+  res2<-rbind(res0,res1)
+  res2$status<-c(
+    ifelse(
+      the_subset$final_date<max(the_subset$final_date),
+      paste0("{\\tt CLOSE} ",the_subset$final_date),
+      ifelse(
+        the_subset$initial_date>=cutoff,
+        paste0("{\\tt OPEN} ",the_subset$initial_date),
+        paste0("{\\tt LIVE} ",the_subset$initial_date)
+      )
+    ),
+    rep("",nrow(res1))
+  )
+  res2$gross<-c(as.character(round(the_subset$final_gross,digits=1)),rep("",nrow(res1)))
+  res2$net<-c(as.character(round(the_subset$final_net,digits=1)),rep("",nrow(res1)))
+  attributes(res2[["final_pnl_mtd"]])$format<-quote(sign_color(n_fmt(this),this))
+  attributes(res2[["final_pnl_ytd"]])$format<-quote(sign_color(n_fmt(this),this))
+  attributes(res2[["final_pnl_ltd"]])$format<-quote(sign_color(n_fmt(this),this))
+  attributes(res2[["gross"]])$format<-quote(sign_color(n_fmt(this),this))
+  attributes(res2[["net"]])$format<-quote(sign_color(n_fmt(this),this))
+  res2
+}
+
+pair_subset<-function(
+  manager="*",
+  cutoff="2018-06-01",
+  filter=grepl(manager,dataset$bucket),
+  dataset=get("duke",parent.frame())
+)(
+dataset[filter] %>%
+  {.$pair<-gsub("_PAIR_","",.$bucket);.} %>%
+  {.$bucket<-NULL;.} %>% 
+  {.[!is.na(gross),.(
+    initial_date=min(date),
+    final_date=max(date),
+    duration=date%>%{c(min(.),max(.))}%>%as.Date(format="%Y-%m-%d")%>%as.integer%>%diff,
+    peak_date=date[which.max(cumprod(1+scrub(pnl)))],
+    peak_pnl=round(10000*max(cumprod(1+scrub(pnl))-1),digits=1),
+    last_pnl=round(10000*(cumprod(1+scrub(pnl))-1)[which(date==max(date))],digits=1),
+    start_date=as.Date(min(date),format="%Y-%m-%d"),
+    end_date=as.Date(max(date),format="%Y-%m-%d"),
+    final_gross=round(10000*gross[which(date==max(date))],digits=1),
+    final_net=round(10000*net[which(date==max(date))],digits=1),
+    final_pnl_draw=round(10000*pnl_draw[which(date==max(date))],digits=1),
+    final_pnl_ltd=round(10000*pnl_ltd[which(date==max(date))],digits=1),
+    final_pnl_ytd=round(10000*pnl_ytd[which(date==max(date))],digits=1),
+    final_pnl_mtd=round(10000*pnl_mtd[which(date==max(date))],digits=1),
+    final_pnl_rolling=round(10000*pnl_rolling[which(date==max(date))],digits=1)
+  ),keyby=pair]}
+)[final_date>=cutoff]
+
+
 require(DBI)
 require(data.table)
 require(gsubfn)
@@ -2115,8 +2175,8 @@ source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/query.R
 source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/make_query.R")
 source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/fetch_bucket_pnl.R")
 source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/make_date_range.R")
-source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/pair_subset.R")
-source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/pair_stats.R")
+#source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/pair_subset.R")
+#source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/pair_stats.R")
 source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/fetch_risk_report.R")
 
 if(!off_site){
@@ -2133,17 +2193,30 @@ if(!off_site){
   )
   
   duke<-fetch_bucket_pnl(db)
-  res0<-mapply(
-    function(m)pair_stats(paste0("^",m)),
-    duke[,bucket]%>%stri_replace_all("",regex="_PAIR_[0-9]+$")%>%unique%>%sort,
-    SIMPLIFY=FALSE
+  
+  duke_managers<-duke[,bucket]%>%stri_replace_all("",regex="_PAIR_[0-9]+$")%>%unique%>%sort
+  
+  duke_manager_pair_stats<-setNames(rep(list(NULL),length(duke_managers)),duke_managers)
+  
+  for(i in duke_managers){
+      the_subset<-pair_subset(manager=paste0("^",i),cutoff="2018-07-01",dataset=duke)
+      if(nrow(the_subset)<1)next
+      the_stats<-pair_stats(the_subset,cutoff="2018-07-01")
+      duke_manager_pair_stats[[i]]<-the_stats
+  }
+
+  ndx<-which(mapply(length,duke_manager_pair_stats)>0)
+  
+  res1<-mapply(
+    function(x,n)paste0(
+      "\\subsection{",n,"}\n",
+      "\\vskip 5mm \n",
+      if(nrow(x)<0){""}else{ntable(df=x)},
+      "\\vskip 5mm \n"
+    ),
+    x=duke_manager_pair_stats[ndx],
+    n=duke_managers[ndx]
   )
-  res1<-mapply(function(x,n)paste0(
-    "\\subsection{",n,"}\n",
-    "\\vskip 5mm \n",
-    ntable(df=x),
-    "\\vskip 5mm \n"
-  ),x=res0,n=names(res0))
   
 } else {
   duke<-data.table(
