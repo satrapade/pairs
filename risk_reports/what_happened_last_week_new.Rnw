@@ -2028,6 +2028,10 @@ or manager-level overlays can be constructed using this information.
 require(data.table)
 require(magrittr)
 
+safe_cor<-function(x,y)if(any(mapply(sd,list(x,y))<1e-10)){0}else{
+  round(100*cor(x,y),digits=0)
+}
+
 duke_lt_matrix<-NNcast(
   data=duke_lt,
   i_name="SuperSectorIndex",
@@ -2057,12 +2061,12 @@ v<-manager_local_pnl%>%{cbind(.,DUKE=rowSums(.))[,colnames(y)]}
 explain<-data.table(
   pm=structure(colnames(y),hrd="Manger"),
   cor_short=structure(
-    round(100*mapply(cor,data.table(y),data.table(z)),digits=1),
+    round(100*mapply(safe_cor,data.table(y),data.table(z)),digits=1),
     format=quote(sign_color(n_fmt(this),this)),
     hdr=tbl(c("Realized","correlation","intraday","2 weeks"))
   ),
   cor_long=structure(
-    round(100*mapply(cor,data.table(v),data.table(w)),digits=1),
+    round(100*mapply(safe_cor,data.table(v),data.table(w)),digits=1),
     format=quote(sign_color(n_fmt(this),this)),
     hdr=tbl(c("Realized","correlation","daily","2 years"))
   ),
@@ -2179,7 +2183,7 @@ source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/make_da
 #source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/pair_stats.R")
 source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/fetch_risk_report.R")
 
-if(!off_site){
+if(FALSE){
   
   if(exists("db"))dbDisconnect(db)
   db<-dbConnect(
@@ -2279,7 +2283,7 @@ Net  &  \Sexpr{duke[!is.na(net)][,max(date)]} \\
 \Sexpr{res1}
 
 <<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
-if(!off_site){
+if(FALSE){
   if(exists("db"))dbDisconnect(db)
 }
 @
