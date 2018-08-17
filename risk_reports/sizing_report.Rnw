@@ -50,28 +50,42 @@ source("https://raw.githubusercontent.com/satrapade/utility/master/nn_cast.R")
 source("https://raw.githubusercontent.com/satrapade/utility/master/make_query.R")
 #
 
+off_site<-if(Sys.info()["sysname"]=="Windows"){FALSE}else{TRUE}
 
 
-log_code(pair_pnl<-readLines(
-  "https://raw.githubusercontent.com/satrapade/pairs/master/data/duke_pair_local_pnl.csv"
-) %>% paste0(collapse="\n") %>% fread)
+pair_pnl<-readLines(
+  if(off_site){
+    "https://raw.githubusercontent.com/satrapade/pairs/master/data/duke_pair_local_pnl.csv"
+  } else {
+    "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_pair_local_pnl.csv"
+  }
+) %>% paste0(collapse="\n") %>% fread
+
 
 log_code(m<-structure(
   do.call(cbind,pair_pnl[,-1,with=FALSE]),
   dimnames=list(pair_pnl$date,names(pair_pnl)[-1])
 )[,grepl(paste0("^",the_manager),names(pair_pnl)[-1])])
 
-log_code(pair_exposure<- readLines(
-  "https://raw.githubusercontent.com/satrapade/pairs/master/data/duke_pair_exposure.csv"
-) %>% paste0(collapse="\n") %>% fread %>%
-{ melt(
-  data=.,
-  id.vars = "date",
-  measure.vars = names(.)[-1],
-  variable.name="pair",
-  value.name="exposure"
-)} %>% 
-{.$manager<-gsub("[0-9]+$","",.$pair); .})
+pair_exposure<- readLines(
+  if(off_site){
+    "https://raw.githubusercontent.com/satrapade/pairs/master/data/duke_pair_exposure.csv"
+  } else {
+    "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_pair_exposure.csv"
+  }
+) %>% 
+  paste0(collapse="\n") %>% 
+  fread %>% 
+  {names(.)<-gsub("date","ticker",names(.),fixed=TRUE);.} %>% # mislabeling 
+  {melt(
+      data=.,
+      id.vars = "ticker", 
+      measure.vars = names(.)[-1],
+      variable.name="pair",
+      value.name="exposure"
+  )} %>% 
+  {.$manager<-gsub("[0-9]+$","",.$pair); .} %>%
+  {.[,.(manager,pair,ticker,exposure)]}
 
 
 
