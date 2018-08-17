@@ -1905,7 +1905,7 @@ log_code(sector_exposure<- duke_lt_matrix %>%
 { data.table(sector=rownames(.),.)})
 
 for(i in setdiff(names(sector_exposure),"sector")){
-  attributes(sector_exposure[[i]])$format<-quote(sign_color(n_fmt(this),this))
+  attributes(sector_exposure[[i]])$format<-quote(sign_color(n_fmt(round(this,digits=0)),this))
 }
 
 log_code(z<-intraday_managers*10000)
