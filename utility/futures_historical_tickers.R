@@ -19,7 +19,7 @@ futures_historical_tickers<-function(futures_tickers){
     res<-Rblpapi::bds(
       security=ffc,
       field="FUT_CHAIN", 
-      options=NULL
+      options=NULL,
       overrides=c(CHAIN_DATE=gsub("-","",f2d(f))),
       verbose=FALSE,
       identity=NULL
