@@ -255,6 +255,9 @@ pair_constituents<-pair_exposure[,.(
   stock_most=local({
     eq<-(ticker_class(ticker)=="equity|nomatch")
     ex<-ifelse(eq,exposure,0)
+    if(max(abs(ex))<1e-10){
+      return(gsub("( Equity)|( Index)|( [A-Z]{2})","",ticker[which.max(abs(exposure))]))
+    }
     gsub("( Equity)|( Index)|( [A-Z]{2})","",ticker[which.max(abs(ex))])
   })
 ),keyby=pair]
