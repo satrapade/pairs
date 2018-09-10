@@ -348,7 +348,33 @@ log_code(pair_stats$corr_10min<-pair_stats[
  )
 ])
 
+log_code(pair_stats$perf3m<-pair_stats[
+  TRUE,
+  structure(
+    10000*colSums(tail(pair_pnl_matrix[,pair],91)),
+    format=quote(cell_color(add_latex_env(paste0(ifelse(this>0,"\\phantom{-}",""),comma(this,digits=0)),"\\tt"),signed_ramp(this))),
+    hdr=tbl(c("Perf","3m"),align="@{}l@{}") 
+ )
+])
+
+log_code(pair_stats$perf1m<-pair_stats[
+  TRUE,
+  structure(
+    10000*colSums(tail(pair_pnl_matrix[,pair],30)),
+    format=quote(cell_color(add_latex_env(paste0(ifelse(this>0,"\\phantom{-}",""),comma(this,digits=0)),"\\tt"),signed_ramp(this))),
+    hdr=tbl(c("Perf","1m"),align="@{}l@{}") 
+ )
+])
   
+log_code(pair_stats$perf1w<-pair_stats[
+  TRUE,
+  structure(
+    10000*colSums(tail(pair_pnl_matrix[,pair],7)),
+    format=quote(cell_color(add_latex_env(paste0(ifelse(this>0,"\\phantom{-}",""),comma(this,digits=0)),"\\tt"),signed_ramp(this))),
+    hdr=tbl(c("Perf","1w"),align="@{}l@{}") 
+ )
+])
+
 s1col<-function(t,s,th=50){
   r1<-ifelse(s>(+th),paste0("\\textcolor{red}{\\bf ",t,"}"),"")
   r2<-ifelse(s<=th,t,"")
