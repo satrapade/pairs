@@ -370,14 +370,14 @@ log_code(pair_stats$perf1w<-structure(
 ))
 
 bias_ramp<-function(x,bias=50,from="white",to="red"){
-  gcr<-color_ramp(abs(x),"white","green")
-  rcr<-color_ramp(abs(x),"white","red")
+  gcr<-color_ramp(abs(x-bias),"white","green")
+  rcr<-color_ramp(abs(x-bias),"white","red")
   ifelse(x>bias,gcr,rcr)
 }
 
 log_code(pair_stats$hit1w<-structure(
     100*cumsum(pmax(sign(colSums(tail(pair_pnl_matrix[,pair_stats$pair],30))),0))/seq_along(pair_stats$pair),
-    format=quote(cell_color(add_latex_env(comma(this,digits=0),"\\tt"),bias_ramp(this))),
+    format=quote(cell_color(add_latex_env(comma(this,digits=0),"\\tt"),bias_ramp(this,50))),
     hdr=tbl(c("HR","1m"),align="@{}l@{}") 
 ))
 
