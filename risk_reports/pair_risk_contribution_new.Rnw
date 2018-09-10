@@ -357,23 +357,30 @@ log_code(pair_stats$perf3m<-pair_stats[
  )
 ])
 
-log_code(pair_stats$perf1m<-pair_stats[
-  TRUE,
-  structure(
-    10000*colSums(tail(pair_pnl_matrix[,pair],30)),
+log_code(pair_stats$perf1m<-structure(
+    10000*colSums(tail(pair_pnl_matrix[,pair_stats$pair],30)),
     format=quote(cell_color(add_latex_env(paste0(ifelse(this>0,"\\phantom{-}",""),comma(this,digits=0)),"\\tt"),signed_ramp(this))),
     hdr=tbl(c("Perf","1m"),align="@{}l@{}") 
- )
-])
+))
   
-log_code(pair_stats$perf1w<-pair_stats[
-  TRUE,
-  structure(
-    10000*colSums(tail(pair_pnl_matrix[,pair],7)),
+log_code(pair_stats$perf1w<-structure(
+    10000*colSums(tail(pair_pnl_matrix[,pair_stats$pair],7)),
     format=quote(cell_color(add_latex_env(paste0(ifelse(this>0,"\\phantom{-}",""),comma(this,digits=0)),"\\tt"),signed_ramp(this))),
     hdr=tbl(c("Perf","1w"),align="@{}l@{}") 
- )
-])
+))
+
+bias_ramp<-function(x,bias=50,from="white",to="red"){
+  gcr<-color_ramp(abs(x),"white","green")
+  rcr<-color_ramp(abs(x),"white","red")
+  ifelse(x>bias,gcr,rcr)
+}
+
+log_code(pair_stats$hit1w<-structure(
+    100*cumsum(pmax(sign(colSums(tail(pair_pnl_matrix[,pair_stats$pair],30))),0))/seq_along(pair_stats$pair),
+    format=quote(cell_color(add_latex_env(comma(this,digits=0),"\\tt"),bias_ramp(this))),
+    hdr=tbl(c("HR","1m"),align="@{}l@{}") 
+))
+
 
 s1col<-function(t,s,th=50){
   r1<-ifelse(s>(+th),paste0("\\textcolor{red}{\\bf ",t,"}"),"")
