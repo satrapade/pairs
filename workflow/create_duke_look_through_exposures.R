@@ -145,7 +145,8 @@ duke_manager_exposure<-fread(
   id.vars="Ticker",
   measure.vars=tail(colnames(.),-1),
   variable.name="Manager",
-  value.name="Exposure"
+  value.name="Exposure",
+  variable.factor = FALSE
 ) %>% {
   .[abs(Exposure)>0]
 } %>% {
@@ -245,7 +246,8 @@ fwrite(
 #
 
 duke_pair_exposure<-fread(
-  "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_pair_exposure.csv"
+  "N:/Depts/Share/UK Alpha Team/Analytics/duke_summary/duke_pair_exposure.csv",
+  stringsAsFactors=FALSE
 ) %>% {
   names(.)[1]<-"Ticker"
   .
@@ -253,7 +255,8 @@ duke_pair_exposure<-fread(
   id.vars="Ticker",
   measure.vars=tail(colnames(.),-1),
   variable.name="Pair",
-  value.name="Exposure"
+  value.name="Exposure",
+  variable.factor = FALSE
 ) %>% {
   .[abs(Exposure)>0]
 } %>% {
@@ -277,12 +280,24 @@ SIMPLIFY = FALSE
 ))
 
 duke_pair_look_through_exposure<-rbind(
-  duke_pair_equity_exposure[,c("Source","IndexTicker"):=list("Outright","None")],
-  duke_pair_index_look_through[,"Source":="LookThrough"][,.(Pair,Ticker,Exposure,Source,IndexTicker)]
+  duke_pair_equity_exposure[,.(
+    Pair=Pair,
+    Ticker=Ticker,
+    Exposure=Exposure,
+    Source="Outright",
+    IndexTicker="None"
+  )],
+  duke_pair_index_look_through[,.(
+    Pair=Pair,
+    Ticker=Ticker,
+    Exposure=Exposure,
+    Source="LookThrough",
+    IndexTicker=IndexTicker
+  )]
 )[,.(
   Pair=Pair,
   Ticker=Ticker,
-  Exposure=round(10000*Exposure,digits=1),
+  Exposure=10000*Exposure,
   Source=Source,
   IndexTicker=IndexTicker
 )][abs(Exposure)>0]
