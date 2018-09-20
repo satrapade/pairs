@@ -21,11 +21,16 @@ setwd(config$home_directory)
 
 # workflow steps
 append2log("workflow: start",append=FALSE)
-mapply(function(w){
+
+for(w in names(config$workflow)){
   append2log(paste0("workflow: sourcing ",w),append=TRUE)
-  try(source_workflow_step(w),silent=TRUE)
+  res<-try(source_workflow_step(w),silent=TRUE)
+  if("try-error" %in% class(res)){
+    append2log(paste0("workflow error:",w,":",res),append=TRUE)
+  }
   append2log(paste0("workflow: finished ",w),append=TRUE)
-},names(config$workflow))
+}
+
 
 
 # risk report steps
