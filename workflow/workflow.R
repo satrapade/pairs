@@ -22,7 +22,10 @@ setwd(config$home_directory)
 # workflow steps
 append2log("workflow: start",append=FALSE)
 
-for(w in names(config$workflow)){
+workflow_steps<-names(config$workflow)
+
+
+for(w in workflow_steps){
   append2log(paste0("workflow: sourcing ",w),append=TRUE)
   res<-try(source_workflow_step(w),silent=TRUE)
   if("try-error" %in% class(res)){
