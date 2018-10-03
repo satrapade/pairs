@@ -21,15 +21,17 @@ source(
 
 source("https://raw.githubusercontent.com/satrapade/utility/master/utility_functions.R")
 source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/append2log.R")
-source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/futures_historical_tickers.R")
 #source("https://raw.githubusercontent.com/satrapade/latex_utils/master/utility_functions.R")
 source("https://raw.githubusercontent.com/satrapade/utility/master/sheet_scraping_functions.R")
+source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/futures_historical_tickers.R")
 
 append2log("create_cix_uploads: sourced utility function")
 
 cix_results_directory<-config$workflow$create_cix_uploads$cix_results_directory
 luke_results_directory<-config$workflow$create_cix_uploads$luke_results_directory
 duke_results_directory<-config$workflow$create_cix_uploads$duke_results_directory
+
+
 
 
 memo_calc_futures_static<-function(
@@ -308,6 +310,9 @@ for(i in sort(unique(gsub("[0-9]{1,9}$","",the_luke_CIX_formuli$pair)))){
     paste(the_luke_CIX_formuli[n]$pair,",",the_luke_CIX_formuli[n]$Formula,",",the_luke_CIX_formuli[n]$Name,",")
   ),file=paste0(config$home_directory,"/CIX/luke_",i,"_cix.txt"),sep="\n")
 }
+
+
+
 
 
 
