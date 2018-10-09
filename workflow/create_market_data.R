@@ -185,6 +185,12 @@ factor_tickers<-c(
   ################## JPM themes
   "JPEUBATL Index",
   "JPEUBATW Index",
+  ################## CITI 
+  "CIISGREP Index",
+  "CIISVAEP Index",
+  ################# MS 
+  "MXEU000G Index",
+  "MXEU000V Index",
   #################
   # MS quant pairs
   "MSEEMOMO Index",
