@@ -1,0 +1,349 @@
+\documentclass{article}
+
+
+<<,cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+x<-list.files(
+  path="figure",
+  pattern="*.pdf",
+  full.names=TRUE
+)
+if(length(x)>0)file.remove(x)
+@
+
+
+\usepackage[portrait, headheight = 0cm, margin=0.25cm, top = 0.25cm, nofoot]{geometry} 
+\usepackage[export]{adjustbox} 
+\usepackage{graphicx}
+\usepackage[dvipsnames,table]{xcolor} % [dvipsnames,table] for setting colors \usepackage{amsmath} \usepackage{xfrac}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric}
+\usetikzlibrary{shapes.misc}
+%\usetikzlibrary{external}
+%\tikzexternalize % activate!
+%\usepackage{sparklines}
+\usepackage{xfrac}
+\usepackage[space]{grffile}
+
+\DeclareRobustCommand\Tstrut{\rule{0pt}{2.6ex}}         % = `top' strut
+\DeclareRobustCommand\Bstrut{\rule[-0.9ex]{0pt}{0pt}}   % = `bottom' strut
+\renewcommand{\familydefault}{\sfdefault}
+
+
+\begin{document}
+
+<<,cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+# this chunk is common to all child documents
+require(Hmisc)
+require(stringi)
+require(digest)
+require(scales)
+require(data.table)
+require(Matrix)
+require(Matrix.utils)
+require(clue)
+require(magick)
+require(readxl)
+require(Rtsne)
+require(knitr)
+require(magrittr)
+require(gsubfn)
+require(FRAPO)
+require(ggplot2)
+
+config<-new.env()
+source(
+  file="https://raw.githubusercontent.com/satrapade/pairs/master/configuration/workflow_config.R",
+  local=config
+)
+source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/fetch_risk_report.R")
+source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/append2log.R")
+source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/log_code.R")
+source("https://raw.githubusercontent.com/satrapade/utility/master/ticker_class.R")
+source("https://raw.githubusercontent.com/satrapade/utility/master/scrub.R")
+
+if(!exists("append2log"))knitr::knit_exit() 
+if(!exists("log_code"))knitr::knit_exit() 
+
+#append2log("pair_risk_contribution: start",append=TRUE)
+
+source("https://raw.githubusercontent.com/satrapade/latex_utils/master/latex_helpers_v2.R")
+source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/volatility_trajectory.R")
+source("https://raw.githubusercontent.com/satrapade/utility/master/nn_cast.R")
+
+off_site<-if(Sys.info()["sysname"]=="Windows"){FALSE}else{TRUE}
+
+#
+# intraday returns
+#
+
+
+
+bar_intervals<-readLines(
+  if(off_site){
+    "https://raw.githubusercontent.com/satrapade/pairs/master/data/bar_intervals.csv"
+  }else{
+  "N:/Depts/Share/UK Alpha Team/Analytics/market_data/bar_intervals.csv"
+  }
+) %>% paste0(collapse="\n") %>% fread
+
+intraday_perf<-readLines(
+  if(off_site){
+    "https://raw.githubusercontent.com/satrapade/pairs/master/data/intraday_perf.csv"
+  } else {
+    "N:/Depts/Share/UK Alpha Team/Analytics/market_data/intraday_perf.csv"
+  }
+) %>% paste0(collapse="\n") %>% fread %>% {.[bar_intervals$day>0]} %>%
+as.matrix
+
+intraday_pair<-readLines(
+  if(off_site){
+    "https://raw.githubusercontent.com/satrapade/pairs/master/data/intraday_pair.csv"
+  } else {
+    "N:/Depts/Share/UK Alpha Team/Analytics/market_data/intraday_pair.csv"
+  }
+) %>% paste0(collapse="\n") %>% fread %>%  {.[bar_intervals$day>0]} %>%
+as.matrix
+
+intraday_pair_longs<-readLines(
+  if(off_site){
+    "https://raw.githubusercontent.com/satrapade/pairs/master/data/intraday_pair_longs.csv"
+  } else {
+    "N:/Depts/Share/UK Alpha Team/Analytics/market_data/intraday_pair_longs.csv"
+  }
+) %>% paste0(collapse="\n") %>% fread %>%  {.[bar_intervals$day>0]} %>%
+as.matrix
+
+intraday_pair_shorts<-readLines(
+  if(off_site){
+    "https://raw.githubusercontent.com/satrapade/pairs/master/data/intraday_pair_shorts.csv"
+  } else {
+    "N:/Depts/Share/UK Alpha Team/Analytics/market_data/intraday_pair_shorts.csv"
+  }
+) %>% paste0(collapse="\n") %>% fread %>%  {.[bar_intervals$day>0]} %>%
+as.matrix
+
+index_tickers<-colnames(intraday_perf) %>% 
+{.[grepl("Index$",.)]} %>% 
+  {setdiff(.,c("SGBVPHVE Index","SGBVPMEU Index","LYXRLSMN Index"))}
+
+intraday_factor<-intraday_perf[,index_tickers]
+
+@
+
+\definecolor{GGRED}{HTML}{F8766D}
+\definecolor{GGBLUE}{HTML}{00BFC4}
+
+\section{DUKE P\&L explain}
+
+\subsection{How it is done}
+
+\vskip 5mm
+
+\noindent We examine current DUKE holdings over a 2 week period at 10-minute intervals. Because
+portfolio turnover is fairly low (9m on average), results are similar to actual P\&L. We cannot
+do an actual P\&L explain because trades do not have trade date information. Without time-aligned
+factor and trade time-series it is impossible to compute a realistic P\&L explain because 
+uncertainty caused by trade timing is much larger than the quantity we are attempting to calculate.
+
+\vskip 5mm
+\begin{center}
+\Sexpr{ntable(
+ df=data.table(apply(df2matrix(
+    df=data.table(
+      text=index_tickers,
+      x=seq_along(index_tickers),
+      y=seq_along(index_tickers)
+    ),
+    col_count=5
+  ),2,sort,decreasing=TRUE)),
+  add_rownames=FALSE,
+  add_header=FALSE,
+  title="Factors used"
+)}
+\end{center}
+
+
+
+<<,cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+
+gg_color_hue <- function(n) {
+  hues = seq(15, 375, length = n + 1)
+  hcl(h = hues, l = 65, c = 100)[1:n]
+}
+
+n = 2
+cols = gg_color_hue(n)
+
+
+
+#
+# intra-day P&L explain table
+#
+make_explain_table<-function(pm="*",title="PM"){
+  
+  duke<-cbind(unname(rowSums(intraday_pair[,grepl(pm,colnames(intraday_pair))])))
+  duke_long<-cbind(unname(rowSums(intraday_pair_longs[,grepl(pm,colnames(intraday_pair_longs))])))
+  duke_short<-cbind(unname(rowSums(intraday_pair_shorts[,grepl(pm,colnames(intraday_pair_shorts))])))
+  
+  inv_factor_cov<-solve(cov(intraday_factor))
+  
+  duke_explain_all<- intraday_factor %*% t(cov(duke,intraday_factor) %*% inv_factor_cov)
+  
+  duke_long_explain_all<- intraday_factor %*% t(cov(duke_long, intraday_factor) %*% inv_factor_cov)
+  
+  duke_short_explain_all<-intraday_factor%*% t(cov(duke_short, intraday_factor) %*% inv_factor_cov)
+  
+  g_all<-rbind(
+    data.table(pnl=cumsum(duke)*10000,interval=seq_along(duke),what="actual"),
+    data.table(pnl=cumsum(duke_explain_all)*10000,interval=seq_along(duke_explain_all),what="explain")
+  ) %>% ggplot() +
+    geom_line(aes(x=interval,y=pnl,col=what),size=2) + 
+    theme(legend.position="none")
+  
+  g_long<-rbind(
+    data.table(pnl=cumsum(duke_long)*10000,interval=seq_along(duke_long),what="actual"),
+    data.table(pnl=cumsum(duke_long_explain_all)*10000,interval=seq_along(duke_long_explain_all),what="explain")
+  ) %>% ggplot() +
+    geom_line(aes(x=interval,y=pnl,col=what),size=2) + 
+    theme(legend.position="none")
+  
+  g_short<-rbind(
+    data.table(pnl=cumsum(duke_short)*10000,interval=seq_along(duke_short),what="actual"),
+    data.table(pnl=cumsum(duke_short_explain_all)*10000,interval=seq_along(duke_long_explain_all),what="explain")
+  ) %>% ggplot() +
+    geom_line(aes(x=interval,y=pnl,col=what),size=2) + 
+    theme(legend.position="none")
+  
+  g_unexplained<-rbind(
+    data.table(pnl=cumsum(duke-duke_explain_all)*10000,interval=seq_along(duke))
+  ) %>% ggplot() +
+    geom_line(aes(x=interval,y=pnl),size=2) + 
+    theme(legend.position="none")
+  
+  explain_table<-rbind(
+    data.table(
+      what=ntable(
+        df=rbind(
+          data.table(stat="portfolio",value=title),
+          data.table(stat="actual",value=dot("GGRED")),
+          data.table(stat="explain",value=dot("GGBLUE")),
+          data.table(stat="factors used",value=ncol(intraday_factor)),
+          data.table(stat="actual bps",value=round(sum(duke)*10000,digits=0)),
+          data.table(stat="explained bps",value=round(sum(duke_explain_all)*10000,digits=0)),
+          data.table(stat="un-explained bps",value=round(sum(duke-duke_explain_all)*10000,digits=0)),
+          data.table(stat="correlation",value=drop(round(cor(duke,duke_explain_all)*100,digits=0)))
+        ),
+        alternating=FALSE,
+        add_rownames=FALSE,
+        add_header=FALSE
+      ),
+      plot=make_plot(plot(g_all),width="6cm",height="6cm",envir=environment())
+    ),
+    data.table(
+      what=ntable(
+        df=rbind(
+          data.table(stat="portfolio",value=paste0(title," longs")),
+          data.table(stat="actual",value=dot("GGRED")),
+          data.table(stat="explain",value=dot("GGBLUE")),
+          data.table(stat="factors used",value=ncol(intraday_factor)),
+          data.table(stat="actual bps",value=round(sum(duke_long)*10000,digits=0)),
+          data.table(stat="explained bps",value=round(sum(duke_long_explain_all)*10000,digits=0)),
+          data.table(stat="un-explained bps",value=round(sum(duke_long-duke_long_explain_all)*10000,digits=0)),
+          data.table(stat="correlation",value=drop(round(cor(duke_long,duke_long_explain_all)*100,digits=0)))
+        ),
+        alternating=FALSE,
+        add_rownames=FALSE,
+        add_header=FALSE
+      ),
+      plot=make_plot(plot(g_long),width="6cm",height="6cm",envir=environment())
+    ),
+    data.table(
+      what=ntable(
+        df=rbind(
+          data.table(stat="portfolio",value=paste0(title," shorts")),
+          data.table(stat="actual",value=dot("GGRED")),
+          data.table(stat="explain",value=dot("GGBLUE")),
+          data.table(stat="factors used",value=ncol(intraday_factor)),
+          data.table(stat="actual bps",value=round(sum(duke_short)*10000,digits=0)),
+          data.table(stat="explained bps",value=round(sum(duke_short_explain_all)*10000,digits=0)),
+          data.table(stat="un-explained bps",value=round(sum(duke_short-duke_short_explain_all)*10000,digits=0)),
+          data.table(stat="correlation",value=drop(round(cor(duke_short,duke_short_explain_all)*100,digits=0)))
+        ),
+        alternating=FALSE,
+        add_rownames=FALSE,
+        add_header=FALSE
+      ),
+      plot=make_plot(plot(g_short),width="6cm",height="6cm",envir=environment())
+    ),
+    data.table(
+      what=ntable(
+        df=rbind(
+          data.table(stat="portfolio",value=paste0(title," unexplained")),
+          data.table(stat="actual",value=dot("GGRED")),
+          data.table(stat="explain",value=dot("GGBLUE")),
+          data.table(stat="factors used",value=ncol(intraday_factor)),
+          data.table(stat="un-explained bps",value=drop(round(sum(duke-duke_explain_all)*10000,digits=0)))
+        ),
+        alternating=FALSE,
+        add_rownames=FALSE,
+        add_header=FALSE
+      ),
+      plot=make_plot(plot(g_unexplained),width="6cm",height="6cm",envir=environment())
+    )
+  )
+  a1<-c("c","m{6cm}")
+  ntable(
+    df=explain_table,
+    title=paste0(latexTranslate(title)," P\\&L explain, all factors"),
+    alternating=FALSE,
+    add_rownames=FALSE,
+    align=a1
+  )
+}
+@
+
+
+
+\newpage
+\subsection{P\&L explain: DUKE vs \Sexpr{length(index_tickers)}-factor regression fit}
+
+\begin{center}
+\Sexpr{make_explain_table("*","DUKE")}
+\end{center}
+
+\newpage
+\begin{center}
+\Sexpr{make_explain_table("^AC[0-9]+","AC")}
+\end{center}
+
+\newpage
+\begin{center}
+\Sexpr{make_explain_table("^MC[0-9]+","MC")}
+\end{center}
+
+\newpage
+\begin{center}
+\Sexpr{make_explain_table("^GJ[0-9]+","GJ")}
+\end{center}
+
+\newpage
+\begin{center}
+\Sexpr{make_explain_table("^DH[0-9]+","DH")}
+\end{center}
+
+\newpage
+\begin{center}
+\Sexpr{make_explain_table("^JR[0-9]+","JR")}
+\end{center}
+
+\newpage
+\begin{center}
+\Sexpr{make_explain_table("^ABC[0-9]+","ABC")}
+\end{center}
+
+\newpage
+\begin{center}
+\Sexpr{make_explain_table("^ACTW[0-9]+","ACTW")}
+\end{center}
+
+\end{document}
