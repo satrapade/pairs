@@ -4,6 +4,8 @@
 require(stringi)
 require(data.table)
 require(readxl)
+require(ggplot2)
+require(magrittr)
 library(Rblpapi)
 rcon<-Rblpapi::blpConnect()
         
@@ -145,7 +147,44 @@ memo_populate_history_matrix<-function(
   cached_value
 }
 
+#
+NNcast<-function(
+  data,
+  i_name="date",
+  j_name="id",
+  v_name="value",
+  fun=sum,
+  scrub_fun=function(x)scrub(x,default=0),
+  scrub=function(x, default = 0){
+    if(length(x) == 0) return(default)
+    x[which(!is.finite(x))] <- default
+    return(x)
+  },
+  default_value=NA
+){
+  i_expr<-parse(text=as.character(i_name))
+  j_expr<-parse(text=as.character(j_name))
+  v_expr<-parse(text=as.character(v_name))
+  i<-as.character(eval(i_expr,envir=data))
+  j<-as.character(eval(j_expr,envir=data))
+  x<-eval(v_expr,envir=data)
+  df<-data.table(i=i,j=j,x=x)[,.(x=fun(x)),keyby="i,j"]
+  is<-sort(unique(df$i))
+  js<-sort(unique(df$j))
+  res<-matrix(
+    default_value,
+    nrow=length(is),
+    ncol=length(js),
+    dimnames = list(is,js)
+  )
+  i<-match(df$i,rownames(res))
+  j<-match(df$j,colnames(res))
+  res[cbind(i,j)[!is.na(df$x),]]<-df$x[!is.na(df$x)]
+  scrub_fun(res)
+}
 
+
+#
 fname<-"N:/Depts/Global/Absolute Insight/UK Equity/AbsoluteUK xp final.xlsm"
 
 # DUKE AUM 
@@ -244,9 +283,141 @@ local_tret<-as.matrix(memo_populate_history_matrix(
 
 
 
+  
+factor_tickers<-c(
+  "UKX Index",
+  "MCX Index",
+  "SMX Index",
+  "DAX Index",
+  "CAC Index",
+  ################## bloomberg indices
+  "BEUIPO Index",
+  "PMOMENUS Index",
+  "LBUSTRUU Index",
+  ################## SG factors
+  "SGSLVAW Index",
+  "SGSLQAW Index",
+  "SGSLPAW Index",
+  "SGSLMAW Index",
+  "SGSLVQAW Index",
+  "SGSLVAU Index",
+  "SGSLQAU Index",
+  "SGSLPAU Index",
+  "SGSLMAU Index",
+  "SGSLVQAU Index",
+  "SGSLVAE Index",
+  "SGSLQAE Index",
+  "SGSLPAE Index",
+  "SGSLMAE Index",
+  "SGSLVQAE Index",
+  "SGBVPMEU Index",
+  "SGBVPHVE Index",
+  "SGIXTFEQ Index",
+  "SGIXTFFX Index",
+  "SGIXTFIR Index",
+  "SGIXGCM Index",
+  "SGIXTFCY Index",
+  ##################
+  "LYXRLSMN Index",
+  ################## RW picks
+  "SXPARO Index",
+  ################## GS themes
+  "GSTHVISP Index",
+  "GSTHSHRP Index",
+  "GSTHSBAL Index",
+  "GSTHWBAL Index",
+  "GSTHHTAX Index",
+  "GSTHLTAX Index",
+  "GSTHMFOW Index",
+  "GSTHMFUW Index",
+  "GSTHDIVG Index",
+  "GSTHQUAL Index",
+  "GSTHCASH Index",
+  ################## JPM themes
+  "JPEUBATL Index",
+  "JPEUBATW Index",
+  #################
+  # MS quant pairs
+  "MSEEMOMO Index",
+  "MSZZMOMO Index",
+  "MSEEGRW Index",
+  "MSEEVAL Index",
+  "MSSTERSI Index",
+  "MSSTPERI Index",
+  "MSSTSTUS Index",
+  "MSSTHYDS Index",
+  ################# MW TOPS
+  "FXB US Equity",
+  "MLISMBC LX Equity",
+  "GLD US Equity",
+  "EEM US Equity",
+  "VXX US Equity",
+  "TLT US Equity",
+  "USO US Equity",
+  "COINXBE SS Equity",
+  "SXXE Index","SXXP Index", # all stocks
+  "SX3E Index","SX3P Index", # food and beverage
+  "SX4E Index","SX4P Index", # chemicals
+  "SX6E Index","SX6P Index", # utilities
+  "SX7E Index","SX7P Index", # banks
+  "SX8E Index","SX8P Index", # tech
+  "SXAE Index","SXAP Index", # auto
+  "SXDE Index","SXDP Index", # health
+  "SXEE Index","SXEP Index", # energy
+  "SXFE Index","SXFP Index", # financial services
+  "SXIE Index","SXIP Index", # insurance
+  "SXKE Index","SXKP Index", # telecoms
+  "SXME Index","SXMP Index", # media
+  "SXNE Index","SXNP Index", # industrial goods and services
+  "SXOE Index","SXOP Index", # construction and materials
+  "SXPE Index","SXPP Index", # basic resource
+  "SXQE Index","SXQP Index", # personal and household goods
+  "SXRE Index","SXRP Index", # retail
+  "SXTE Index","SXTP Index", # travel and leisure
+  "SX86E Index","SX86P Index" # real estate
+)
 
+factor_ref_matrix<-matrix(
+    0,
+    ncol=length(factor_tickers),
+    nrow=length(all_days),
+    dimnames=list(all_days,factor_tickers)
+)
 
+# load total returns
 
+factor_local_tret<-as.matrix(memo_populate_history_matrix(
+    ref_matrix=factor_ref_matrix,
+    bbg_field="DAY_TO_DAY_TOT_RETURN_GROSS_DVDS",
+    bbg_overrides=NULL,
+    post_fetch_fun=function(x)scrub(as.numeric(x))/100,
+    verbose=TRUE,
+    force=FALSE
+))
+
+#
+#
+#
+
+manager_ptf<-mapply(
+  function(the_manager)structure(cbind(
+    duke_position_scrape[,.(exposure=sum(ifelse(grepl(the_manager,manager),exposure,0))),keyby=ticker][,exposure]
+  ),dimnames=list(sort(unique(duke_position_scrape$ticker)),the_manager)),
+  c(paste0("^",sort(unique(duke_position_scrape$manager)),"$"),"*")
+)
+
+duke<-local_tret%*%manager_ptf
+
+inv_factor_cov<-solve(cov(factor_local_tret))
+  
+duke_explain_all<- factor_local_tret %*% t(cov(duke,factor_local_tret) %*% inv_factor_cov)
+
+duke_specific_all<-duke-duke_explain_all  
+
+data.table(
+  date=as.Date(duke_specific_all,format="%Y-%m-%d"),
+  specific=cumsum(duke_specific_all[,"*"])
+)
 
 
 
