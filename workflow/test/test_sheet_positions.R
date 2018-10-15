@@ -1,6 +1,7 @@
 #
 # fetch sheet positions, take 2
 #
+require(R.cache)
 require(stringi)
 require(data.table)
 require(readxl)
@@ -414,10 +415,23 @@ duke_explain_all<- factor_local_tret %*% t(cov(duke,factor_local_tret) %*% inv_f
 
 duke_specific_all<-duke-duke_explain_all  
 
-data.table(
-  date=as.Date(duke_specific_all,format="%Y-%m-%d"),
-  specific=cumsum(duke_specific_all[,"*"])
-)
+g1<-rbind(
+  data.table(
+    date=as.Date(rownames(duke_specific_all),format="%Y-%m-%d"),
+    pnl=cumsum(duke_specific_all[,"*"]),
+    what="specific"
+  ),
+  data.table(
+     date=as.Date(rownames(duke),format="%Y-%m-%d"),
+     pnl=cumsum(duke[,"*"]),
+     what="all"
+  )
+) %>% 
+  ggplot() +
+  geom_line(aes(x=date,y=pnl,col=what),size=2,alpha=0.75)
+  
+
+plot(g1)
 
 
 
