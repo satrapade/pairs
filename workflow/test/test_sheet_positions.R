@@ -9,7 +9,10 @@ require(ggplot2)
 require(magrittr)
 library(Rblpapi)
 rcon<-Rblpapi::blpConnect()
-        
+
+#
+replace_zero_with_last<-function(x,a=x!=0)x[which(a)[c(1,1:sum(a))][cumsum(a)+1]]
+
 #
 scrub<-function(x)
 {
@@ -184,76 +187,89 @@ NNcast<-function(
   scrub_fun(res)
 }
 
+require(stringi)
+require(data.table)
+require(readxl)
+require(ggplot2)
+require(magrittr)
+library(Rblpapi)
 
-#
-fname<-"N:/Depts/Global/Absolute Insight/UK Equity/AbsoluteUK xp final.xlsm"
-
-# DUKE AUM 
-duke_summary_scrape<-data.table(read_xlsx(
-  path=fname,
-  sheet="DUKE Summary",
-  range="A4:B11",
-  col_names = c("A","B"),
-  col_types = "text"
-))[,.(
-  parameter=make.names(A),
-  value=scrub(as.numeric(B))
-)][,.SD,keyby=parameter]
-
-# DUKE open positions
-duke_position_scrape<-data.table(read_xlsx(
-  path=fname, 
-  sheet = "DUKE Open Trades", 
-  range = "B10:P2000", 
-  col_names = c("B","C","D","E","F","G","H","I","J","K","L","M","N","O","P"), 
-  col_types = "text"
-))[grepl("^[A-Z]{2,4}[0-9]{1,3}$",stri_trim(toupper(B)))][,.(
-  row=seq_along(C),
-  manager=toupper(C),
-  pair=toupper(B[B!=""][findInterval(1:length(B),which(B!=""),all.inside = TRUE,rightmost.closed = TRUE)]),
-  direction=toupper(D),
-  ticker=local({
-    x0<-gsub("[ ]{2,10}"," ",F)
-    x1<-toupper(x0)
-    x2<-gsub("EQUITY$","Equity",x1)
-    x3<-gsub("INDEX$","Index",x2)
-    ifelse(is.na(x3),"",x3)
-  }),
-  units=scrub(as.integer(I)),
-  multiplier=scrub(as.integer(H)),
-  quantity=scrub(as.integer(H))*scrub(as.integer(I)),
-  price=scrub(as.numeric(G)),
-  cash=(-1)*scrub(as.numeric(J)),
-  asset_value=scrub(as.numeric(N)),
-  pnl=scrub(as.numeric(O)),
-  bps=scrub(as.numeric(P)),
-  fx=scrub(as.numeric(M)),
-  local_asset_value=scrub(as.numeric(L)),
-  class=ticker_class(gsub("INDEX$","Index",gsub("EQUITY$","Equity",toupper(F))))
-)][,c(.SD,list(
-  risk_ticker=local({
-    res<-Rblpapi::bdp(unique(ticker[grepl("future",class)]),"UNDL_SPOT_TICKER")
-    res1<-data.table(
-      sheet_ticker=rownames(res),
-      risk_ticker=paste0(res$UNDL_SPOT_TICKER," Index")
-    )[,.SD,keyby=sheet_ticker]
-    res2<-res1[J(ticker),risk_ticker]
-    ifelse(is.na(res2),ticker,res2)
-  })
-))][ticker!=""][,.(
-  manager=unique(manager),
-  exposure=sum(asset_value)/duke_summary_scrape["Current.fund",value]
-),keyby=c("pair","risk_ticker")][,.(
-  manager,
-  pair,
-  ticker=risk_ticker,
-  exposure=round(exposure*10000,digits=1)
-)]
-
+scrape_duke<-function(
+  fname="N:/Depts/Global/Absolute Insight/UK Equity/AbsoluteUK xp final.xlsm"
+){
+  
+  rcon<-Rblpapi::blpConnect()
+  # DUKE AUM 
+  duke_summary_scrape<-data.table(read_xlsx(
+    path=fname,
+    sheet="DUKE Summary",
+    range="A4:B11",
+    col_names = c("A","B"),
+    col_types = "text"
+  ))[,.(
+    parameter=make.names(A),
+    value=scrub(as.numeric(B))
+  )][,.SD,keyby=parameter]
+  
+  # DUKE open positions
+  duke_position_scrape<-data.table(read_xlsx(
+    path=fname, 
+    sheet = "DUKE Open Trades", 
+    range = "B10:P2000", 
+    col_names = c("B","C","D","E","F","G","H","I","J","K","L","M","N","O","P"), 
+    col_types = "text"
+  ))[grepl("^[A-Z]{2,4}[0-9]{1,3}$",stri_trim(toupper(B)))][,.(
+    row=seq_along(C),
+    manager=toupper(C),
+    pair=toupper(B[B!=""][findInterval(1:length(B),which(B!=""),all.inside = TRUE,rightmost.closed = TRUE)]),
+    direction=toupper(D),
+    ticker=local({
+      x0<-gsub("[ ]{2,10}"," ",F)
+      x1<-toupper(x0)
+      x2<-gsub("EQUITY$","Equity",x1)
+      x3<-gsub("INDEX$","Index",x2)
+      ifelse(is.na(x3),"",x3)
+    }),
+    units=scrub(as.integer(I)),
+    multiplier=scrub(as.integer(H)),
+    quantity=scrub(as.integer(H))*scrub(as.integer(I)),
+    price=scrub(as.numeric(G)),
+    cash=(-1)*scrub(as.numeric(J)),
+    asset_value=scrub(as.numeric(N)),
+    pnl=scrub(as.numeric(O)),
+    bps=scrub(as.numeric(P)),
+    fx=scrub(as.numeric(M)),
+    local_asset_value=scrub(as.numeric(L)),
+    class=ticker_class(gsub("INDEX$","Index",gsub("EQUITY$","Equity",toupper(F))))
+  )][,c(.SD,list(
+    risk_ticker=local({
+      res<-Rblpapi::bdp(unique(ticker[grepl("future",class)]),"UNDL_SPOT_TICKER")
+      res1<-data.table(
+        sheet_ticker=rownames(res),
+        risk_ticker=paste0(res$UNDL_SPOT_TICKER," Index")
+      )[,.SD,keyby=sheet_ticker]
+      res2<-res1[J(ticker),risk_ticker]
+      ifelse(is.na(res2),ticker,res2)
+    })
+  ))][ticker!=""][,.(
+    manager=unique(manager),
+    exposure=sum(asset_value)/duke_summary_scrape["Current.fund",value]
+  ),keyby=c("pair","risk_ticker")][,.(
+    manager,
+    pair,
+    ticker=risk_ticker,
+    exposure=round(exposure*10000,digits=1)
+  )]
+  
+  duke_position_scrape
+  
+}
 
 #
 # form reference matrix
 #
+
+duke_position_scrape<-scrape_duke()
 
 all_tickers<-sort(unique(duke_position_scrape$ticker))
 
@@ -292,25 +308,8 @@ factor_tickers<-c(
   "DAX Index",
   "CAC Index",
   ################## bloomberg indices
-  "BEUIPO Index",
   "PMOMENUS Index",
-  "LBUSTRUU Index",
   ################## SG factors
-  "SGSLVAW Index",
-  "SGSLQAW Index",
-  "SGSLPAW Index",
-  "SGSLMAW Index",
-  "SGSLVQAW Index",
-  "SGSLVAU Index",
-  "SGSLQAU Index",
-  "SGSLPAU Index",
-  "SGSLMAU Index",
-  "SGSLVQAU Index",
-  "SGSLVAE Index",
-  "SGSLQAE Index",
-  "SGSLPAE Index",
-  "SGSLMAE Index",
-  "SGSLVQAE Index",
   "SGBVPMEU Index",
   "SGBVPHVE Index",
   "SGIXTFEQ Index",
@@ -318,8 +317,6 @@ factor_tickers<-c(
   "SGIXTFIR Index",
   "SGIXGCM Index",
   "SGIXTFCY Index",
-  ##################
-  "LYXRLSMN Index",
   ################## RW picks
   "SXPARO Index",
   ################## GS themes
@@ -345,17 +342,14 @@ factor_tickers<-c(
   "MSEEVAL Index",
   "MSSTERSI Index",
   "MSSTPERI Index",
-  "MSSTSTUS Index",
   "MSSTHYDS Index",
   ################# MW TOPS
   "FXB US Equity",
-  "MLISMBC LX Equity",
   "GLD US Equity",
   "EEM US Equity",
   "VXX US Equity",
   "TLT US Equity",
   "USO US Equity",
-  "COINXBE SS Equity",
   "SXXE Index","SXXP Index", # all stocks
   "SX3E Index","SX3P Index", # food and beverage
   "SX4E Index","SX4P Index", # chemicals
@@ -400,6 +394,55 @@ factor_local_tret<-as.matrix(memo_populate_history_matrix(
 #
 #
 
+
+get_single_bar<-function(
+  ticker,
+  start=Sys.time()-60*60*24*14,
+  end=Sys.time(),
+  force=FALSE
+){
+  the_key<-list("get_single_bar",ticker,start,end)
+  cached_value<-loadCache(key=the_key)
+  if(!is.null(cached_value))if(!force)return(cached_value)
+  res<-Rblpapi::getBars(
+    ticker,
+    barInterval = 10,
+    startTime = start,
+    endTime = end
+  )
+  cached_value<-data.table(ticker=rep(ticker,nrow(res)),res)
+  saveCache(cached_value,key=the_key)
+  cached_value
+}
+
+bars<-do.call(
+  rbind,
+  mapply(
+    get_single_bar,
+    sort(unique(c(all_tickers,factor_tickers))),
+    MoreArgs=list( 
+      start=as.POSIXct.Date(Sys.Date())-60*60*24*14,
+      end=as.POSIXct.Date(Sys.Date())
+    ),
+    SIMPLIFY=FALSE
+  )
+)
+
+
+bar_matrix<-apply(NNcast(
+  bars,
+  i_name="times",
+  j_name="ticker",
+  v_name="close",
+  fun=sum
+),2,function(x)x%>%replace_zero_with_last%>%{diff(.)/head(.,-1)})
+
+
+
+#
+#
+#
+
 manager_ptf<-mapply(
   function(the_manager)structure(cbind(
     duke_position_scrape[,.(exposure=sum(ifelse(grepl(the_manager,manager),exposure,0))),keyby=ticker][,exposure]
@@ -409,11 +452,16 @@ manager_ptf<-mapply(
 
 duke<-local_tret%*%manager_ptf
 
+intraday_duke<-bar_matrix[,all_tickers]%*%manager_ptf
+
 inv_factor_cov<-solve(cov(factor_local_tret))
+intraday_inv_factor_cov<-solve(cov(bar_matrix[,factor_tickers]))
   
 duke_explain_all<- factor_local_tret %*% t(cov(duke,factor_local_tret) %*% inv_factor_cov)
+intraday_duke_explain_all<- bar_matrix[,factor_tickers] %*% t(cov(intraday_duke,bar_matrix[,factor_tickers]) %*% intraday_inv_factor_cov)
 
-duke_specific_all<-duke-duke_explain_all  
+duke_specific_all <- duke - duke_explain_all  
+intraday_duke_specific_all <- intraday_duke - intraday_duke_explain_all  
 
 g1<-rbind(
   data.table(
@@ -425,6 +473,11 @@ g1<-rbind(
      date=as.Date(rownames(duke),format="%Y-%m-%d"),
      pnl=cumsum(duke[,"*"]),
      what="all"
+  ),
+  data.table(
+     date=as.Date(rownames(duke_explain_all),format="%Y-%m-%d"),
+     pnl=cumsum(duke_explain_all[,"*"]),
+     what="explained"
   )
 ) %>% 
   ggplot() +
@@ -432,6 +485,30 @@ g1<-rbind(
   
 
 plot(g1)
+
+
+g2<-rbind(
+  data.table(
+    bar=1:nrow(intraday_duke_specific_all),
+    pnl=cumsum(intraday_duke_specific_all[,"*"]),
+    what="specific"
+  ),
+  data.table(
+     bar=1:nrow(intraday_duke),
+     pnl=cumsum(intraday_duke[,"*"]),
+     what="all"
+  ),
+  data.table(
+     bar=1:nrow(intraday_duke_explain_all),
+     pnl=cumsum(intraday_duke_explain_all[,"*"]),
+     what="explained"
+  )
+) %>% 
+  ggplot() +
+  geom_line(aes(x=bar,y=pnl,col=what),size=2,alpha=0.75)
+  
+
+plot(g2)
 
 
 
