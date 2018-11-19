@@ -379,11 +379,13 @@ factor_tickers<-c(
   #################
   # MS quant pairs
   "MSEEMOMO Index",
-  "MSEEGRW Index",
-  "MSEEVAL Index",
-  "MSSTERSI Index",
-  "MSSTPERI Index",
+  "MSEEGRW Index", #
+  "MSEEVAL Index", #
+  "MSSTERSI Index", #
+  "MSSTPERI Index", #
   "MSSTHYDS Index",
+  #################
+  "JPDUKB16 Index", # brexit hedge basket
   ################# MW TOPS
   "SXXE Index","SXXP Index", # all stocks
   "SX3E Index","SX3P Index", # food and beverage
@@ -924,6 +926,307 @@ hedge_score<-rank(pair_hedge_stability_summary_df$vov_2w)+rank(pair_hedge_stabil
   ),
   scale="0.5"
 )}
+\end{center}
+
+\newpage
+\section{Manager pair correlations}
+<<,cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+colnames(intraday_duke_pairs)<-gsub("\\^|\\$","",colnames(intraday_duke_pairs),fixed=FALSE)
+colnames(duke_pairs)<-gsub("\\^|\\$","",colnames(duke_pairs),fixed=FALSE)
+
+cms_intraday<-do.call(rbind,mapply(
+  function(m){
+    cm<-cor(intraday_duke_pairs[,grepl(paste0("^",m,"[0-9]+$"),colnames(intraday_duke_pairs))])
+    u<-cm[col(cm)>row(cm)]
+    i<-row(cm)[col(cm)>row(cm)]
+    j<-col(cm)[col(cm)>row(cm)]
+    data.table(
+      pair_cor=structure(u,format=quote(sign_color(t=round(100*this,digits=2),s=this))),
+      manager=m,
+      pair1=rownames(cm)[i],
+      pair2=colnames(cm)[j]
+    )
+  },
+  sort(unique(duke_position_scrape$manager)),
+  SIMPLIFY=FALSE
+))[abs(pair_cor)>1e-3]
+
+cms_daily<-do.call(rbind,mapply(
+  function(m){
+    cm<-cor(duke_pairs[,grepl(paste0("^",m,"[0-9]+$"),colnames(duke_pairs))])
+    u<-cm[col(cm)>row(cm)]
+    i<-row(cm)[col(cm)>row(cm)]
+    j<-col(cm)[col(cm)>row(cm)]
+    data.table(
+      pair_cor=structure(u,format=quote(sign_color(t=round(100*this,digits=2),s=this))),
+      manager=m,
+      pair1=rownames(cm)[i],
+      pair2=colnames(cm)[j]
+    )
+  },
+  sort(unique(duke_position_scrape$manager)),
+  SIMPLIFY=FALSE
+))[abs(pair_cor)>1e-3]
+
+cms<-rbind(
+  data.table(cms_intraday,type="intraday"),
+  data.table(cms_daily,type="daily")
+)
+
+intraday_cor_stats<-cms_intraday[,.(
+    mean_cor=structure(mean(pair_cor),format=quote(sign_color(t=round(100*this,digits=2),s=this))),
+    median_cor=structure(median(pair_cor),format=quote(sign_color(t=round(100*this,digits=2),s=this))),
+    max_cor=structure(max(pair_cor),format=quote(sign_color(t=round(100*this,digits=2),s=this))),
+    min_cor=structure(min(pair_cor),format=quote(sign_color(t=round(100*this,digits=2),s=this)))
+),keyby=manager]
+
+daily_cor_stats<-cms_daily[,.(
+    mean_cor=structure(mean(pair_cor),format=quote(sign_color(t=round(100*this,digits=2),s=this))),
+    median_cor=structure(median(pair_cor),format=quote(sign_color(t=round(100*this,digits=2),s=this))),
+    max_cor=structure(max(pair_cor),format=quote(sign_color(t=round(100*this,digits=2),s=this))),
+    min_cor=structure(min(pair_cor),format=quote(sign_color(t=round(100*this,digits=2),s=this)))
+),keyby=manager]
+
+
+g_cor<-ggplot(cms, aes(x=pair_cor,y=..density..,fill=type)) + 
+  geom_histogram(bins=30,alpha=0.5, position="identity") +
+  geom_vline(xintercept = 0) +
+  facet_wrap( ~ manager, nrow = 2)
+
+
+@
+
+
+\begin{center}
+\begin{tabular}{c c}
+\Sexpr{ntable(
+  df=intraday_cor_stats,
+  title="Manager pair correlation statistics, 2 weeks, 10-min bars"
+)}
+&
+\Sexpr{ntable(
+  df=daily_cor_stats,
+  title="Manager pair correlation statistics, 2 year, daily"
+)}
+\\
+\end{tabular}
+\end{center}
+
+\vskip 5mm 
+
+\begin{center}
+\Sexpr{make_plot(plot(g_cor),width="20cm",height="20cm",envir=environment())}
+\end{center}
+
+\newpage
+\section{Factor correlations}
+<<,cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+
+cmf_intraday<-do.call(rbind,mapply(
+  function(m){
+    cm<-cor(bar_matrix[,factor_tickers],intraday_duke_pairs[,grepl(paste0("^",m,"[0-9]+$"),colnames(intraday_duke_pairs))])
+    u<-cm[col(cm)>row(cm)]
+    i<-row(cm)[col(cm)>row(cm)]
+    j<-col(cm)[col(cm)>row(cm)]
+    data.table(
+      pair_cor=structure(u,format=quote(sign_color(t=round(100*this,digits=2),s=this))),
+      manager=m,
+      factor=rownames(cm)[i],
+      pair=colnames(cm)[j]
+    )
+  },
+  sort(unique(duke_position_scrape$manager)),
+  SIMPLIFY=FALSE
+))[abs(pair_cor)>1e-3]
+
+cmf_daily<-do.call(rbind,mapply(
+  function(m){
+    cm<-cor(factor_local_tret,duke_pairs[,grepl(paste0("^",m,"[0-9]+$"),colnames(duke_pairs))])
+    u<-cm[col(cm)>row(cm)]
+    i<-row(cm)[col(cm)>row(cm)]
+    j<-col(cm)[col(cm)>row(cm)]
+    data.table(
+      pair_cor=structure(u,format=quote(sign_color(t=round(100*this,digits=2),s=this))),
+      manager=m,
+      factor=rownames(cm)[i],
+      pair=colnames(cm)[j]
+    )
+  },
+  sort(unique(duke_position_scrape$manager)),
+  SIMPLIFY=FALSE
+))[abs(pair_cor)>1e-3]
+
+cmf<-rbind(
+  data.table(cmf_intraday,type="intraday"),
+  data.table(cmf_daily,type="daily")
+)
+
+intraday_corf_stats<-cmf_intraday[,.(
+    mean_cor=structure(mean(pair_cor),format=quote(sign_color(t=round(100*this,digits=2),s=this))),
+    median_cor=structure(median(pair_cor),format=quote(sign_color(t=round(100*this,digits=2),s=this))),
+    max_cor=structure(max(pair_cor),format=quote(sign_color(t=round(100*this,digits=2),s=this))),
+    min_cor=structure(min(pair_cor),format=quote(sign_color(t=round(100*this,digits=2),s=this)))
+),keyby=manager]
+
+daily_corf_stats<-cmf_daily[,.(
+    mean_cor=structure(mean(pair_cor),format=quote(sign_color(t=round(100*this,digits=2),s=this))),
+    median_cor=structure(median(pair_cor),format=quote(sign_color(t=round(100*this,digits=2),s=this))),
+    max_cor=structure(max(pair_cor),format=quote(sign_color(t=round(100*this,digits=2),s=this))),
+    min_cor=structure(min(pair_cor),format=quote(sign_color(t=round(100*this,digits=2),s=this)))
+),keyby=manager]
+
+
+g_fcor<-ggplot(cmf, aes(x=pair_cor,y=..density..,fill=type)) + 
+  geom_histogram(bins=30,alpha=0.5, position="identity") +
+  geom_vline(xintercept = 0) +
+  facet_wrap( ~ manager, nrow = 2)
+
+
+@
+
+\begin{center}
+\begin{tabular}{c c}
+\Sexpr{ntable(
+  df=intraday_corf_stats,
+  title="Manager pair correlation to factors, 2 weeks, 10-min bars"
+)}
+&
+\Sexpr{ntable(
+  df=daily_corf_stats,
+  title="Manager pair correlation to factors, 2 year, daily"
+)}
+\\
+\end{tabular}
+\end{center}
+
+\vskip 5mm 
+
+\begin{center}
+\Sexpr{make_plot(plot(g_fcor),width="20cm",height="20cm",envir=environment())}
+\end{center}
+
+\newpage
+\section{High correlation pairs}
+
+\vskip 5mm
+
+\begin{center}
+\begin{tabular}{c c}
+\Sexpr{ntable(
+  df=cms_intraday[head(order(-abs(pair_cor)),50)][order(-abs(pair_cor))],
+  title="intraday"
+)}
+&
+\Sexpr{ntable(
+  df=cms_daily[head(order(-abs(pair_cor)),50)][order(-abs(pair_cor))],
+  title="daily"
+)}
+\\
+\end{tabular}
+\end{center}
+
+\newpage
+\section{High factor exposure pairs}
+
+\vskip 5mm
+
+\begin{center}
+\begin{tabular}{c c}
+\Sexpr{ntable(
+  df=cmf_intraday[head(order(-abs(pair_cor)),50)][order(-abs(pair_cor))],
+  title="intraday"
+)}
+&
+\Sexpr{ntable(
+  df=cmf_daily[head(order(-abs(pair_cor)),50)][order(-abs(pair_cor))],
+  title="daily"
+)}
+\\
+\end{tabular}
+\end{center}
+
+\newpage
+\section{High sector exposure pairs}
+<<,cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+sector_tickers<-factor_tickers[grepl("^SX",factor_tickers)]
+
+cmfs_intraday<-do.call(rbind,mapply(
+  function(m){
+    cm<-cor(bar_matrix[,sector_tickers],intraday_duke_pairs[,grepl(paste0("^",m,"[0-9]+$"),colnames(intraday_duke_pairs))])
+    u<-cm[col(cm)>row(cm)]
+    i<-row(cm)[col(cm)>row(cm)]
+    j<-col(cm)[col(cm)>row(cm)]
+    data.table(
+      pair_cor=structure(u,format=quote(sign_color(t=round(100*this,digits=2),s=this))),
+      manager=m,
+      sector=rownames(cm)[i],
+      pair=colnames(cm)[j]
+    )
+  },
+  sort(unique(duke_position_scrape$manager)),
+  SIMPLIFY=FALSE
+))[abs(pair_cor)>1e-3]
+
+cmfs_daily<-do.call(rbind,mapply(
+  function(m){
+    cm<-cor(factor_local_tret[,sector_tickers],duke_pairs[,grepl(paste0("^",m,"[0-9]+$"),colnames(duke_pairs))])
+    u<-cm[col(cm)>row(cm)]
+    i<-row(cm)[col(cm)>row(cm)]
+    j<-col(cm)[col(cm)>row(cm)]
+    data.table(
+      pair_cor=structure(u,format=quote(sign_color(t=round(100*this,digits=2),s=this))),
+      manager=m,
+      sector=rownames(cm)[i],
+      pair=colnames(cm)[j]
+    )
+  },
+  sort(unique(duke_position_scrape$manager)),
+  SIMPLIFY=FALSE
+))[abs(pair_cor)>1e-3]
+
+cmfs<-rbind(
+  data.table(cmfs_intraday,type="intraday"),
+  data.table(cmfs_daily,type="daily")
+)
+
+intraday_corfs_stats<-cmfs_intraday[,.(
+    mean_cor=structure(mean(pair_cor),format=quote(sign_color(t=round(100*this,digits=2),s=this))),
+    median_cor=structure(median(pair_cor),format=quote(sign_color(t=round(100*this,digits=2),s=this))),
+    max_cor=structure(max(pair_cor),format=quote(sign_color(t=round(100*this,digits=2),s=this))),
+    min_cor=structure(min(pair_cor),format=quote(sign_color(t=round(100*this,digits=2),s=this)))
+),keyby=manager]
+
+daily_corfs_stats<-cmfs_daily[,.(
+    mean_cor=structure(mean(pair_cor),format=quote(sign_color(t=round(100*this,digits=2),s=this))),
+    median_cor=structure(median(pair_cor),format=quote(sign_color(t=round(100*this,digits=2),s=this))),
+    max_cor=structure(max(pair_cor),format=quote(sign_color(t=round(100*this,digits=2),s=this))),
+    min_cor=structure(min(pair_cor),format=quote(sign_color(t=round(100*this,digits=2),s=this)))
+),keyby=manager]
+
+
+g_fscor<-ggplot(cmfs, aes(x=pair_cor,y=..density..,fill=type)) + 
+  geom_histogram(bins=30,alpha=0.5, position="identity") +
+  geom_vline(xintercept = 0) +
+  facet_wrap( ~ manager, nrow = 2)
+
+
+@
+
+\vskip 5mm
+
+\begin{center}
+\begin{tabular}{c c}
+\Sexpr{ntable(
+  df=cmfs_intraday[head(order(-abs(pair_cor)),50)][order(-abs(pair_cor))],
+  title="intraday"
+)}
+&
+\Sexpr{ntable(
+  df=cmfs_daily[head(order(-abs(pair_cor)),50)][order(-abs(pair_cor))],
+  title="daily"
+)}
+\\
+\end{tabular}
 \end{center}
 
 
