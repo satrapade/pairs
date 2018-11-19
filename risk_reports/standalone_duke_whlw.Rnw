@@ -1229,5 +1229,68 @@ g_fscor<-ggplot(cmfs, aes(x=pair_cor,y=..density..,fill=type)) +
 \end{tabular}
 \end{center}
 
+\newpage
+\section{Pair long-short correlation}
+<<,cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+
+long_pair_ptf<-do.call(cbind,mapply(
+  function(the_pair)structure(cbind(
+    duke_position_scrape[,.(exposure=sum(ifelse(grepl(paste0("^",the_pair,"$"),pair),pmax(exposure,0),0))),keyby=ticker][,exposure]
+  ),dimnames=list(sort(unique(duke_position_scrape$ticker)),the_pair)),
+  sort(unique(duke_position_scrape$pair)),
+  SIMPLIFY=FALSE
+))
+
+intraday_long_pairs<-bar_matrix[,rownames(long_pair_ptf)]%*%long_pair_ptf
+daily_long_pairs<-local_tret[,rownames(long_pair_ptf)]%*%long_pair_ptf
+  
+short_pair_ptf<-do.call(cbind,mapply(
+  function(the_pair)structure(cbind(
+    duke_position_scrape[,.(exposure=sum(ifelse(grepl(paste0("^",the_pair,"$"),pair),pmin(exposure,0),0))),keyby=ticker][,exposure]
+  ),dimnames=list(sort(unique(duke_position_scrape$ticker)),the_pair)),
+  sort(unique(duke_position_scrape$pair)),
+  SIMPLIFY=FALSE
+))
+
+intraday_short_pairs<-bar_matrix[,rownames(short_pair_ptf)]%*%short_pair_ptf
+daily_short_pairs<-local_tret[,rownames(short_pair_ptf)]%*%short_pair_ptf
+
+
+intraday_pair_cor<-mapply(function(x,y){
+  if(sd(x)<1e-10)return(0)
+  if(sd(y)<1e-10)return(0)
+  cor(x,y)
+},data.table(intraday_long_pairs),data.table(intraday_short_pairs))
+
+daily_pair_cor<-mapply(function(x,y){
+  if(sd(x)<1e-10)return(0)
+  if(sd(y)<1e-10)return(0)
+  cor(x,y)
+},data.table(daily_long_pairs),data.table(daily_short_pairs))
+
+pair_cor_df<-data.table(
+  pair=names(daily_pair_cor),
+  daily=structure(daily_pair_cor,format=quote(sign_color(t=round(100*this,digits=2),s=this))),
+  intraday=structure(intraday_pair_cor,format=quote(sign_color(t=round(100*this,digits=2),s=this)))
+)[order(abs(intraday))]
+
+@
+
+\begin{center}
+\begin{tabular}{c c}
+\Sexpr{ntable(
+  df=pair_cor_df[order(abs(intraday))],
+  title="ordered intraday pair correlation",
+  scale="0.5"
+)}
+&
+\Sexpr{ntable(
+  df=pair_cor_df[order(abs(daily))],
+  title="ordered daily pair correlation",
+  scale="0.5"
+)}
+\\
+\end{tabular}
+\end{center}
 
 \end{document}
