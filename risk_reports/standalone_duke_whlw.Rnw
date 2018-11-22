@@ -2,6 +2,7 @@
 
 
 <<,cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+
 x<-list.files(
   path="figure",
   pattern="*.pdf",
@@ -16,6 +17,7 @@ source("https://raw.githubusercontent.com/satrapade/latex_utils/master/latex_hel
 
 \usepackage[portrait, headheight = 0cm, margin=0.25cm, top = 0.25cm, nofoot]{geometry} 
 \usepackage[export]{adjustbox} 
+\usepackage[space]{grffile}
 \usepackage{graphicx}
 \usepackage[dvipsnames,table]{xcolor} % [dvipsnames,table] for setting colors \usepackage{amsmath} \usepackage{xfrac}
 \usepackage{tikz}
@@ -25,12 +27,16 @@ source("https://raw.githubusercontent.com/satrapade/latex_utils/master/latex_hel
 %\tikzexternalize % activate!
 %\usepackage{sparklines}
 \usepackage{xfrac}
-\usepackage[space]{grffile}
+\usepackage{sparklines}
+\usepackage{xfrac}
+\usepackage{hyperref}
+\usepackage{amsmath, amsthm, amssymb, amsfonts}
+\usepackage{listings}
+\lstset{language=R} 
 
 \DeclareRobustCommand\Tstrut{\rule{0pt}{2.6ex}}         % = `top' strut
 \DeclareRobustCommand\Bstrut{\rule[-0.9ex]{0pt}{0pt}}   % = `bottom' strut
 \renewcommand{\familydefault}{\sfdefault}
-
 
 \begin{document}
 
@@ -46,6 +52,7 @@ require(readxl)
 require(ggplot2)
 require(magrittr)
 library(Rblpapi)
+require(FRAPO)
 rcon<-Rblpapi::blpConnect()
 
 #
@@ -507,10 +514,15 @@ bar_matrix<-apply(NNcast(
 #
 
 manager_ptf<-mapply(
-  function(the_manager)structure(cbind(
-    duke_position_scrape[,.(exposure=sum(ifelse(grepl(the_manager,manager),exposure,0))),keyby=ticker][,exposure]
-  ),dimnames=list(sort(unique(duke_position_scrape$ticker)),the_manager)),
-  c(paste0("^",sort(unique(duke_position_scrape$manager)),"$"),"*")
+  function(the_manager){
+    if(the_manager!="*")the_manager<-paste0("^",the_manager,"$")
+    structure(cbind(
+      duke_position_scrape[,.(
+        exposure=sum(ifelse(grepl(the_manager,manager),exposure,0))
+      ),keyby=ticker][,exposure]
+    ),dimnames=list(sort(unique(duke_position_scrape$ticker)),the_manager))
+  },
+  c(sort(unique(duke_position_scrape$manager)),"*")
 )
 
 duke<-local_tret%*%manager_ptf
@@ -521,7 +533,9 @@ inv_factor_cov<-solve(cov(factor_local_tret))
 intraday_inv_factor_cov<-solve(cov(bar_matrix[,factor_tickers]))
   
 duke_explain_all<- factor_local_tret %*% t(cov(duke,factor_local_tret) %*% inv_factor_cov)
+
 intraday_duke_explain_all<- bar_matrix[,factor_tickers] %*% t(cov(intraday_duke,bar_matrix[,factor_tickers]) %*% intraday_inv_factor_cov)
+
 benchmark_explain_all<- factor_local_tret %*% t(cov(benchmark_local_tret,factor_local_tret) %*% inv_factor_cov)
 
 
@@ -676,12 +690,16 @@ require(scales)
 
 
 manager_ptf<-mapply(
-  function(the_manager)structure(cbind(
-    duke_position_scrape[,.(exposure=sum(ifelse(grepl(the_manager,manager),exposure,0))),keyby=ticker][,exposure]
-  ),dimnames=list(sort(unique(duke_position_scrape$ticker)),the_manager)),
-  c(paste0("^",sort(unique(duke_position_scrape$manager)),"$"),"*")
+  function(the_manager){
+    if(the_manager!="*")the_manager<-paste0("^",the_manager,"$")
+    structure(cbind(
+      duke_position_scrape[,.(
+        exposure=sum(ifelse(grepl(the_manager,manager),exposure,0))
+      ),keyby=ticker][,exposure]
+    ),dimnames=list(sort(unique(duke_position_scrape$ticker)),the_manager))
+  },
+  c(sort(unique(duke_position_scrape$manager)),"*")
 )
-
 
 duke<-local_tret%*%manager_ptf
 intraday_duke<-bar_matrix[,all_tickers]%*%manager_ptf
@@ -775,16 +793,21 @@ duke_ticking<-which(apply(intraday_duke,1,sd)>1e-10)
 
 pair_ptf<-mapply(
   function(the_pair)structure(cbind(
-    duke_position_scrape[,.(exposure=sum(ifelse(grepl(the_pair,pair),exposure,0))),keyby=ticker][,exposure]
+    duke_position_scrape[,.(exposure=sum(ifelse(grepl(paste0("^",the_pair,"$"),pair),exposure,0))),keyby=ticker][,exposure]
   ),dimnames=list(sort(unique(duke_position_scrape$ticker)),the_pair)),
-  paste0("^",sort(unique(duke_position_scrape$pair)),"$")
+  sort(unique(duke_position_scrape$pair))
 )
 
 manager_ptf<-mapply(
-  function(the_manager)structure(cbind(
-    duke_position_scrape[,.(exposure=sum(ifelse(grepl(the_manager,manager),exposure,0))),keyby=ticker][,exposure]
-  ),dimnames=list(sort(unique(duke_position_scrape$ticker)),the_manager)),
-  c(paste0("^",sort(unique(duke_position_scrape$manager)),"$"),"*")
+  function(the_manager){
+    if(the_manager!="*")the_manager<-paste0("^",the_manager,"$")
+    structure(cbind(
+      duke_position_scrape[,.(
+        exposure=sum(ifelse(grepl(the_manager,manager),exposure,0))
+      ),keyby=ticker][,exposure]
+    ),dimnames=list(sort(unique(duke_position_scrape$ticker)),the_manager))
+  },
+  c(sort(unique(duke_position_scrape$manager)),"*")
 )
 
 duke_pairs<-local_tret%*%pair_ptf
@@ -936,12 +959,15 @@ colnames(duke_pairs)<-gsub("\\^|\\$","",colnames(duke_pairs),fixed=FALSE)
 
 cms_intraday<-do.call(rbind,mapply(
   function(m){
-    cm<-cor(intraday_duke_pairs[,grepl(paste0("^",m,"[0-9]+$"),colnames(intraday_duke_pairs))])
+    cm<-round(
+      100*cor(intraday_duke_pairs[,grepl(paste0("^",m,"[0-9]+$"),colnames(intraday_duke_pairs))]),
+      digits=0
+    )
     u<-cm[col(cm)>row(cm)]
     i<-row(cm)[col(cm)>row(cm)]
     j<-col(cm)[col(cm)>row(cm)]
     data.table(
-      pair_cor=structure(u,format=quote(sign_color(t=round(100*this,digits=2),s=this))),
+      pair_cor=structure(u,format=quote(sign_color(t=round(this,digits=2),s=this))),
       manager=m,
       pair1=rownames(cm)[i],
       pair2=colnames(cm)[j]
@@ -953,12 +979,15 @@ cms_intraday<-do.call(rbind,mapply(
 
 cms_daily<-do.call(rbind,mapply(
   function(m){
-    cm<-cor(duke_pairs[,grepl(paste0("^",m,"[0-9]+$"),colnames(duke_pairs))])
+    cm<-round(
+      100*cor(duke_pairs[,grepl(paste0("^",m,"[0-9]+$"),colnames(duke_pairs))]),
+      digits=0
+    )
     u<-cm[col(cm)>row(cm)]
     i<-row(cm)[col(cm)>row(cm)]
     j<-col(cm)[col(cm)>row(cm)]
     data.table(
-      pair_cor=structure(u,format=quote(sign_color(t=round(100*this,digits=2),s=this))),
+      pair_cor=structure(u,format=quote(sign_color(t=round(this,digits=2),s=this))),
       manager=m,
       pair1=rownames(cm)[i],
       pair2=colnames(cm)[j]
@@ -974,17 +1003,17 @@ cms<-rbind(
 )
 
 intraday_cor_stats<-cms_intraday[,.(
-    mean_cor=structure(mean(pair_cor),format=quote(sign_color(t=round(100*this,digits=2),s=this))),
-    median_cor=structure(median(pair_cor),format=quote(sign_color(t=round(100*this,digits=2),s=this))),
-    max_cor=structure(max(pair_cor),format=quote(sign_color(t=round(100*this,digits=2),s=this))),
-    min_cor=structure(min(pair_cor),format=quote(sign_color(t=round(100*this,digits=2),s=this)))
+    mean_cor=structure(mean(pair_cor),format=quote(sign_color(t=round(this,digits=2),s=this))),
+    median_cor=structure(median(pair_cor),format=quote(sign_color(t=round(this,digits=2),s=this))),
+    max_cor=structure(max(pair_cor),format=quote(sign_color(t=round(this,digits=2),s=this))),
+    min_cor=structure(min(pair_cor),format=quote(sign_color(t=round(this,digits=2),s=this)))
 ),keyby=manager]
 
 daily_cor_stats<-cms_daily[,.(
-    mean_cor=structure(mean(pair_cor),format=quote(sign_color(t=round(100*this,digits=2),s=this))),
-    median_cor=structure(median(pair_cor),format=quote(sign_color(t=round(100*this,digits=2),s=this))),
-    max_cor=structure(max(pair_cor),format=quote(sign_color(t=round(100*this,digits=2),s=this))),
-    min_cor=structure(min(pair_cor),format=quote(sign_color(t=round(100*this,digits=2),s=this)))
+    mean_cor=structure(mean(pair_cor),format=quote(sign_color(t=round(this,digits=2),s=this))),
+    median_cor=structure(median(pair_cor),format=quote(sign_color(t=round(this,digits=2),s=this))),
+    max_cor=structure(max(pair_cor),format=quote(sign_color(t=round(this,digits=2),s=this))),
+    min_cor=structure(min(pair_cor),format=quote(sign_color(t=round(this,digits=2),s=this)))
 ),keyby=manager]
 
 
@@ -1024,14 +1053,17 @@ g_cor<-ggplot(cms, aes(x=pair_cor,y=..density..,fill=type)) +
 
 cmf_intraday<-do.call(rbind,mapply(
   function(m){
-    cm<-cor(bar_matrix[,factor_tickers],intraday_duke_pairs[,grepl(paste0("^",m,"[0-9]+$"),colnames(intraday_duke_pairs))])
+    cm<-round(
+      100*cor(bar_matrix[,factor_tickers],intraday_duke_pairs[,grepl(paste0("^",m,"[0-9]+$"),colnames(intraday_duke_pairs))]),
+      digits=0
+    )
     u<-cm[col(cm)>row(cm)]
     i<-row(cm)[col(cm)>row(cm)]
     j<-col(cm)[col(cm)>row(cm)]
     data.table(
-      pair_cor=structure(u,format=quote(sign_color(t=round(100*this,digits=2),s=this))),
+      pair_cor=structure(u,format=quote(sign_color(t=this,s=this))),
       manager=m,
-      factor=rownames(cm)[i],
+      factor=gsub(" Index","",rownames(cm))[i],
       pair=colnames(cm)[j]
     )
   },
@@ -1041,14 +1073,17 @@ cmf_intraday<-do.call(rbind,mapply(
 
 cmf_daily<-do.call(rbind,mapply(
   function(m){
-    cm<-cor(factor_local_tret,duke_pairs[,grepl(paste0("^",m,"[0-9]+$"),colnames(duke_pairs))])
+    cm<-round(
+      100*cor(factor_local_tret,duke_pairs[,grepl(paste0("^",m,"[0-9]+$"),colnames(duke_pairs))]),
+      digits=0
+    )
     u<-cm[col(cm)>row(cm)]
     i<-row(cm)[col(cm)>row(cm)]
     j<-col(cm)[col(cm)>row(cm)]
     data.table(
-      pair_cor=structure(u,format=quote(sign_color(t=round(100*this,digits=2),s=this))),
+      pair_cor=structure(u,format=quote(sign_color(t=this,s=this))),
       manager=m,
-      factor=rownames(cm)[i],
+      factor=gsub(" Index","",rownames(cm))[i],
       pair=colnames(cm)[j]
     )
   },
@@ -1062,17 +1097,17 @@ cmf<-rbind(
 )
 
 intraday_corf_stats<-cmf_intraday[,.(
-    mean_cor=structure(mean(pair_cor),format=quote(sign_color(t=round(100*this,digits=2),s=this))),
-    median_cor=structure(median(pair_cor),format=quote(sign_color(t=round(100*this,digits=2),s=this))),
-    max_cor=structure(max(pair_cor),format=quote(sign_color(t=round(100*this,digits=2),s=this))),
-    min_cor=structure(min(pair_cor),format=quote(sign_color(t=round(100*this,digits=2),s=this)))
+    mean_cor=structure(mean(pair_cor),format=quote(sign_color(t=round(this,digits=2),s=this))),
+    median_cor=structure(median(pair_cor),format=quote(sign_color(t=round(this,digits=2),s=this))),
+    max_cor=structure(max(pair_cor),format=quote(sign_color(t=round(this,digits=2),s=this))),
+    min_cor=structure(min(pair_cor),format=quote(sign_color(t=round(this,digits=2),s=this)))
 ),keyby=manager]
 
 daily_corf_stats<-cmf_daily[,.(
-    mean_cor=structure(mean(pair_cor),format=quote(sign_color(t=round(100*this,digits=2),s=this))),
-    median_cor=structure(median(pair_cor),format=quote(sign_color(t=round(100*this,digits=2),s=this))),
-    max_cor=structure(max(pair_cor),format=quote(sign_color(t=round(100*this,digits=2),s=this))),
-    min_cor=structure(min(pair_cor),format=quote(sign_color(t=round(100*this,digits=2),s=this)))
+    mean_cor=structure(mean(pair_cor),format=quote(sign_color(t=round(this,digits=2),s=this))),
+    median_cor=structure(median(pair_cor),format=quote(sign_color(t=round(this,digits=2),s=this))),
+    max_cor=structure(max(pair_cor),format=quote(sign_color(t=round(this,digits=2),s=this))),
+    min_cor=structure(min(pair_cor),format=quote(sign_color(t=round(this,digits=2),s=this)))
 ),keyby=manager]
 
 
@@ -1152,14 +1187,17 @@ sector_tickers<-factor_tickers[grepl("^SX",factor_tickers)]
 
 cmfs_intraday<-do.call(rbind,mapply(
   function(m){
-    cm<-cor(bar_matrix[,sector_tickers],intraday_duke_pairs[,grepl(paste0("^",m,"[0-9]+$"),colnames(intraday_duke_pairs))])
+    cm<-round(
+      100*cor(bar_matrix[,sector_tickers],intraday_duke_pairs[,grepl(paste0("^",m,"[0-9]+$"),colnames(intraday_duke_pairs))]),
+      digits=0
+    )
     u<-cm[col(cm)>row(cm)]
     i<-row(cm)[col(cm)>row(cm)]
     j<-col(cm)[col(cm)>row(cm)]
     data.table(
-      pair_cor=structure(u,format=quote(sign_color(t=round(100*this,digits=2),s=this))),
+      pair_cor=structure(u,format=quote(sign_color(t=this,s=this))),
       manager=m,
-      sector=rownames(cm)[i],
+      sector=gsub(" Index","",rownames(cm))[i],
       pair=colnames(cm)[j]
     )
   },
@@ -1169,14 +1207,17 @@ cmfs_intraday<-do.call(rbind,mapply(
 
 cmfs_daily<-do.call(rbind,mapply(
   function(m){
-    cm<-cor(factor_local_tret[,sector_tickers],duke_pairs[,grepl(paste0("^",m,"[0-9]+$"),colnames(duke_pairs))])
+    cm<-round(
+      100*cor(factor_local_tret[,sector_tickers],duke_pairs[,grepl(paste0("^",m,"[0-9]+$"),colnames(duke_pairs))]),
+      digits=0
+    )
     u<-cm[col(cm)>row(cm)]
     i<-row(cm)[col(cm)>row(cm)]
     j<-col(cm)[col(cm)>row(cm)]
     data.table(
-      pair_cor=structure(u,format=quote(sign_color(t=round(100*this,digits=2),s=this))),
+      pair_cor=structure(u,format=quote(sign_color(t=this,s=this))),
       manager=m,
-      sector=rownames(cm)[i],
+      sector=gsub(" Index","",rownames(cm))[i],
       pair=colnames(cm)[j]
     )
   },
@@ -1190,17 +1231,17 @@ cmfs<-rbind(
 )
 
 intraday_corfs_stats<-cmfs_intraday[,.(
-    mean_cor=structure(mean(pair_cor),format=quote(sign_color(t=round(100*this,digits=2),s=this))),
-    median_cor=structure(median(pair_cor),format=quote(sign_color(t=round(100*this,digits=2),s=this))),
-    max_cor=structure(max(pair_cor),format=quote(sign_color(t=round(100*this,digits=2),s=this))),
-    min_cor=structure(min(pair_cor),format=quote(sign_color(t=round(100*this,digits=2),s=this)))
+    mean_cor=structure(mean(pair_cor),format=quote(sign_color(t=round(this,digits=2),s=this))),
+    median_cor=structure(median(pair_cor),format=quote(sign_color(t=round(this,digits=2),s=this))),
+    max_cor=structure(max(pair_cor),format=quote(sign_color(t=round(this,digits=2),s=this))),
+    min_cor=structure(min(pair_cor),format=quote(sign_color(t=round(this,digits=2),s=this)))
 ),keyby=manager]
 
 daily_corfs_stats<-cmfs_daily[,.(
-    mean_cor=structure(mean(pair_cor),format=quote(sign_color(t=round(100*this,digits=2),s=this))),
-    median_cor=structure(median(pair_cor),format=quote(sign_color(t=round(100*this,digits=2),s=this))),
-    max_cor=structure(max(pair_cor),format=quote(sign_color(t=round(100*this,digits=2),s=this))),
-    min_cor=structure(min(pair_cor),format=quote(sign_color(t=round(100*this,digits=2),s=this)))
+    mean_cor=structure(mean(pair_cor),format=quote(sign_color(t=round(this,digits=2),s=this))),
+    median_cor=structure(median(pair_cor),format=quote(sign_color(t=round(this,digits=2),s=this))),
+    max_cor=structure(max(pair_cor),format=quote(sign_color(t=round(this,digits=2),s=this))),
+    min_cor=structure(min(pair_cor),format=quote(sign_color(t=round(this,digits=2),s=this)))
 ),keyby=manager]
 
 
@@ -1259,38 +1300,754 @@ daily_short_pairs<-local_tret[,rownames(short_pair_ptf)]%*%short_pair_ptf
 intraday_pair_cor<-mapply(function(x,y){
   if(sd(x)<1e-10)return(0)
   if(sd(y)<1e-10)return(0)
-  cor(x,y)
+  round(100*cor(x,y),digits=0)
 },data.table(intraday_long_pairs),data.table(intraday_short_pairs))
 
 daily_pair_cor<-mapply(function(x,y){
   if(sd(x)<1e-10)return(0)
   if(sd(y)<1e-10)return(0)
-  cor(x,y)
+  round(100*cor(x,y),digits=0)
 },data.table(daily_long_pairs),data.table(daily_short_pairs))
 
 pair_cor_df<-data.table(
   pair=names(daily_pair_cor),
-  daily=structure(daily_pair_cor,format=quote(sign_color(t=round(100*this,digits=2),s=this))),
-  intraday=structure(intraday_pair_cor,format=quote(sign_color(t=round(100*this,digits=2),s=this)))
+  perf=structure(
+    colSums(intraday_duke_pairs)[names(daily_pair_cor)],
+    format=quote(paste0("\\multicolumn{1}{r}{",sign_color(n_fmt(round(this,digits=1)),this),"}")),
+    hdr=tbl(c("2week","pair","perf"))
+  ),
+  long_perf=structure(
+    colSums(intraday_long_pairs)[names(daily_pair_cor)],
+    format=quote(paste0("\\multicolumn{1}{r}{",sign_color(n_fmt(round(this,digits=1)),this),"}")),
+    hdr=tbl(c("2week","long","perf"))
+  ),
+  short_perf=structure(
+    colSums(intraday_short_pairs)[names(daily_pair_cor)],
+    format=quote(paste0("\\multicolumn{1}{r}{",sign_color(n_fmt(round(this,digits=1)),this),"}")),
+    hdr=tbl(c("2week","short","perf"))
+  ),
+  gross=duke_position_scrape[,.(gross=sum(abs(exposure))),keyby=pair][names(daily_pair_cor),gross],
+  long=duke_position_scrape[,.(long=gsub("( Equity)|( Index)","",ticker[which.max(exposure)])),keyby=pair][names(daily_pair_cor),long],
+  short=duke_position_scrape[,.(short=gsub("( Equity)|( Index)","",ticker[which.min(exposure)])),keyby=pair][names(daily_pair_cor),short],
+  daily=structure(daily_pair_cor,format=quote(sign_color(t=this,s=this))),
+  intraday=structure(intraday_pair_cor,format=quote(sign_color(t=this,s=this)))
 )[order(abs(intraday))]
+
 
 @
 
 \begin{center}
 \begin{tabular}{c c}
 \Sexpr{ntable(
-  df=pair_cor_df[order(abs(intraday))],
-  title="ordered intraday pair correlation",
+  df=pair_cor_df[order(abs(intraday))][,c(
+    .SD,
+    list(
+      rank=structure(
+        frank(abs(daily),ties.method="dense")-frank(abs(intraday),ties.method="dense"),
+        format=quote(background_color(n_fmt(this),signed_ramp(this))),
+        hdr=tbl(c("change","in","rank"))
+      )
+    )
+  )],
+  title=large_bold("ordered by intraday pair leg correlation, low to high"),
   scale="0.5"
 )}
 &
 \Sexpr{ntable(
-  df=pair_cor_df[order(abs(daily))],
-  title="ordered daily pair correlation",
+  df=pair_cor_df[order(abs(daily))][,c(
+    .SD,
+    list(
+      rank=structure(
+        frank(abs(intraday),ties.method="dense")-frank(abs(daily),ties.method="dense"),
+        format=quote(background_color(n_fmt(this),signed_ramp(this))),
+        hdr=tbl(c("change","in","rank"))
+      )
+    )
+  )],
+  title=large_bold("ordered daily pair leg correlation, low to high"),
   scale="0.5"
 )}
 \\
 \end{tabular}
 \end{center}
+
+
+<<,cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+
+performance_image<-function(
+  pair_pattern="*",
+  txt_size=5,
+  sort_pnl=TRUE,
+  xform_fun=function(x)cumsum(x)
+){
+  
+  m<-intraday_duke_pairs[duke_ticking,grepl(pair_pattern,colnames(intraday_duke_pairs))]
+  xformed_m<-apply(m,2,xform_fun)
+  pair_perf_rank<-setNames(frank(drop(tail(xformed_m,1)),ties.method="first"),colnames(m))
+  
+  x<-data.table(
+    tick=1:nrow(intraday_duke_pairs[duke_ticking,]),
+    xformed_m
+  ) %>% 
+  {melt(data=.,id.vars="tick",measure.vars=rownames(intraday_duke_pairs),variable.factor=FALSE)} %>%
+  {.[,.(
+    tick=tick,
+    variable=variable,
+    value=value,
+    pair=if(sort_pnl){
+        factor(variable,levels=names(pair_perf_rank)[order(pair_perf_rank)])
+      }else{
+        factor(variable)
+      }
+  )]}
+  
+  g_perf<-x %>% ggplot()+
+    geom_raster(aes(x=tick,y=pair,fill=value))+
+    scale_fill_gradient2(
+      low = "red", #muted("red"), 
+      mid = "white",
+      high = "green", #muted("green"), 
+      midpoint = 0, 
+      space = "Lab",
+      na.value = "grey50", 
+      guide = "colourbar", 
+      aesthetics = "fill"
+    ) + 
+    theme(axis.text.y = element_text(size = txt_size))
+  
+  g_perf
+  
+}
+
+@
+
+
+\newpage
+\section{DUKE performance image: P\&L ordered by pair name}
+
+\begin{center}
+\Sexpr{make_plot(
+  plot(performance_image("*",sort_pnl=FALSE)),
+  width="20cm",
+  height="26cm",
+  envir=environment()
+)}
+\end{center}
+
+<<,cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+
+duke_ticking<-which(apply(intraday_duke,1,sd)>1e-10)
+
+pair_ptf<-mapply(
+  function(the_pair)structure(cbind(
+    duke_position_scrape[,.(exposure=sum(ifelse(grepl(paste0("^",the_pair,"$"),pair),exposure,0))),keyby=ticker][,exposure]
+  ),dimnames=list(sort(unique(duke_position_scrape$ticker)),the_pair)),
+  sort(unique(duke_position_scrape$pair))
+)
+
+duke_pairs<-local_tret%*%pair_ptf
+intraday_duke_pairs<-bar_matrix[,all_tickers]%*%pair_ptf
+
+
+total_gross <- sum(abs(duke_position_scrape$exposure))
+
+manager_gross<-duke_position_scrape[,.(
+  pair_count=length(unique(pair)),
+  gross=sum(abs(exposure)),
+  gross_fraction=sum(abs(exposure))/total_gross
+),keyby=manager][,.SD,keyby=manager]
+
+pair_rp<-duke_position_scrape[,.(
+  manager=manager[1],
+  actual_pair_gross=sum(abs(exposure)),
+  manager_gross=manager_gross[manager,gross][1],
+  unit_daily_sd=sd(duke_pairs[,pair])/sum(abs(exposure)),
+  unit_intraday_sd=sd(intraday_duke_pairs[,pair])/sum(abs(exposure))
+),keyby=pair][,c(
+  .SD,
+  list(
+    daily_rp_gross_ratio=manager_gross*(1/unit_daily_sd)/sum(1/unit_daily_sd)/actual_pair_gross,
+    intraday_rp_gross_ratio=manager_gross*(1/unit_intraday_sd)/sum(1/unit_intraday_sd)/actual_pair_gross
+  )
+),keyby=manager][,c(
+  .SD,
+  list(
+    daily_conviction=structure(
+      1/daily_rp_gross_ratio,
+      hdr=tbl(c("daily","conviction")),
+      format=quote(round(this,digits=2))
+    ),
+    intraday_conviction=structure(
+      1/intraday_rp_gross_ratio,
+      hdr=tbl(c("intraday","conviction")),
+      format=quote(round(this,digits=2))
+    )
+  )
+)]
+
+# rp_duke_pairs<-duke_pairs[,pair_rp$pair]%*%diag(pair_rp$daily_rp_gross_ratio)
+# rp_intraday_duke_pairs<-intraday_duke_pairs[,pair_rp$pair]%*%diag(pair_rp$intraday_rp_gross_ratio)
+# 
+# apply(rp_intraday_duke_pairs,2,sd)
+# apply(rp_duke_pairs,2,sd)
+
+@
+
+\newpage
+\section{DUKE performance image: by P\&L}
+
+\begin{center}
+\Sexpr{make_plot(
+  plot(performance_image("*",sort_pnl=TRUE)),
+  width="20cm",
+  height="26cm",
+  envir=environment()
+)}
+\end{center}
+
+
+\newpage
+\section{DUKE performance image: Cummulative hit-ratio}
+
+\begin{center}
+\Sexpr{make_plot(
+  plot(performance_image("*",sort_pnl=FALSE,xform_fun=function(x)100*cumsum(sign(x))/length(x))),
+  width="20cm",
+  height="26cm",
+  envir=environment()
+)}
+\end{center}
+
+\newpage
+\section{DUKE performance image: Cummulative hit-ratio, sorted}
+
+\begin{center}
+\Sexpr{make_plot(
+  plot(performance_image("*",sort_pnl=TRUE,xform_fun=function(x)100*cumsum(sign(x))/length(x))),
+  width="20cm",
+  height="26cm",
+  envir=environment()
+)}
+\end{center}
+
+\newpage
+\section{ABC performance image}
+
+\begin{center}
+\begin{tabular}{c c}
+\hline
+\rowcolor{gray!20}
+Cummulative P\&L (bps) & Cummulative hit ratio (pct) \\
+\Sexpr{make_plot(plot(
+  performance_image("^ABC[0-9]+$",txt_size=10)
+),width="10cm",height="10cm",envir=environment())}
+&
+\Sexpr{make_plot(plot(
+  performance_image("^ABC[0-9]+$",txt_size=10,xform_fun=function(x)100*cumsum(sign(x))/length(x))
+),width="10cm",height="10cm",envir=environment())}
+\\
+\Sexpr{ntable(
+  df=pair_rp[manager=="ABC",.(pair,daily_conviction,intraday_conviction)][order(-daily_conviction)]
+)}
+&
+\\
+\end{tabular}
+\end{center}
+
+\newpage
+\section{MC performance image}
+
+\begin{center}
+\begin{tabular}{c c}
+\hline
+\rowcolor{gray!20}
+Cummulative P\&L (bps) & Cummulative hit ratio (pct) \\
+\Sexpr{make_plot(plot(
+  performance_image("^MC[0-9]+$",txt_size=10)
+),width="10cm",height="10cm",envir=environment())}
+&
+\Sexpr{make_plot(plot(
+  performance_image("^MC[0-9]+$",txt_size=10,xform_fun=function(x)100*cumsum(sign(x))/length(x))
+),width="10cm",height="10cm",envir=environment())}
+\\
+\Sexpr{ntable(
+  df=pair_rp[manager=="MC",.(pair,daily_conviction,intraday_conviction)][order(-daily_conviction)]
+)}
+&
+\\
+\end{tabular}
+\end{center}
+\newpage
+\section{DH performance image}
+
+
+\begin{center}
+\begin{tabular}{c c}
+\hline
+\rowcolor{gray!20}
+Cummulative P\&L (bps) & Cummulative hit ratio (pct) \\
+\Sexpr{make_plot(plot(
+  performance_image("^DH[0-9]+$",txt_size=10)
+),width="10cm",height="10cm",envir=environment())}
+&
+\Sexpr{make_plot(plot(
+  performance_image("^DH[0-9]+$",txt_size=10,xform_fun=function(x)100*cumsum(sign(x))/length(x))
+),width="10cm",height="10cm",envir=environment())}
+\\
+\Sexpr{ntable(
+  df=pair_rp[manager=="DH",.(pair,daily_conviction,intraday_conviction)][order(-daily_conviction)]
+)}
+&
+\\
+\end{tabular}
+\end{center}
+
+\newpage
+\section{JR performance image}
+
+
+\begin{center}
+\begin{tabular}{c c}
+\hline
+\rowcolor{gray!20}
+Cummulative P\&L (bps) & Cummulative hit ratio (pct) \\
+\Sexpr{make_plot(plot(
+  performance_image("^JR[0-9]+$",txt_size=10)
+),width="10cm",height="10cm",envir=environment())}
+&
+\Sexpr{make_plot(plot(
+  performance_image("^JR[0-9]+$",txt_size=10,xform_fun=function(x)100*cumsum(sign(x))/length(x))
+),width="10cm",height="10cm",envir=environment())}
+\\
+\Sexpr{ntable(
+  df=pair_rp[manager=="JR",.(pair,daily_conviction,intraday_conviction)][order(-daily_conviction)]
+)}
+&
+\\
+\end{tabular}
+\end{center}
+
+
+\newpage
+\section{AC performance image}
+
+
+\begin{center}
+\begin{tabular}{c c}
+\hline
+\rowcolor{gray!20}
+Cummulative P\&L (bps) & Cummulative hit ratio (pct) \\
+\Sexpr{make_plot(plot(
+  performance_image("^AC[0-9]+$",txt_size=10)
+),width="10cm",height="10cm",envir=environment())}
+&
+\Sexpr{make_plot(plot(
+  performance_image("^AC[0-9]+$",txt_size=10,xform_fun=function(x)100*cumsum(sign(x))/length(x))
+),width="10cm",height="10cm",envir=environment())}
+\\
+\Sexpr{ntable(
+  df=pair_rp[manager=="AC",.(pair,daily_conviction,intraday_conviction)][order(-daily_conviction)]
+)}
+&
+\\
+\end{tabular}
+\end{center}
+
+
+\newpage
+\section{GJ performance image}
+
+
+\begin{center}
+\begin{tabular}{c c}
+\hline
+\rowcolor{gray!20}
+Cummulative P\&L (bps) & Cummulative hit ratio (pct) \\
+\Sexpr{make_plot(plot(
+  performance_image("^GJ[0-9]+$",txt_size=10)
+),width="10cm",height="10cm",envir=environment())}
+&
+\Sexpr{make_plot(plot(
+  performance_image("^GJ[0-9]+$",txt_size=10,xform_fun=function(x)100*cumsum(sign(x))/length(x))
+),width="10cm",height="10cm",envir=environment())}
+\\
+\Sexpr{ntable(
+  df=pair_rp[manager=="GJ",.(pair,daily_conviction,intraday_conviction)][order(-daily_conviction)]
+)}
+&
+\\
+\end{tabular}
+\end{center}
+
+
+\newpage
+\section{ACTW performance image}
+
+\begin{center}
+\begin{tabular}{c c}
+\hline
+\rowcolor{gray!20}
+Cummulative P\&L (bps) & Cummulative hit ratio (pct) \\
+\Sexpr{make_plot(plot(
+  performance_image("^ACTW[0-9]+$",txt_size=10)
+),width="10cm",height="10cm",envir=environment())}
+&
+\Sexpr{make_plot(plot(
+  performance_image("^ACTW[0-9]+$",txt_size=10,xform_fun=function(x)100*cumsum(sign(x))/length(x))
+),width="10cm",height="10cm",envir=environment())}
+\\
+\Sexpr{ntable(
+  df=pair_rp[manager=="ACTW",.(pair,daily_conviction,intraday_conviction)][order(-daily_conviction)]
+)}
+&
+\\
+\end{tabular}
+\end{center}
+
+
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+  
+require(RSQLite)
+require(DBI)
+require(Matrix)
+require(Matrix.utils)
+require(Rblpapi)
+require(R.cache)
+require(RcppRoll)
+require(data.table)
+require(Hmisc)
+require(clue)
+require(gsubfn)
+require(magrittr)
+
+# x<-list.files(
+#   path="figure",
+#   pattern="*.pdf",
+#   full.names=TRUE
+# )
+# if(length(x)>0)file.remove(x)
+
+source(
+  "https://raw.githubusercontent.com/satrapade/utility/master/utility_functions.R"
+)
+
+source(
+  "https://raw.githubusercontent.com/satrapade/latex_utils/master/latex_helpers_v2.R"
+)
+
+source(
+  "https://raw.githubusercontent.com/satrapade/utility/master/scrub.R"
+)
+
+source(
+  "https://raw.githubusercontent.com/satrapade/utility/master/with_columns.R"
+)
+
+source(
+  "https://raw.githubusercontent.com/satrapade/utility/master/nn_cast.R"
+)
+
+source(
+  "https://raw.githubusercontent.com/satrapade/utility/master/make_query.R"
+)
+
+
+
+
+if(exists("db"))dbDisconnect(db)
+db<-dbConnect(
+  odbc::odbc(), 
+  .connection_string = paste0(
+    "driver={SQL Server};",
+    "server=SQLS071FP\\QST;",
+    "database=PRDQSTFundPerformance;",
+    "trusted_connection=true"
+  )
+)
+
+
+query_string="
+SELECT 
+tBucket.Name AS bucket,
+SUBSTRING(CONVERT(varchar,tHistoricalBucket.HistoricalDate),1,10) AS date,
+tHistoricalBucket.BucketPricePlItd AS cummulative_return
+FROM tHistoricalBucket
+LEFT JOIN tBucket
+ON tBucket.BucketId = tHistoricalBucket.BucketId
+LEFT JOIN tBucket AS tParentBucket 
+ON tParentBucket.BucketId=tBucket.ParentBucketId
+LEFT JOIN tBucket AS tRootBucket 
+ON tRootBucket.BucketId=tParentBucket.ParentBucketId
+WHERE tRootBucket.Name = 'EqyBucket'
+AND tHistoricalBucket.ProductId=--R{product_id}--
+AND tHistoricalBucket.DataSourceId=--R{data_source_id}--
+"
+
+
+query_historical_holdings_string="
+SELECT 
+tBucket.Name AS bucket,
+SUBSTRING(CONVERT(varchar,tHistoricalBucketHolding.HistoricalDate),1,10) AS date,
+tSecurity.Ticker AS security_ticker,
+tUnderlyingSecurity.Ticker AS underlying_security_ticker,
+tSecurityType.Name AS security_type,
+tUnderlyingSecurityType.Name AS underlying_security_type
+FROM tHistoricalBucketHolding
+LEFT JOIN tBucket
+ON tBucket.BucketId = tHistoricalBucketHolding.BucketId
+LEFT JOIN tBucket AS tParentBucket 
+ON tParentBucket.BucketId=tBucket.ParentBucketId
+LEFT JOIN tBucket AS tRootBucket 
+ON tRootBucket.BucketId=tParentBucket.ParentBucketId
+LEFT JOIN tSecurity 
+ON tSecurity.SecurityId = tHistoricalBucketHolding.SecurityId
+LEFT JOIN tSecurityType 
+ON tSecurityType.SecurityTypeId = tSecurity.SecurityTypeId
+LEFT JOIN tSecurity AS tUnderlyingSecurity
+ON tUnderlyingSecurity.SecurityId = tSecurity.UnderlyingSecurityId
+LEFT JOIN tSecurityType AS tUnderlyingSecurityType
+ON tUnderlyingSecurityType.SecurityTypeId = tUnderlyingSecurity.SecurityTypeId
+WHERE tRootBucket.Name = 'EqyBucket'
+AND tHistoricalBucketHolding.ProductId=--R{product_id}--
+AND tHistoricalBucketHolding.DataSourceId=--R{data_source_id}--
+"
+
+
+
+
+
+@
+
+
+
+
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+
+#
+# DUKE
+#
+
+duke_bucket_holdings<-query(make_query(
+  query_string = query_historical_holdings_string,
+  product_id="8",
+  data_source_id="2"
+),db=db)[grepl("[A-Z]{2,3}_PAIR_[0-9]{2,9}",bucket)]
+
+ticker_count<-duke_bucket_holdings[,.(
+  manager=gsub("_PAIR_[0-9]+$","",bucket),
+  ticker=ifelse(
+    !security_type %in% c("Equity Swap","Equity Etd"),
+    "other",
+    ifelse(security_type=="Equity Swap",underlying_security_ticker,security_ticker)
+  )
+)][,.(ticker=unique(ticker)),keyby="manager"]
+
+duke_bucket_return<-query(make_query(
+  query_string = query_string,
+  product_id="8",
+  data_source_id="2"
+),db=db)[
+  grepl("[A-Z]{2,3}_PAIR_[0-9]{2,9}",bucket) &
+  !is.na(cummulative_return)
+]
+
+duke_bucket_return_matrix<-10000*NNcast(
+  data=duke_bucket_return,
+  i_name="date",
+  j_name="bucket",
+  v_name="cummulative_return",
+  fun=sum,
+  scrub_fun=scrub
+)
+
+duke_high_water_mark<-apply(duke_bucket_return_matrix,2,max)
+duke_current_drawdown<-apply(duke_bucket_return_matrix,2,function(x)max(x)-x[length(x)])
+duke_max_drawdown<-apply(duke_bucket_return_matrix,2,function(x)max(cummax(x)-x))
+
+duke_pair_pms<-gsub("_PAIR_[0-9]+$","",colnames(duke_bucket_return_matrix))
+duke_pms<-sort(unique(duke_pair_pms))
+
+duke_pm_return<-structure(
+  duke_bucket_return_matrix%*%diag(length(duke_pms))[match(duke_pair_pms,duke_pms),],
+  dimnames=list(rownames(duke_bucket_return_matrix),duke_pms)
+)
+
+duke_pm_high_water_mark<-apply(duke_pm_return,2,max)
+duke_pm_current_drawdown<-apply(duke_pm_return,2,function(x)max(x)-x[length(x)])
+duke_pm_max_drawdown<-apply(duke_pm_return,2,function(x)max(cummax(x)-x))
+
+gg_duke_pm_plot<-melt(
+  data.table(date=as.Date(rownames(duke_pm_return),format="%Y-%m-%d"),duke_pm_return),
+  id.vars="date",
+  measure.vars = colnames(duke_pm_return),
+  variable.name="pm",
+  value.name="return"
+) %>% ggplot() +
+geom_line(
+  aes(x=date,y=return,color=pm,group=pm)
+)+
+scale_x_date(
+  labels = date_format("%Y-%m-%d"),
+  breaks = pretty(as.Date(rownames(duke_pm_return),format="%Y-%m-%d"), n = 15)
+) +
+labs(y = "P&L, basis points") +
+labs(x = "") +
+theme(
+  axis.text.x=element_text(angle=50,size=6,vjust=0.5)
+)
+
+
+@
+
+
+
+\newpage
+\section{Data sources}
+
+\vskip 5mm
+
+\begin{itemize}
+\item We rely on the performance attribution database to obtain pair P\&L time-series. 
+\item The allocation of positions (and P\&L) to pairs is a daily manual process that 
+relies on a feed of settled trades from our custodian. 
+\item This means that our information is out of date by at least the settlement period
+(best practice would be to have exposures on the day they were traded). 
+\item Because coverage at the performance team varies, our numbers can be out of date 
+beyond the settlement lag. 
+\item A standard portfolio management system would bring this process up to current best practice.
+\end{itemize}
+
+\vskip 10mm
+
+\begin{center}
+\begin{tabular}{l l}
+\hline
+\multicolumn{2}{c}{Latest bucket P\&L date} \\
+LUKE  &  
+\Sexpr{query("SELECT MAX(HistoricalDate) FROM tHistoricalBucket WHERE tHistoricalBucket.ProductId=7")[[1]][1]}
+\\
+DUKE  &  
+\Sexpr{query("SELECT MAX(HistoricalDate) FROM tHistoricalBucket WHERE tHistoricalBucket.ProductId=8")[[1]][1]}
+\\
+\end{tabular}
+\end{center}
+
+\vskip 5mm
+
+\begin{center}
+\Sexpr{ntable(
+  df=apply(as.data.table(
+    t(query("
+    select Top 1        
+    bs.backup_finish_date                    as PRDFundPerformance_BackupDateTime,
+    rs.restore_date                          as PRDQSTFundPerformance_RestoreDateTime
+    from msdb..restorehistory rs
+    inner join msdb..backupset bs 
+    on rs.backup_set_id = bs.backup_set_id
+    where destination_database_name = 'PRDQSTFundPerformance'
+    order by rs.restore_date desc
+    ",db)),
+    keep.rownames=TRUE
+  ),2,latexTranslate),
+  title="Database copy date"
+)}
+\end{center}
+
+
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+duke_live_pairs<-setdiff(names(which(apply(tail(duke_bucket_return_matrix,30),2,sd)>0)),"DH_PAIR_20")
+duke_live_drawdowns<-duke_current_drawdown[duke_live_pairs]
+duke_top_drawdowns<-names(which(rank(-duke_live_drawdowns)<11))
+  
+gg_duke_drawdown_plot<-melt(
+  data.table(
+    date=tail(as.Date(rownames(duke_bucket_return_matrix[,duke_top_drawdowns]),format="%Y-%m-%d"),60),
+    tail(apply(duke_bucket_return_matrix[,duke_top_drawdowns],2,function(x)max(x)-x),60)
+  ),
+  id.vars="date",
+  measure.vars = duke_top_drawdowns,
+  variable.name="pair",
+  value.name="return"
+) %>% ggplot() +
+ylim(
+  low=0,
+  high=50
+)+
+geom_hline(
+    aes(yintercept=40),size=0.25,color=rgb(1,0,0,0.5),show.legend=FALSE
+)+ 
+geom_line(
+  aes(x=date,y=return,group=pair),
+  color=rgb(0,0,1,0.5)
+)+
+scale_x_date(
+  labels = date_format("%Y-%m-%d"),
+  breaks = pretty(as.Date(tail(rownames(duke_bucket_return_matrix),60),format="%Y-%m-%d"), n = 15)
+) +
+labs(
+  y = "Drawdown from high watermark, basis points"
+) +
+labs(
+  x = ""
+) +
+theme(
+  axis.text.x=element_text(angle=50,size=6,vjust=0.5)
+) + 
+facet_grid(
+  rows=vars(pair),
+  labeller=labeller(pair=function(x)gsub("_PAIR_","",x))
+)
+
+@
+\newpage
+\section{top DUKE drawdowns, as of \Sexpr{ tail(rownames(duke_bucket_return_matrix),1)}}
+
+\vskip 5mm
+
+\begin{center}
+\Sexpr{make_plot(
+  plot(gg_duke_drawdown_plot),
+  width="20cm",
+  height="20cm",
+  envir=environment()
+)}
+\end{center}
+
+\newpage
+\section{
+  Historical DUKE performance by manager: 
+  \Sexpr{head(rownames(duke_bucket_return_matrix),1)} to \Sexpr{tail(rownames(duke_bucket_return_matrix),1)} 
+}
+
+\subsection{DUKE: All together}
+
+\vskip 5mm
+
+\begin{center}
+\Sexpr{make_plot(
+  plot(gg_duke_pm_plot),
+  width="20cm",
+  height="20cm",
+  envir=environment()
+)}
+\end{center}
+
+\subsection{DUKE: By manager}
+
+\vskip 5mm
+
+\begin{center}
+\Sexpr{make_plot(
+  plot(gg_duke_pm_plot + facet_grid(rows=vars(pm))),
+  width="20cm",
+  height="20cm",
+  envir=environment()
+)}
+\end{center}
+
+
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+if(exists("db"))dbDisconnect(db)
+@
 
 \end{document}
