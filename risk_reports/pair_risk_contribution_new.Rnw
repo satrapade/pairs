@@ -270,9 +270,15 @@ log_code(pair_stats<-data.table(
   marginal_risk_contribution=structure(
     mrc(total_gross*gross_fraction,cov(pair_tret)),
     format=quote(n_fmt(round(this,digits=1))),
-    hdr=tbl(c("MRC","risk","cntr","pct"),align="@{}l@{}")
+    hdr=tbl(c("2Y","MRC","risk","cntr","pct"),align="@{}l@{}")
 )))
-  
+
+pair_stats$marginal_risk_contribution_1y<-structure(
+    mrc(total_gross*gross_fraction,cov(tail(pair_tret,365))),
+    format=quote(n_fmt(round(this,digits=1))),
+    hdr=tbl(c("1Y","MRC","risk","cntr","pct"),align="@{}l@{}")
+)  
+
 log_code(pair_stats$pair<-names(gross_fraction))
 
 
@@ -309,7 +315,15 @@ log_code(pair_stats$cum_marginal_risk<-pair_stats[
   structure(
       cumsum(marginal_risk_contribution),
       format=quote(round(this,digits=1)),
-      hdr=tbl(c("Cum","marg","risk","pct"),align="@{}l@{}") 
+      hdr=tbl(c("Cum","2Y","marg","risk","pct"),align="@{}l@{}") 
+)])
+
+log_code(pair_stats$cum_marginal_risk_1y<-pair_stats[
+  TRUE,
+  structure(
+      cumsum(marginal_risk_contribution_1y),
+      format=quote(round(this,digits=1)),
+      hdr=tbl(c("Cum","1Y","marg","risk","pct"),align="@{}l@{}") 
 )])
 
 log_code(pair_stats$volatility_trajectory<-pair_stats[
