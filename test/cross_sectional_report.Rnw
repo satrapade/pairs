@@ -1,0 +1,365 @@
+
+
+
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+# input:
+#
+#  the_manager 
+#
+#
+require(stringi)
+require(data.table)
+require(FRAPO)
+require(Hmisc)
+
+require(magrittr)
+require(PerformanceAnalytics)
+require(RcppRoll)
+require(ggplot2)
+require(scales)
+require(lubridate)
+
+
+x<-list.files(
+  path="figure",
+  pattern="*.pdf",
+  full.names=TRUE
+)
+if(length(x)>0)file.remove(x)
+
+
+source("https://raw.githubusercontent.com/satrapade/latex_utils/master/latex_helpers_v2.R")
+source("https://raw.githubusercontent.com/satrapade/utility/master/tikz_shape.R")
+source("https://raw.githubusercontent.com/satrapade/utility/master/nn_cast.R")
+
+tret<- fread("N:/Depts/Share/UK Alpha Team/Analytics/test/hist_stock_data.csv") %>%
+{.[,.(tret=tret[1],vol_30d=vol_30d[1]),keyby=c("date","ticker")]} %>%
+{.[sd(tret)>0]} %>%
+{.[!is.na(vol_30d)]} %>%
+{.$date<-as.Date(.$date,format="%Y-%m-%d");.} %>%
+{.$year_month<-as.character(.$date,format="%Y-%m");.}
+
+countcurt<-function(x){
+  maxx<-max(x)
+  minx<-min(x)
+  a<-mean(x)+(maxx-minx)/24
+  b<-mean(x)-(maxx-minx)/24
+  2*(sum(x>b)-sum(x>a))/length(x)-1
+}
+
+count_disasters<-function(x,q=0.1){
+  the_range<-quantile(x,c(q,1-q))
+  thresh<-min(the_range)+diff(the_range)*q
+  sum(x<thresh)/length(x)
+}
+
+count_home_runs<-function(x,q=0.1){
+  the_range<-quantile(x,c(q,1-q))
+  thresh<-max(the_range)-diff(the_range)*q
+  sum(x>thresh)/length(x)
+}
+
+fatness<-function(x,q=0.25){
+  q_points<-c(q,1-q)
+  diff(quantile(x,q_points))
+}
+
+fatness_ratio<-function(x,q1=0.25,q2=0.01){
+  q1_points<-c(q1,1-q1)
+  q1_diff<-diff(quantile(x,q1_points))
+  q2_points<-c(q2,1-q2)
+  q2_diff<-diff(quantile(x,q2_points))
+  q2_diff/q1_diff
+}
+
+w<-tret[,.(
+  date=as.Date(paste0(year_month,"-01"),format="%Y-%m-%d"),
+  index_sd=sd(tret[ticker=="SXXP Index"]),
+  cross_sectional_sd=sd(tret),
+  cross_sectional_kurtosis=PerformanceAnalytics::kurtosis(tret),
+  hivol_cross_sectional_kurtosis=PerformanceAnalytics::kurtosis(tret[vol_30d>quantile(vol_30d,0.90)]),
+  lovol_cross_sectional_kurtosis=PerformanceAnalytics::kurtosis(tret[vol_30d<quantile(vol_30d,0.10)]),
+  sd_ratio=sd(tret)/sd(tret[ticker=="SXXP Index"]),
+  mean_move=mean(abs(tret)),
+  mean_lovol_move=mean(abs(tret[vol_30d<quantile(vol_30d,0.10)])),
+  mean_hivol_move=mean(abs(tret[vol_30d>quantile(vol_30d,0.90)])),
+  hivol_lovol_ratio=quantile(vol_30d,c(0.1,0.90)) %>% 
+    {mean(abs(tret[vol_30d>.[2]]))/mean(abs(tret[vol_30d<.[1]]))},
+  hivol_lovol_diff=quantile(vol_30d,c(0.1,0.90)) %>% 
+    {mean(abs(tret[vol_30d>.[2]]))-mean(abs(tret[vol_30d<.[1]]))} %>%
+    {./mean(abs(tret[ticker=="SXXP Index"]))},
+  hivol_sxxp_ratio=quantile(vol_30d,0.90) %>% 
+    {mean(abs(tret[vol_30d>.]))/mean(abs(tret[ticker=="SXXP Index"]))},
+  lovol_sxxp_ratio=quantile(vol_30d,0.1) %>% 
+    {mean(abs(tret[vol_30d>.]))/mean(abs(tret[ticker=="SXXP Index"]))},
+  hist_daily_rank_cor=cor(abs(tret),vol_30d,method="spearman"),
+  lovol_breadth=mean(sign(tret[vol_30d<quantile(vol_30d,0.10)])),
+  hivol_breadth=mean(sign(tret[vol_30d>quantile(vol_30d,0.90)])),
+  count_disasters=count_disasters(tret,q=0.1),
+  count_home_runs=count_home_runs(tret,q=0.1),
+  dispersion_01=fatness(tret,q=0.01),
+  dispersion_05=fatness(tret,q=0.05),
+  dispersion_25=fatness(tret,q=0.25),
+  sd_hivol=sd(tret[vol_30d>quantile(vol_30d,0.9)]),
+  sd_lovol=sd(tret[vol_30d<quantile(vol_30d,0.1)]),
+  breadth=mean(sign(tret)),
+  breadth_hivol=which(vol_30d>quantile(vol_30d,0.90)) %>% {mean(sign(tret[.]))},
+  breadth_lovol=which(vol_30d>quantile(vol_30d,0.10)) %>% {mean(sign(tret[.]))},
+  breadth=mean(sign(tret)),
+  upmove=if(sum(tret>0)>0){mean(tret[tret>0])}else{0},
+  dnmove=if(sum(tret<0)>0){mean(abs(tret[tret<0]))}else{0},
+  count=length(tret)
+),keyby=year_month][count>1000]
+
+data1<-c("dispersion_01","dispersion_05","dispersion_25","cross_sectional_sd")
+data2<-c("count_disasters","count_home_runs","count_skew")
+data3<-c("count_skew")
+data4<-c("mean_lovol_move","mean_hivol_move")
+data5<-c("hivol_lovol_ratio")
+data6<-c("upmove","dnmove")
+data7<-c("updn_diff")
+data8<-c("lovol_breadth","hivol_breadth")
+
+make_stat_plot<-function(start_date,stats)w[date>=as.Date(start_date)] %>% 
+  melt(
+    id.vars="date",
+    measure.vars=stats
+  ) %>%
+  ggplot() + 
+  geom_line(aes(x=date,y=value,col=variable)) + 
+  scale_x_date(date_breaks = "1 years" , date_labels = "%y")+
+  ggtitle(paste0(stats,collapse=", "))
+
+
+@
+\documentclass{article}
+
+\usepackage[portrait, headheight = 0cm, margin=0.25cm, top = 0.25cm, nofoot]{geometry} 
+\usepackage[export]{adjustbox} 
+\usepackage{graphicx}
+\usepackage[space]{grffile}
+\usepackage[dvipsnames,table]{xcolor} % [dvipsnames,table] for setting colors \usepackage{amsmath} \usepackage{xfrac}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric}
+\usetikzlibrary{shapes.misc}
+\usetikzlibrary{arrows}
+\usepackage{xfrac}
+\usepackage{hyperref}
+\usepackage{amsmath}
+
+\DeclareRobustCommand\Tstrut{\rule{0pt}{2.6ex}}         % = `top' strut
+\DeclareRobustCommand\Bstrut{\rule[-0.9ex]{0pt}{0pt}}   % = `bottom' strut
+\renewcommand{\familydefault}{\sfdefault}
+
+
+\begin{document}
+
+\tableofcontents
+
+\newpage
+\section{Summary}
+\vskip 5mm
+
+\begin{itemize}
+\item We examine a number of cross sectional statistics of daily returns of SXXP memeber stocks
+\item SXXP members are sampled quarterly and their daily returns for the preceding 3 month are
+retrieved from Bloomberg 
+\item We split the resulting return data by month and compute a number of statistics for each group
+\end{itemize}
+
+\newpage
+\section{cross-sectional kurtosis}
+\subsection{since 2001}
+\begin{center}
+\Sexpr{make_plot(plot(
+  make_stat_plot("2001-01-01",c("cross_sectional_kurtosis"))
+),width="20cm",height="20cm",envir=environment())}
+\end{center}
+
+\subsection{since 2011}
+\begin{center}
+\Sexpr{make_plot(plot(
+  make_stat_plot("2011-01-01",c("cross_sectional_kurtosis"))
+),width="20cm",height="20cm",envir=environment())}
+\end{center}
+
+\subsection{since 2017}
+\begin{center}
+\Sexpr{make_plot(plot(
+  make_stat_plot("2017-01-01",c("cross_sectional_kurtosis"))
+),width="20cm",height="20cm",envir=environment())}
+\end{center}
+
+\newpage
+\section{upmoves, downmoves}
+\subsection{since 2001}
+\begin{center}
+\Sexpr{make_plot(plot(
+  make_stat_plot("2001-01-01",c("upmove","dnmove"))
+),width="20cm",height="20cm",envir=environment())}
+\end{center}
+
+\newpage
+\subsection{since 2011}
+\begin{center}
+\Sexpr{make_plot(plot(
+  make_stat_plot("2011-01-01",c("upmove","dnmove"))
+),width="20cm",height="20cm",envir=environment())}
+\end{center}
+
+\newpage
+\subsection{since 2017}
+\begin{center}
+\Sexpr{make_plot(plot(
+  make_stat_plot("2017-01-01",c("upmove","dnmove"))
+),width="20cm",height="20cm",envir=environment())}
+\end{center}
+
+
+
+\newpage
+\section{disasters, home runs}
+\subsection{since 2001}
+\begin{center}
+\Sexpr{make_plot(plot(
+  make_stat_plot("2001-01-01",c("count_home_runs","count_disasters"))
+),width="20cm",height="20cm",envir=environment())}
+\end{center}
+\subsection{since 2011}
+\begin{center}
+\Sexpr{make_plot(plot(
+  make_stat_plot("2011-01-01",c("count_home_runs","count_disasters"))
+),width="20cm",height="20cm",envir=environment())}
+\end{center}
+\subsection{since 2017}
+\begin{center}
+\Sexpr{make_plot(plot(
+  make_stat_plot("2017-01-01",c("count_home_runs","count_disasters"))
+),width="20cm",height="20cm",envir=environment())}
+\end{center}
+
+\newpage
+\section{dispersion, cross-sectional deviation}
+\subsection{since 2011}
+\begin{center}
+\Sexpr{make_plot(plot(
+  make_stat_plot("2001-01-01",c("dispersion_01","dispersion_05","dispersion_25","cross_sectional_sd"))
+),width="20cm",height="20cm",envir=environment())}
+\end{center}
+
+\newpage
+\subsection{since 2011}
+\begin{center}
+\Sexpr{make_plot(plot(
+  make_stat_plot("2011-01-01",c("dispersion_01","dispersion_05","dispersion_25","cross_sectional_sd"))
+),width="20cm",height="20cm",envir=environment())}
+\end{center}
+
+\newpage
+\subsection{hi-vol basket vs lo-vol basket disperion,since 2011}
+\begin{center}
+\Sexpr{make_plot(plot(
+  make_stat_plot("2011-01-01",c("sd_hivol","sd_lovol"))
+),width="20cm",height="20cm",envir=environment())}
+\end{center}
+
+\newpage
+\subsection{hi-vol vs lo-vol basket volatility ratio,since 2011}
+\begin{center}
+\Sexpr{make_plot(plot(
+  make_stat_plot("2011-01-01",c("hivol_lovol_ratio"))
+),width="20cm",height="20cm",envir=environment())}
+\end{center}
+
+\newpage
+\subsection{hi-vol vs lo-vol basket volatility ratio,since 2001}
+\begin{center}
+\Sexpr{make_plot(plot(
+  make_stat_plot("2001-01-01",c("hivol_lovol_ratio"))
+),width="20cm",height="20cm",envir=environment())}
+\end{center}
+
+\newpage
+\subsection{hi-vol vs lo-vol basket volatility difference,since 2001}
+\begin{center}
+\Sexpr{make_plot(plot(
+  make_stat_plot("2001-01-01",c("hivol_lovol_diff"))
+),width="20cm",height="20cm",envir=environment())}
+\end{center}
+
+\newpage
+\section{Correlation of realized volatility and size of daily move}
+
+\begin{center}
+\Sexpr{make_plot(plot(
+  make_stat_plot("2001-01-01",c("hist_daily_rank_cor"))
+),width="20cm",height="20cm",envir=environment())}
+\end{center}
+
+\newpage
+\section{hi-vol breadth, lo-vol breadth}
+
+\subsection{since 2001}
+\begin{center}
+\Sexpr{make_plot(plot(
+  make_stat_plot("2001-01-01",c("breadth_hivol","breadth_lovol"))
+),width="20cm",height="20cm",envir=environment())}
+\end{center}
+
+\newpage
+\subsection{since 2011}
+\begin{center}
+\Sexpr{make_plot(plot(
+  make_stat_plot("2011-01-01",c("breadth_hivol","breadth_lovol"))
+),width="20cm",height="20cm",envir=environment())}
+\end{center}
+
+\newpage
+\subsection{since 2017}
+\begin{center}
+\Sexpr{make_plot(plot(
+  make_stat_plot("2017-01-01",c("breadth_hivol","breadth_lovol"))
+),width="20cm",height="20cm",envir=environment())}
+\end{center}
+
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+ g_breadth_diff<-function(start_date,ticks="1 years",tick_label="%y")w[date>start_date] %>%
+  {data.table(
+   date=tail(.$date,-1),
+   hi=diff(.$breadth_hivol),
+   lo=diff(.$breadth_lovol),
+   agree=factor(
+     ifelse(diff(.$breadth_hivol)*diff(.$breadth_lovol)<0,"disagree","agree"),
+     levels=c("disagree","agree")
+   ),
+   diff=diff(.$breadth_hivol)-diff(.$breadth_lovol)
+  )} %>%
+  ggplot() +
+  geom_point(aes(x=date,y=diff,col=agree)) +
+  scale_x_date(date_breaks =ticks , date_labels = tick_label)+
+  ggtitle("hivol minus lovol breadth change")
+@
+
+\newpage
+\subsection{hi-vol vs lo-vol breadth changes, since 2017}
+\begin{center}
+\Sexpr{make_plot(plot(
+  g_breadth_diff("2017-01-01",ticks="1 months", tick_label="%b")
+),width="20cm",height="20cm",envir=environment())}
+\end{center}
+
+\newpage
+\subsection{hi-vol vs lo-vol breadth changes, since 2001}
+\begin{center}
+\Sexpr{make_plot(plot(
+  g_breadth_diff("2001-01-01",ticks="1 years", tick_label="%y")
+),width="20cm",height="20cm",envir=environment())}
+\end{center}
+
+
+\end{document}
+
+
+
+
+
