@@ -2,11 +2,7 @@
 
 
 <<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
-# input:
-#
-#  the_manager 
-#
-#
+
 require(stringi)
 require(data.table)
 require(FRAPO)
@@ -27,14 +23,23 @@ x<-list.files(
 )
 if(length(x)>0)file.remove(x)
 
-
+source("https://raw.githubusercontent.com/satrapade/utility/master/utility_functions.R")
 source("https://raw.githubusercontent.com/satrapade/latex_utils/master/latex_helpers_v2.R")
 source("https://raw.githubusercontent.com/satrapade/utility/master/tikz_shape.R")
 source("https://raw.githubusercontent.com/satrapade/utility/master/nn_cast.R")
 
 tret<- fread("N:/Depts/Share/UK Alpha Team/Analytics/test/hist_stock_data.csv") %>%
-{.[,.(tret=tret[1],vol_30d=vol_30d[1]),keyby=c("date","ticker")]} %>%
-{.[sd(tret)>0]} %>%
+{.[,.(
+    tret=tret[1],
+    vol_30d=vol_30d[1],
+    best_analyst_rating=best_analyst_rating[1],
+    rsi30d=rsi30d[1],
+    ma200=ma200[1],
+    ma30=ma30[1],
+    beta_plus=beta_plus[1],
+    beta_minus=beta_minus[1],
+    corr=corr[1]
+  ),keyby=c("date","ticker")]} %>%
 {.[!is.na(vol_30d)]} %>%
 {.$date<-as.Date(.$date,format="%Y-%m-%d");.} %>%
 {.$year_month<-as.character(.$date,format="%Y-%m");.}
@@ -76,13 +81,41 @@ w<-tret[,.(
   date=as.Date(paste0(year_month,"-01"),format="%Y-%m-%d"),
   index_sd=sd(tret[ticker=="SXXP Index"]),
   cross_sectional_sd=sd(tret),
-  cross_sectional_kurtosis=PerformanceAnalytics::kurtosis(tret),
-  hivol_cross_sectional_kurtosis=PerformanceAnalytics::kurtosis(tret[vol_30d>quantile(vol_30d,0.90)]),
-  lovol_cross_sectional_kurtosis=PerformanceAnalytics::kurtosis(tret[vol_30d<quantile(vol_30d,0.10)]),
   sd_ratio=sd(tret)/sd(tret[ticker=="SXXP Index"]),
   mean_move=mean(abs(tret)),
   mean_lovol_move=mean(abs(tret[vol_30d<quantile(vol_30d,0.10)])),
   mean_hivol_move=mean(abs(tret[vol_30d>quantile(vol_30d,0.90)])),
+  mean_lorating_move=local({
+    i<-which(ticker!="SXXP Index" & !is.na(best_analyst_rating))
+    if(length(i)<1)return(0)
+    thresh<-quantile(best_analyst_rating[i],0.5)
+    mean(tret[i][best_analyst_rating[i]<thresh])
+  }),
+  mean_hirating_move=local({
+    i<-which(ticker!="SXXP Index" & !is.na(best_analyst_rating))
+    if(length(i)<1)return(0)
+    thresh<-quantile(best_analyst_rating[i],0.5)
+    mean(tret[i][best_analyst_rating[i]>thresh])
+  }),
+  mean_hilorating_move=local({
+    i<-which(ticker!="SXXP Index" & !is.na(best_analyst_rating))
+    if(length(i)<1)return(0)
+    hi_t<-quantile(best_analyst_rating[i],0.75)
+    lo_t<-quantile(best_analyst_rating[i],0.25)
+    mean(tret[i][best_analyst_rating[i]>hi_t])-mean(tret[i][best_analyst_rating[i]<lo_t])
+  }),
+  mean_lobetadiff_move=local({
+    i<-which(ticker!="SXXP Index" & !is.na(beta_plus) & !is.na(beta_minus))
+    if(length(i)<1)return(0)
+    thresh<-quantile((beta_plus-beta_minus)[i],0.25)
+    mean(tret[i][(beta_plus-beta_minus)[i]<thresh])
+  }),
+  mean_hibetadiff_move=local({
+    i<-which(ticker!="SXXP Index" & !is.na(beta_plus) & !is.na(beta_minus))
+    if(length(i)<1)return(0)
+    thresh<-quantile((beta_plus-beta_minus)[i],0.75)
+    mean(tret[i][(beta_plus-beta_minus)[i]>thresh])
+  }),
   hivol_lovol_ratio=quantile(vol_30d,c(0.1,0.90)) %>% 
     {mean(abs(tret[vol_30d>.[2]]))/mean(abs(tret[vol_30d<.[1]]))},
   hivol_lovol_diff=quantile(vol_30d,c(0.1,0.90)) %>% 
@@ -119,6 +152,46 @@ data5<-c("hivol_lovol_ratio")
 data6<-c("upmove","dnmove")
 data7<-c("updn_diff")
 data8<-c("lovol_breadth","hivol_breadth")
+
+
+calc_stats<-function(dt,jtxt,g="year_month"){
+  stats<-c(jtxt,c(count="length(tret)",date="as.Date(paste0(year_month,'-01'),format='%Y-%m-%d')"))
+  stats_expr_txt<-paste0("list(",paste0(names(stats),"=",stats,collapse=","),")")
+  jexpr<-parse(text=stats_expr_txt)[[1]]
+  dt_expr<-bquote(dt[,.(jexpr),keyby=.(g)])
+  res0<-eval(dt_expr)
+  res1<-res0[count>1000]
+  res2<-melt(res1,id.vars="date",measure.vars=names(jtxt))
+  res2
+}
+
+plot_stats<-function(stats){
+  stats %>%
+  ggplot() + 
+  geom_line(aes(x=date,y=value,col=variable)) + 
+  scale_x_date(date_breaks = "1 years" , date_labels = "%y")+
+  ggtitle(paste0(sort(unique(stats$variable)),collapse=", "))
+}
+
+latex_stats<-function(dt,jtxt){
+  stats<-calc_stats(dt,jtxt)
+  g<-plot_stats(stats)
+  paste0(
+    "\\begin{center}",
+    ntable(
+      df=data.table(
+        stat=latexTranslate(names(jtxt)),
+        calculation=paste("{\\tt ",latexTranslate(jtxt)," }")
+      )
+    ),
+    "\\end{center}",
+    "\\begin{center}",
+    make_plot(plot(g),width="20cm",height="20cm",envir=environment()),
+    "\\end{center}",
+    collapse="\n"
+  )
+}
+
 
 make_stat_plot<-function(start_date,stats)w[date>=as.Date(start_date)] %>% 
   melt(
@@ -167,195 +240,217 @@ retrieved from Bloomberg
 \item We split the resulting return data by month and compute a number of statistics for each group
 \end{itemize}
 
-\newpage
-\section{cross-sectional kurtosis}
-\subsection{since 2001}
-\begin{center}
-\Sexpr{make_plot(plot(
-  make_stat_plot("2001-01-01",c("cross_sectional_kurtosis"))
-),width="20cm",height="20cm",envir=environment())}
-\end{center}
+\vskip 5mm
 
-\subsection{since 2011}
-\begin{center}
-\Sexpr{make_plot(plot(
-  make_stat_plot("2011-01-01",c("cross_sectional_kurtosis"))
-),width="20cm",height="20cm",envir=environment())}
-\end{center}
+items in dataset:
 
-\subsection{since 2017}
+\vskip 5mm
+
 \begin{center}
-\Sexpr{make_plot(plot(
-  make_stat_plot("2017-01-01",c("cross_sectional_kurtosis"))
-),width="20cm",height="20cm",envir=environment())}
+\Sexpr{ntable(
+  df=data.table(
+    item=latexTranslate(names(tret)),
+    type=mapply(class,tret)
+  )
+)}
 \end{center}
 
 \newpage
-\section{upmoves, downmoves}
-\subsection{since 2001}
-\begin{center}
-\Sexpr{make_plot(plot(
-  make_stat_plot("2001-01-01",c("upmove","dnmove"))
-),width="20cm",height="20cm",envir=environment())}
-\end{center}
+\section{mean absolute move, mean move}
+\Sexpr{latex_stats(dt=tret,jtxt=c(mean_abs_move="mean(abs(tret))",mean_move="mean(tret)"))}
 
 \newpage
-\subsection{since 2011}
-\begin{center}
-\Sexpr{make_plot(plot(
-  make_stat_plot("2011-01-01",c("upmove","dnmove"))
-),width="20cm",height="20cm",envir=environment())}
-\end{center}
+\section{upmove, downmove}
+\Sexpr{latex_stats(dt=tret,jtxt=c(upmove="mean(tret[tret>0])",downmove="mean(-tret[tret<0])"))}
 
 \newpage
-\subsection{since 2017}
-\begin{center}
-\Sexpr{make_plot(plot(
-  make_stat_plot("2017-01-01",c("upmove","dnmove"))
-),width="20cm",height="20cm",envir=environment())}
-\end{center}
-
+\section{dispersion}
+\Sexpr{latex_stats(
+  dt=tret,
+  jtxt=c(
+    dispersion_01="diff(quantile(tret,c(0.01,0.99)))",
+    dispersion_05="diff(quantile(tret,c(0.05,0.95)))",
+    dispersion_25="diff(quantile(tret,c(0.25,0.75)))",
+    sd="sd(tret)"
+  )
+)}
 
 
 \newpage
-\section{disasters, home runs}
-\subsection{since 2001}
-\begin{center}
-\Sexpr{make_plot(plot(
-  make_stat_plot("2001-01-01",c("count_home_runs","count_disasters"))
-),width="20cm",height="20cm",envir=environment())}
-\end{center}
-\subsection{since 2011}
-\begin{center}
-\Sexpr{make_plot(plot(
-  make_stat_plot("2011-01-01",c("count_home_runs","count_disasters"))
-),width="20cm",height="20cm",envir=environment())}
-\end{center}
-\subsection{since 2017}
-\begin{center}
-\Sexpr{make_plot(plot(
-  make_stat_plot("2017-01-01",c("count_home_runs","count_disasters"))
-),width="20cm",height="20cm",envir=environment())}
-\end{center}
-
-\newpage
-\section{dispersion, cross-sectional deviation}
-\subsection{since 2011}
-\begin{center}
-\Sexpr{make_plot(plot(
-  make_stat_plot("2001-01-01",c("dispersion_01","dispersion_05","dispersion_25","cross_sectional_sd"))
-),width="20cm",height="20cm",envir=environment())}
-\end{center}
-
-\newpage
-\subsection{since 2011}
-\begin{center}
-\Sexpr{make_plot(plot(
-  make_stat_plot("2011-01-01",c("dispersion_01","dispersion_05","dispersion_25","cross_sectional_sd"))
-),width="20cm",height="20cm",envir=environment())}
-\end{center}
-
-\newpage
-\subsection{hi-vol basket vs lo-vol basket disperion,since 2011}
-\begin{center}
-\Sexpr{make_plot(plot(
-  make_stat_plot("2011-01-01",c("sd_hivol","sd_lovol"))
-),width="20cm",height="20cm",envir=environment())}
-\end{center}
-
-\newpage
-\subsection{hi-vol vs lo-vol basket volatility ratio,since 2011}
-\begin{center}
-\Sexpr{make_plot(plot(
-  make_stat_plot("2011-01-01",c("hivol_lovol_ratio"))
-),width="20cm",height="20cm",envir=environment())}
-\end{center}
-
-\newpage
-\subsection{hi-vol vs lo-vol basket volatility ratio,since 2001}
-\begin{center}
-\Sexpr{make_plot(plot(
-  make_stat_plot("2001-01-01",c("hivol_lovol_ratio"))
-),width="20cm",height="20cm",envir=environment())}
-\end{center}
-
-\newpage
-\subsection{hi-vol vs lo-vol basket volatility difference,since 2001}
-\begin{center}
-\Sexpr{make_plot(plot(
-  make_stat_plot("2001-01-01",c("hivol_lovol_diff"))
-),width="20cm",height="20cm",envir=environment())}
-\end{center}
-
-\newpage
-\section{Correlation of realized volatility and size of daily move}
-
-\begin{center}
-\Sexpr{make_plot(plot(
-  make_stat_plot("2001-01-01",c("hist_daily_rank_cor"))
-),width="20cm",height="20cm",envir=environment())}
-\end{center}
-
-\newpage
-\section{hi-vol breadth, lo-vol breadth}
-
-\subsection{since 2001}
-\begin{center}
-\Sexpr{make_plot(plot(
-  make_stat_plot("2001-01-01",c("breadth_hivol","breadth_lovol"))
-),width="20cm",height="20cm",envir=environment())}
-\end{center}
-
-\newpage
-\subsection{since 2011}
-\begin{center}
-\Sexpr{make_plot(plot(
-  make_stat_plot("2011-01-01",c("breadth_hivol","breadth_lovol"))
-),width="20cm",height="20cm",envir=environment())}
-\end{center}
-
-\newpage
-\subsection{since 2017}
-\begin{center}
-\Sexpr{make_plot(plot(
-  make_stat_plot("2017-01-01",c("breadth_hivol","breadth_lovol"))
-),width="20cm",height="20cm",envir=environment())}
-\end{center}
-
+\section{correlation of returns and rating}
 <<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
- g_breadth_diff<-function(start_date,ticks="1 years",tick_label="%y")w[date>start_date] %>%
-  {data.table(
-   date=tail(.$date,-1),
-   hi=diff(.$breadth_hivol),
-   lo=diff(.$breadth_lovol),
-   agree=factor(
-     ifelse(diff(.$breadth_hivol)*diff(.$breadth_lovol)<0,"disagree","agree"),
-     levels=c("disagree","agree")
-   ),
-   diff=diff(.$breadth_hivol)-diff(.$breadth_lovol)
-  )} %>%
-  ggplot() +
-  geom_point(aes(x=date,y=diff,col=agree)) +
-  scale_x_date(date_breaks =ticks , date_labels = tick_label)+
-  ggtitle("hivol minus lovol breadth change")
+safe_cor<-function(x,y,method){
+  i<-which(!is.na(x)&!is.na(y))
+  cor(x[i],y[i],method = method)
+}
 @
+\Sexpr{latex_stats(
+  dt=tret,
+  jtxt=c(
+    rating_corr="safe_cor(tret,best_analyst_rating,method='spearman')"
+  )
+)}
 
 \newpage
-\subsection{hi-vol vs lo-vol breadth changes, since 2017}
-\begin{center}
-\Sexpr{make_plot(plot(
-  g_breadth_diff("2017-01-01",ticks="1 months", tick_label="%b")
-),width="20cm",height="20cm",envir=environment())}
-\end{center}
+\section{correlation of realized volatility and rating}
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+safe_cor<-function(x,y,method){
+  i<-which(!is.na(x)&!is.na(y))
+  cor(x[i],y[i],method = method)
+}
+@
+\Sexpr{latex_stats(
+  dt=tret,
+  jtxt=c(
+    rating_corr="safe_cor(vol_30d,best_analyst_rating,method='spearman')"
+  )
+)}
 
 \newpage
-\subsection{hi-vol vs lo-vol breadth changes, since 2001}
-\begin{center}
-\Sexpr{make_plot(plot(
-  g_breadth_diff("2001-01-01",ticks="1 years", tick_label="%y")
-),width="20cm",height="20cm",envir=environment())}
-\end{center}
+\section{correlation of trend and rating}
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+safe_cor<-function(x,y,method){
+  i<-which(!is.na(x)&!is.na(y))
+  cor(x[i],y[i],method = method)
+}
+@
+\Sexpr{latex_stats(
+  dt=tret,
+  jtxt=c(
+    rating_corr="safe_cor((ma30-ma200)/ma200,best_analyst_rating,method='spearman')"
+  )
+)}
 
+
+\newpage
+\section{correlation of 1m realized volatility and size of daily move}
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+safe_cor<-function(x,y,method){
+  i<-which(!is.na(x)&!is.na(y))
+  cor(x[i],y[i],method = method)
+}
+@
+\Sexpr{latex_stats(
+  dt=tret,
+  jtxt=c(
+    rating_corr="safe_cor(abs(tret),vol_30d,method='spearman')"
+  )
+)}
+
+\newpage
+\section{mean abs lovol, hivol move}
+\Sexpr{latex_stats(
+  dt=tret,
+  jtxt=c(
+    mean_lovol_move="mean(tret[vol_30d<quantile(vol_30d,0.25)])",
+    mean_hivol_move="mean(tret[vol_30d>quantile(vol_30d,0.75)])"
+  )
+)}
+
+\newpage
+\section{mean abs lovol, hivol move}
+\Sexpr{latex_stats(
+  dt=tret,
+  jtxt=c(
+    mean_abs_lovol_move="mean(abs(tret[vol_30d<quantile(vol_30d,0.25)]))",
+    mean_abs_hivol_move="mean(abs(tret[vol_30d>quantile(vol_30d,0.75)]))"
+  )
+)}
+  
+\newpage
+\section{beta plus, beta minus}
+\Sexpr{latex_stats(
+  dt=tret,
+  jtxt=c(
+    mean_beta_plus="mean(beta_plus[!is.na(beta_plus)])",
+    mean_beta_minus="mean(beta_minus[!is.na(beta_minus)])"
+  )
+)}
+    
+\newpage
+\section{analyst ratings}
+\Sexpr{latex_stats(
+  dt=tret,
+  jtxt=c(
+    analyst_rating="mean(best_analyst_rating[!is.na(best_analyst_rating)])"
+  )
+)}
+  
+\newpage
+\section{rsi}
+\Sexpr{latex_stats(
+  dt=tret,
+  jtxt=c(
+    rsi30d="mean(rsi30d[!is.na(rsi30d)])"
+  )
+)}  
+
+\newpage
+\section{corr}
+\Sexpr{latex_stats(
+  dt=tret,
+  jtxt=c(
+    corr="mean(corr[!is.na(corr)])"
+  )
+)}  
+
+\newpage
+\section{breadth}
+\Sexpr{latex_stats(
+  dt=tret,
+  jtxt=c(
+    corr="mean(sign(tret))"
+  )
+)}  
+
+\newpage
+\section{analyst rating factor basket}
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+position_on_factor<-function(tret,factor,q){
+  i<-which(!is.na(tret)&!is.na(factor))
+  short <- ifelse(factor[i]<quantile(factor[i],q),-1,0)
+  long  <- ifelse(factor[i]>quantile(factor[i],1-q),1,0)
+  tret[i]*(short+long)
+}
+@
+\Sexpr{latex_stats(
+  dt=tret,
+  jtxt=c(
+    analyst_factor="mean(position_on_factor(tret-0.5*(beta_plus+beta_minus)*(ticker=='SXXP Index')*tret,best_analyst_rating,0.25))"
+  )
+)}
+
+
+\newpage
+\section{mean streak, days}
+<<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+mean_streak<-
+tret[,.SD,keyby="date"][,.(
+  max_streak=local({
+        change_sign<-abs(diff(sign(tret)))>0
+        change_loc<-which(change_sign)
+        if(length(change_loc)<2)return(0L)
+        max(diff(change_loc))
+  })
+),keyby=c("year_month","ticker")][,.(
+    date=as.Date(paste0(year_month,"-01")),
+    mean_max_streak=mean(max_streak)
+  ),
+  keyby="year_month"
+]
+
+
+gg_mean_streak <- mean_streak[mean_max_streak>0] %>%
+  ggplot() + 
+  geom_point(aes(x=date,y=mean_max_streak)) + 
+  geom_hline(yintercept = mean(mean_streak[mean_max_streak>0,mean_max_streak])) +
+  scale_x_date(date_breaks = "1 years" , date_labels = "%y")+
+  ggtitle("mean max streak, days")
+
+@
+\begin{center}
+\Sexpr{make_plot(plot(gg_mean_streak),width="20cm",height="20cm",envir=environment())}
+\end{center}
 
 \end{document}
 
