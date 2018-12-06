@@ -44,7 +44,17 @@ w<-mapply(
       securities=tickers,
       fields=c(
         "DAY_TO_DAY_TOT_RETURN_GROSS_DVDS",
-        "VOLATILITY_30D"
+        "VOLATILITY_30D",
+        "BEST_ANALYST_RATING",
+        "RSI_30D",
+        "MOV_AVG_200D",
+        "MOV_AVG_30D",
+        "BETA_PLUS",
+        "BETA_MINUS",
+        "CORR_COEF",
+        "VWAP_VOLUME",
+        "EQY_WEIGHTED_AVG_PX",
+        "SHORT_INT_RATIO"
       ),
       start.date=as.Date(start,format="%Y%m%d"),
       end.date=as.Date(end,format="%Y%m%d"),
@@ -69,7 +79,17 @@ w4<-do.call(rbind,mapply(function(df,ticker){
         ticker=ticker,
         date=df$date,
         tret=df$DAY_TO_DAY_TOT_RETURN_GROSS_DVDS,
-        vol_30d=df$VOLATILITY_30D
+        vol_30d=df$VOLATILITY_30D,
+        best_analyst_rating=df$BEST_ANALYST_RATING,
+        rsi30d=df$RSI_30D,
+        ma200=df$MOV_AVG_200D,
+        ma30=df$MOV_AVG_30D,
+        beta_plus=df$BETA_PLUS,
+        beta_minus=df$BETA_MINUS,
+        corr=df$CORR_COEF,
+        vwap_volume=df$VWAP_VOLUME,
+        eqy_weighted_avg_px=df$EQY_WEIGHTED_AVG_PX,
+        short_int_ratio=df$SHORT_INT_RATIO
       )
 },df=w3,ticker=names(w3),SIMPLIFY=FALSE))
 
