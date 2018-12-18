@@ -325,12 +325,67 @@ scrape_duke<-function(
   
 }
 
+
+
+scrape_tim<-function(
+  fname="N:/Depts/Share/UK Alpha Team/Analytics/test/tim1.csv"
+){
+  x<-fread(fname) %>%
+  {names(.)<-mapply(function(n)paste0(strsplit(gsub("[^[:alnum:] ]", "",n), " +")[[1]],collapse=""),n=names(.));.} %>%
+  {.$CurrentInvestment<-as.numeric(gsub(",","",.$CurrentInvestment));.}
+  
+  company2manager<-function(company)abbreviate(mapply(
+      function(n){
+        res<-paste0(strsplit(gsub("[^[:alnum:] ]", "",n), " +")[[1]],collapse="")
+        toupper(res)
+      },
+      n=company
+  ),minlength = 2)
+  
+  author2pair<-function(author)abbreviate(mapply(
+    function(n){
+      res<-paste0(strsplit(gsub("[^[:alnum:] ]", "",n), " +")[[1]],collapse="")
+      toupper(res)
+    },
+    n=author
+  ))  
+  
+  all_pms<-company2manager(sort(unique(x$AuthorCompany)))
+  all_pairs<-author2pair(sort(unique(x$Author)))
+  
+  res<-x[,.(
+    manager=company2manager(AuthorCompany),
+    pair=paste0(company2manager(AuthorCompany),stri_pad(match(author2pair(Author),all_pairs),width=3,side="left",pad="0")),
+    ticker=ifelse(grepl("(Index$)|(Equity$)",Ticker),Ticker,paste0(Ticker," Equity")),
+    exposure=round(10000*ifelse(Type=="Long",1,-1)*CurrentInvestment/sum(CurrentInvestment),digits=1)
+  )]
+  
+  dollar_neutral<-res[,.(
+    manager=manager[1],
+    ticker="SXXP Index",
+    exposure=-sum(exposure)
+  ),keyby=pair]
+  
+  dollar_neutral_tim<-rbind(
+    res,
+    dollar_neutral
+  )[,.(
+      manager=manager[1],
+      exposure=round(sum(exposure),digits=1)
+  ),keyby=c("pair","ticker")]
+  
+  dollar_neutral_tim
+}
+
 #
 # form reference matrix
 #
 
 fname_offs<-"https://raw.githubusercontent.com/satrapade/pairs/data/AbsoluteUK%20xp%20final.xlsm"
 fname_ons<-"N:/Depts/Global/Absolute Insight/UK Equity/AbsoluteUK xp final.xlsm"
+
+duke_position_scrape<-scrape_duke(fname_ons)
+tim_position_scrape<-scrape_tim("N:/Depts/Share/UK Alpha Team/Analytics/test/tim1.csv")
 
 duke_position_scrape<-scrape_duke(fname_ons)
 
@@ -370,6 +425,7 @@ factor_tickers<-c(
   "SMX Index",
   "DAX Index",
   "CAC Index",
+  "V2X Index",
   ################## bloomberg indices
   "PMOMENUS Index",
   ################## SG factors
@@ -378,7 +434,7 @@ factor_tickers<-c(
   "SGIXTFEQ Index",
   "SGIXTFFX Index",
   "SGIXTFIR Index",
-  "SGIXGCM Index",
+  #"SGIXGCM Index",
   "SGIXTFCY Index",
   ################## JPM themes
   "JPEUBATL Index",
@@ -391,6 +447,12 @@ factor_tickers<-c(
   "MSSTERSI Index", #
   "MSSTPERI Index", #
   "MSSTHYDS Index",
+  "MSEERVOL Index",
+  #################
+  "SPEULVE Index", # SP low vol
+  "SPEULVDP Index", # lo vol, high divident
+  "M07IEU02 Index", # barra low vol
+  "XDEBEUR EU Equity", # xtrackers MSCI world minimum vol
   #################
   "JPDUKB16 Index", # brexit hedge basket
   ################# MW TOPS
@@ -737,11 +799,11 @@ position_summary_df<-data.table(
   subset=gsub("\\^|\\$","",colnames(duke)),
   net=structure(
     mapply(function(n)duke_position_scrape[grepl(n,manager),sum(exposure)],colnames(duke)),
-    format=quote(sign_color(comma(this,digits=1),this))
+    format=quote(sign_color(comma(round(this,digits=1),digits=1),this))
   ),
   gross=structure(
     mapply(function(n)duke_position_scrape[grepl(n,manager),sum(abs(exposure))],colnames(duke)),
-    format=quote(sign_color(comma(this,digits=1),this))
+    format=quote(sign_color(comma(round(this,digits=1),digits=1),this))
   ),
   cor1=structure(
     drop(cor(duke,factor_local_tret[,"SXXP Index"])),
@@ -1530,179 +1592,71 @@ pair_rp<-duke_position_scrape[,.(
 )}
 \end{center}
 
-\newpage
-\section{ABC performance image}
+<<,cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
 
-\begin{center}
-\begin{tabular}{c c}
-\hline
-\rowcolor{gray!20}
-Cummulative P\&L (bps) & Cummulative hit ratio (pct) \\
-\Sexpr{make_plot(plot(
-  performance_image("^ABC[0-9]+$",txt_size=10)
-),width="10cm",height="10cm",envir=environment())}
-&
-\Sexpr{make_plot(plot(
-  performance_image("^ABC[0-9]+$",txt_size=10,xform_fun=function(x)100*cumsum(sign(x))/length(x))
-),width="10cm",height="10cm",envir=environment())}
-\\
-\Sexpr{ntable(
-  df=pair_rp[manager=="ABC",.(pair,daily_conviction,intraday_conviction)][order(-daily_conviction)]
-)}
-&
-\\
-\end{tabular}
-\end{center}
-
-\newpage
-\section{MC performance image}
-
-\begin{center}
-\begin{tabular}{c c}
-\hline
-\rowcolor{gray!20}
-Cummulative P\&L (bps) & Cummulative hit ratio (pct) \\
-\Sexpr{make_plot(plot(
-  performance_image("^MC[0-9]+$",txt_size=10)
-),width="10cm",height="10cm",envir=environment())}
-&
-\Sexpr{make_plot(plot(
-  performance_image("^MC[0-9]+$",txt_size=10,xform_fun=function(x)100*cumsum(sign(x))/length(x))
-),width="10cm",height="10cm",envir=environment())}
-\\
-\Sexpr{ntable(
-  df=pair_rp[manager=="MC",.(pair,daily_conviction,intraday_conviction)][order(-daily_conviction)]
-)}
-&
-\\
-\end{tabular}
-\end{center}
-\newpage
-\section{DH performance image}
+pair_vols<-do.call(rbind,mapply(function(n){
+  vol<-do.call(data.table,as.list(16*apply(tail(duke_pairs,n),2,sd)))
+  data.table(days=n,vol)
+},n=seq(from=365,to=30,length.out=20),SIMPLIFY=FALSE))%>%
+{melt(.,id.vars="days",measure.vars=colnames(duke_pairs))}
 
 
-\begin{center}
-\begin{tabular}{c c}
-\hline
-\rowcolor{gray!20}
-Cummulative P\&L (bps) & Cummulative hit ratio (pct) \\
-\Sexpr{make_plot(plot(
-  performance_image("^DH[0-9]+$",txt_size=10)
-),width="10cm",height="10cm",envir=environment())}
-&
-\Sexpr{make_plot(plot(
-  performance_image("^DH[0-9]+$",txt_size=10,xform_fun=function(x)100*cumsum(sign(x))/length(x))
-),width="10cm",height="10cm",envir=environment())}
-\\
-\Sexpr{ntable(
-  df=pair_rp[manager=="DH",.(pair,daily_conviction,intraday_conviction)][order(-daily_conviction)]
-)}
-&
-\\
-\end{tabular}
-\end{center}
+make_manager_page<-function(m){
+  res<-paste0(
+    "\\newpage",
+    paste0("\\section{",m," performance image}"),
+    "\\begin{center}",
+    "\\begin{tabular}{m{10cm} m{10cm}}",
+    "\\hline",
+    "\\rowcolor{gray!20}",
+    "Cummulative P\\&L (bps) & Cummulative hit ratio (pct) \\\\",
+    make_plot(
+      plot(performance_image(paste0("^",m,"[0-9]+$"),txt_size=10)),
+      width="10cm",
+      height="10cm",
+      envir=environment()
+    ),
+    " & ",
+    make_plot(
+      plot(performance_image(paste0("^",m,"[0-9]+$"),txt_size=10,xform_fun=function(x)100*cumsum(sign(x))/length(x))),
+      width="10cm",
+      height="10cm",
+      envir=environment()
+    ),
+    " \\\\ ",
+    "\\hline",
+    "\\rowcolor{gray!20}",
+    "Conviction ratios & Historical vols \\\\",
+    ntable(
+      df=pair_rp[manager==m,.(pair,daily_conviction,intraday_conviction)][order(-daily_conviction)]
+    ),
+    " & ",
+    make_plot(
+      plot(
+        pair_vols[grepl(paste0("^",m,"[0-9]+$"),variable)] %>% 
+        ggplot() +
+        geom_line(aes(x=days,y=value,col=variable),size=2)
+      ),
+      width="10cm",
+      height="10cm",
+      envir=environment()
+    ),
+    "  \\\\ ",
+    "\\end{tabular}",
+    "\\end{center}",
+    collapse="\n"
+  )
+  res
+}
 
-\newpage
-\section{JR performance image}
+all_managers<-sort(unique(duke_position_scrape$manager))
 
-
-\begin{center}
-\begin{tabular}{c c}
-\hline
-\rowcolor{gray!20}
-Cummulative P\&L (bps) & Cummulative hit ratio (pct) \\
-\Sexpr{make_plot(plot(
-  performance_image("^JR[0-9]+$",txt_size=10)
-),width="10cm",height="10cm",envir=environment())}
-&
-\Sexpr{make_plot(plot(
-  performance_image("^JR[0-9]+$",txt_size=10,xform_fun=function(x)100*cumsum(sign(x))/length(x))
-),width="10cm",height="10cm",envir=environment())}
-\\
-\Sexpr{ntable(
-  df=pair_rp[manager=="JR",.(pair,daily_conviction,intraday_conviction)][order(-daily_conviction)]
-)}
-&
-\\
-\end{tabular}
-\end{center}
-
-
-\newpage
-\section{AC performance image}
-
-
-\begin{center}
-\begin{tabular}{c c}
-\hline
-\rowcolor{gray!20}
-Cummulative P\&L (bps) & Cummulative hit ratio (pct) \\
-\Sexpr{make_plot(plot(
-  performance_image("^AC[0-9]+$",txt_size=10)
-),width="10cm",height="10cm",envir=environment())}
-&
-\Sexpr{make_plot(plot(
-  performance_image("^AC[0-9]+$",txt_size=10,xform_fun=function(x)100*cumsum(sign(x))/length(x))
-),width="10cm",height="10cm",envir=environment())}
-\\
-\Sexpr{ntable(
-  df=pair_rp[manager=="AC",.(pair,daily_conviction,intraday_conviction)][order(-daily_conviction)]
-)}
-&
-\\
-\end{tabular}
-\end{center}
+all_manager_pages<-paste(mapply(make_manager_page,m=all_managers),collapse="\n\n\n")
 
 
-\newpage
-\section{GJ performance image}
+@
 
-
-\begin{center}
-\begin{tabular}{c c}
-\hline
-\rowcolor{gray!20}
-Cummulative P\&L (bps) & Cummulative hit ratio (pct) \\
-\Sexpr{make_plot(plot(
-  performance_image("^GJ[0-9]+$",txt_size=10)
-),width="10cm",height="10cm",envir=environment())}
-&
-\Sexpr{make_plot(plot(
-  performance_image("^GJ[0-9]+$",txt_size=10,xform_fun=function(x)100*cumsum(sign(x))/length(x))
-),width="10cm",height="10cm",envir=environment())}
-\\
-\Sexpr{ntable(
-  df=pair_rp[manager=="GJ",.(pair,daily_conviction,intraday_conviction)][order(-daily_conviction)]
-)}
-&
-\\
-\end{tabular}
-\end{center}
-
-
-\newpage
-\section{ACTW performance image}
-
-\begin{center}
-\begin{tabular}{c c}
-\hline
-\rowcolor{gray!20}
-Cummulative P\&L (bps) & Cummulative hit ratio (pct) \\
-\Sexpr{make_plot(plot(
-  performance_image("^ACTW[0-9]+$",txt_size=10)
-),width="10cm",height="10cm",envir=environment())}
-&
-\Sexpr{make_plot(plot(
-  performance_image("^ACTW[0-9]+$",txt_size=10,xform_fun=function(x)100*cumsum(sign(x))/length(x))
-),width="10cm",height="10cm",envir=environment())}
-\\
-\Sexpr{ntable(
-  df=pair_rp[manager=="ACTW",.(pair,daily_conviction,intraday_conviction)][order(-daily_conviction)]
-)}
-&
-\\
-\end{tabular}
-\end{center}
+\Sexpr{all_manager_pages}
 
 
 <<, cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
