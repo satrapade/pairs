@@ -389,6 +389,8 @@ tim_position_scrape<-scrape_tim("N:/Depts/Share/UK Alpha Team/Analytics/test/tim
 
 duke_position_scrape<-scrape_duke(fname_ons)
 
+
+
 all_tickers<-sort(unique(duke_position_scrape$ticker))
 
 all_days<-make_date_range(
@@ -744,6 +746,7 @@ g_2y_benchmark_specific<-rbind(
 \end{center}
 
 
+
 \newpage
 \section{Position summary}
 <<,cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
@@ -843,6 +846,335 @@ position_summary_df<-data.table(
 \Sexpr{ntable(
   df=position_summary_df
 )}
+\end{center}
+
+\newpage
+\section{Pair risk contribution}
+<<,cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+#
+# compute look-through exposures
+#
+require(DBI)
+if(exists("db"))dbDisconnect(db)
+db<-dbConnect(
+  odbc::odbc(), 
+  .connection_string = paste0(
+    "driver={SQL Server};",
+    "server=SQLS071FP\\QST;",
+    "database=PRDQSTFundPerformance;",
+    "trusted_connection=true"
+  )
+)
+duke_index_exposure<-duke_position_scrape[ticker_class(ticker)=="index|nomatch"][pair!="DH20"]
+duke_equity_exposure<-duke_position_scrape[ticker_class(ticker)=="equity|nomatch"][pair!="DH20"]
+
+source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/fetch_index_weights.R")
+
+rconn<-Rblpapi::blpConnect()
+
+super_sector_index_map<-fread(
+'
+  NAME,                           INDEX
+  "Automobiles & Parts",          "SXA"
+  "Banks",                        "SX7"
+  "Basic Resources",              "SXP"
+  "Chemicals",                    "SX4"
+  "Construction & Materials",     "SXO"
+  "Financial Services",           "SXF"
+  "Food & Beverage",              "SX3"
+  "Health Care",                  "SXD"
+  "Industrial Goods & Services",  "SXN"
+  "Insurance",                    "SXI"
+  "Media",                        "SXM"
+  "Oil & Gas",                    "SXE"
+  "Personal & Household Goods",   "SXQ"
+  "Real Estate",                  "SX86"
+  "Retail",                       "SXR"
+  "Technology",                   "SX8"
+  "Telecommunications",           "SXK"
+  "Travel & Leisure",             "SXT"
+  "Utilities",                    "SX6"         
+'
+)[,
+  c(
+    "P_Index",
+    "E_Index"
+  ):=list(
+    P_index=local({
+      Rblpapi::bdp(unique(paste0(INDEX,"P Index")),"DAY_TO_DAY_TOT_RETURN_GROSS_DVDS")[
+        paste0(INDEX,"P Index")  , "DAY_TO_DAY_TOT_RETURN_GROSS_DVDS"
+      ]
+    }),
+    E_index=local({
+      Rblpapi::bdp(unique(paste0(INDEX,"E Index")),"DAY_TO_DAY_TOT_RETURN_GROSS_DVDS")[
+        paste0(INDEX,"E Index")  , "DAY_TO_DAY_TOT_RETURN_GROSS_DVDS"
+        ]
+    })
+  )
+]
+
+
+
+
+duke_index_look_through<-do.call(rbind,
+  mapply(
+    function(
+      manager,
+      pair,
+      ndx,
+      exposure
+    ){
+      res<-fetch_index_weights(ndx)[,"exposure":=exposure*Weight/sum(Weight)] 
+      bbg_ticker<-Rblpapi::bdp(paste0("/buid/",res$UniqueId),"PARSEKYABLE_DES")
+      res$ticker<-bbg_ticker[paste0("/buid/",res$UniqueId),"PARSEKYABLE_DES"]
+      data.table(
+        manager=manager,
+        pair=pair,
+        ticker=res$ticker,
+        exposure=res$exposure,
+        source="LookThrough",
+        index=ndx
+      )
+    },
+    manager=duke_index_exposure$manager,
+    pair=duke_index_exposure$pair,
+    ndx=duke_index_exposure$ticker,
+    exposure=duke_index_exposure$exposure,
+    SIMPLIFY = FALSE
+  )
+)
+
+duke_look_through_exposure<-rbind(
+  duke_equity_exposure[,.(manager,pair,ticker,exposure,source="Outright",index="None")],
+  duke_index_look_through
+)[abs(exposure)>0]
+
+
+universe<-data.table(
+  ticker=sort(unique(duke_look_through_exposure$ticker)),
+  sector=Rblpapi::bdp(sort(unique(duke_look_through_exposure$ticker)),"ICB_SUPERSECTOR_NAME")[
+    sort(unique(duke_look_through_exposure$ticker)),
+    "ICB_SUPERSECTOR_NAME"
+  ]
+)[,.SD,keyby=ticker]
+
+duke_aggregated_look_through_exposure<-duke_look_through_exposure[,.(
+  exposure=sum(exposure),
+  sector=universe[ticker,sector],
+  index=super_sector_index_map[,.SD,keyby=NAME][universe[ticker,sector],INDEX]
+),keyby=c("manager","pair","ticker","source")][abs(exposure)>0]
+
+duke_look_vs_outright<-duke_aggregated_look_through_exposure[,.(
+  Outright=sum(exposure[source=="Outright"]),
+  LookThrough=sum(exposure[source=="LookThrough"]),
+  sector=universe[ticker,sector]
+),keyby=ticker]
+
+total_gross<-duke_look_vs_outright[,sum(abs(Outright+LookThrough))]
+
+gross_fraction <- duke_aggregated_look_through_exposure[,.(
+  gross=sum(abs(exposure))
+),keyby=pair] %>% 
+  {setNames(.$gross,.$pair)} %>%
+  {./sum(.)}
+
+pair_weights<-total_gross*gross_fraction
+
+pair_gross<-total_gross*gross_fraction
+
+pair_lt_matrix<-NNcast(
+  duke_aggregated_look_through_exposure[!is.na(index)],
+  i_name="pair",
+  j_name="index",
+  v_name="exposure"
+)
+
+pair_ptf<-mapply(
+  function(the_pair)structure(cbind(
+    duke_position_scrape[,.(exposure=sum(ifelse(grepl(paste0("^",the_pair,"$"),pair),exposure,0))),keyby=ticker][,exposure]
+  ),dimnames=list(sort(unique(duke_position_scrape$ticker)),the_pair)),
+  the_pair=setdiff(sort(unique(duke_position_scrape$pair)),"DH20")
+)
+rownames(pair_ptf)<-sort(unique(duke_position_scrape$ticker))
+duke_pairs<-local_tret%*%pair_ptf
+intraday_duke_pairs<-bar_matrix[,rownames(pair_ptf)]%*%pair_ptf
+
+plt<-data.table(pair_lt_matrix[names(gross_fraction),])
+for(i in names(plt)){
+  attributes(plt[[i]])$format=quote(scol(n_fmt(round(this,digits=0)),this))
+  attributes(plt[[i]])$hdr=tbl(c(
+    gsub("^SX","",i),
+    n_fmt(round(sum(plt[[i]]),digits=0))
+  ),align="@{}l@{}")
+}
+
+pair_constituents<-duke_position_scrape[,.(
+  ticker_max=gsub("( Equity)|( Index)|( [A-Z]{2})","",ticker[which.max(exposure)]),
+  ticker_min=gsub("( Equity)|( Index)|( [A-Z]{2})","",ticker[which.min(exposure)]),
+  ticker_most=gsub("( Equity)|( Index)|( [A-Z]{2})","",ticker[which.max(abs(exposure))]),
+  stock_most=local({
+    eq<-(ticker_class(ticker)=="equity|nomatch")
+    ex<-ifelse(eq,exposure,0)
+    if(max(abs(ex))<1e-10){
+      return(gsub("( Equity)|( Index)|( [A-Z]{2})","",ticker[which.max(abs(exposure))]))
+    }
+    gsub("( Equity)|( Index)|( [A-Z]{2})","",ticker[which.max(abs(ex))])
+  })
+),keyby=pair]
+
+pair_stats<-data.table(
+  marginal_risk_contribution=structure(
+    mrc(total_gross*gross_fraction,cov(duke_pairs)),
+    format=quote(n_fmt(round(this,digits=1))),
+    hdr=tbl(c("2Y","MRC","risk","cntr","pct"),align="@{}l@{}")
+))
+
+pair_stats$marginal_risk_contribution_1y<-structure(
+    mrc(total_gross*gross_fraction,cov(tail(duke_pairs,365))),
+    format=quote(n_fmt(round(this,digits=1))),
+    hdr=tbl(c("1Y","MRC","risk","cntr","pct"),align="@{}l@{}")
+)  
+
+pair_stats$pair<-names(gross_fraction)
+
+pair_stats$stock<-pair_constituents[names(gross_fraction),stock_most]
+
+pair_stats$gross_fraction<-structure(
+    100*gross_fraction,
+    format=quote(round(this,digits=1)),
+    hdr=tbl(c("GRS","pct","tot"),align="@{}l@{}")
+)
+
+pair_stats$gross<-structure(
+    total_gross*gross_fraction,
+    format=quote(round(this,digits=0)),
+    hdr=tbl(c("ACT","gross","bps"),align="@{}l@{}")
+)
+
+pair_stats$rp_gross<-structure(
+    apply(duke_pairs,2,sd)%>%{mean(.)/.}%>%{total_gross*./sum(.)}, # risk parity
+    format=quote(n_fmt(round(this,digits=0))),
+    hdr=tbl(c("RP","gross","bps"),align="@{}l@{}")
+)
+
+pair_stats$volatility<-structure(
+    apply(duke_pairs,2,sd),
+    format=quote(round(this,digits=1)),
+    hdr=tbl(c("Vol","daily","bps"),align="l")
+)
+
+pair_stats<-pair_stats[order(-marginal_risk_contribution)]
+
+pair_stats$cum_marginal_risk<-pair_stats[
+  TRUE,
+  structure(
+      cumsum(marginal_risk_contribution),
+      format=quote(round(this,digits=1)),
+      hdr=tbl(c("Cum","2Y","marg","risk","pct"),align="@{}l@{}") 
+)]
+
+pair_stats$cum_marginal_risk_1y<-pair_stats[
+  TRUE,
+  structure(
+      cumsum(marginal_risk_contribution_1y),
+      format=quote(round(this,digits=1)),
+      hdr=tbl(c("Cum","1Y","marg","risk","pct"),align="@{}l@{}") 
+)]
+
+source("https://raw.githubusercontent.com/satrapade/pairs/master/utility/volatility_trajectory.R")
+pair_stats$volatility_trajectory<-pair_stats[
+  TRUE,
+  structure(
+    volatility_trajectory_mrc(duke_pairs/100,setNames(gross,pair)),
+    format=quote(round(this,digits=2)),
+    hdr=tbl(c("Vol","traj","marg","risk","seq"),align="@{}l@{}")
+)]
+
+pair_stats<-data.table(pair_stats,plt[match(pair_stats$pair,rownames(pair_lt_matrix))])
+
+pair_stats$corr_day<-pair_stats[
+  TRUE,
+  structure(
+    100*mapply(
+      cor,
+      data.table(duke_pairs[,pair]),
+      data.table(factor_local_tret[,paste0(colnames(pair_lt_matrix),"P Index")]%*%t(pair_lt_matrix[pair,]))
+    ),
+    format=quote(s1col(n_fmt(round(this,digits=0)),this,50)),
+    hdr=tbl(c("COR","2","yr","daily"),align="@{}l@{}") 
+ )
+]
+
+pair_stats$corr_10min<-pair_stats[
+  TRUE,
+  structure(
+    100*mapply(
+      cor,
+      data.table(intraday_duke_pairs[,pair]),
+      data.table(bar_matrix[,paste0(colnames(pair_lt_matrix),"P Index")]%*%t(pair_lt_matrix[pair,]))
+    ),
+    format=quote(s1col(n_fmt(round(this,digits=0)),this,50)),
+    hdr=tbl(c("COR","2","wk","10min"),align="@{}l@{}") 
+ )
+]
+
+pair_stats$perf3m<-pair_stats[
+  TRUE,
+  structure(
+    colSums(tail(duke_pairs[,pair],91)),
+    format=quote(cell_color(add_latex_env(paste0(ifelse(this>0,"\\phantom{-}",""),comma(this,digits=0)),"\\tt"),signed_ramp(this))),
+    hdr=tbl(c("Perf","3m"),align="@{}l@{}") 
+ )
+]
+
+pair_stats$perf1m<-structure(
+    colSums(tail(duke_pairs[,pair_stats$pair],30)),
+    format=quote(cell_color(add_latex_env(paste0(ifelse(this>0,"\\phantom{-}",""),comma(this,digits=0)),"\\tt"),signed_ramp(this))),
+    hdr=tbl(c("Perf","1m"),align="@{}l@{}") 
+)
+
+pair_stats$perf1w<-structure(
+    colSums(tail(duke_pairs[,pair_stats$pair],7)),
+    format=quote(cell_color(add_latex_env(paste0(ifelse(this>0,"\\phantom{-}",""),comma(this,digits=0)),"\\tt"),signed_ramp(this))),
+    hdr=tbl(c("Perf","1w"),align="@{}l@{}") 
+)
+
+bias_ramp<-function(x,bias=50,from="white",to="red"){
+  gcr<-color_ramp(abs(x-bias),"white","green")
+  rcr<-color_ramp(abs(x-bias),"white","red")
+  ifelse(x>bias,gcr,rcr)
+}
+
+pair_stats$hit1w<-structure(
+    100*cumsum(pmax(sign(colSums(tail(duke_pairs[,pair_stats$pair],30))),0))/seq_along(pair_stats$pair),
+    format=quote(cell_color(add_latex_env(comma(this,digits=0),"\\tt"),bias_ramp(this,50))),
+    hdr=tbl(c("HR","1m"),align="@{}l@{}") 
+)
+
+
+s1col<-function(t,s,th=50){
+  r1<-ifelse(s>(+th),paste0("\\textcolor{red}{\\bf ",t,"}"),"")
+  r2<-ifelse(s<=th,t,"")
+  paste0(r1,r2)
+}
+
+scol<-function(t,s,th=50){
+  r1<-ifelse(s<(-th),paste0("\\textcolor{red}{\\bf ",t,"}"),"")
+  r2<-ifelse(s>(+th),paste0("\\textcolor{black}{\\bf ",t,"}"),"")
+  r3<-ifelse(abs(s)<=th,t,"")
+  paste0(r1,r2,r3)
+}
+
+latex_pair_stats<-ntable(
+  df=pair_stats,
+  scale="0.50",
+  add_rownames=TRUE
+)
+
+
+@
+\begin{center}
+\Sexpr{latex_pair_stats}
 \end{center}
 
 \newpage
