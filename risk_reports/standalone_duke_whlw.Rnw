@@ -387,8 +387,9 @@ fname_ons<-"N:/Depts/Global/Absolute Insight/UK Equity/AbsoluteUK xp final.xlsm"
 duke_position_scrape<-scrape_duke(fname_ons)
 tim_position_scrape<-scrape_tim("N:/Depts/Share/UK Alpha Team/Analytics/test/tim1.csv")
 
-duke_position_scrape<-scrape_duke(fname_ons)
+duke_position_scrape<-scrape_tim("N:/Depts/Share/UK Alpha Team/Analytics/test/tim1.csv")
 
+duke_position_scrape$ticker[duke_position_scrape$ticker=="MHG NO Equity"]<-"MOWI NO Equity"
 
 
 all_tickers<-sort(unique(duke_position_scrape$ticker))
@@ -801,11 +802,11 @@ sign_color<-function(t,s){
 position_summary_df<-data.table(
   subset=gsub("\\^|\\$","",colnames(duke)),
   net=structure(
-    mapply(function(n)duke_position_scrape[grepl(n,manager),sum(exposure)],colnames(duke)),
+    mapply(function(n)duke_position_scrape[grepl(n,manager),sum(exposure)],colnames(duke)%>%{ifelse(.=="*","*",paste0("^",.,"$"))}),
     format=quote(sign_color(comma(round(this,digits=1),digits=1),this))
   ),
   gross=structure(
-    mapply(function(n)duke_position_scrape[grepl(n,manager),sum(abs(exposure))],colnames(duke)),
+    mapply(function(n)duke_position_scrape[grepl(n,manager),sum(abs(exposure))],colnames(duke)%>%{ifelse(.=="*","*",paste0("^",.,"$"))}),
     format=quote(sign_color(comma(round(this,digits=1),digits=1),this))
   ),
   cor1=structure(
@@ -924,6 +925,8 @@ duke_index_look_through<-do.call(rbind,
       ndx,
       exposure
     ){
+      #cat(manager,pair,"\n")
+      if(class(try(fetch_index_weights(ndx),silent=TRUE))=="try-error")ndx<-"SXXP Index"
       res<-fetch_index_weights(ndx)[,"exposure":=exposure*Weight/sum(Weight)] 
       bbg_ticker<-Rblpapi::bdp(paste0("/buid/",res$UniqueId),"PARSEKYABLE_DES")
       res$ticker<-bbg_ticker[paste0("/buid/",res$UniqueId),"PARSEKYABLE_DES"]
@@ -1839,8 +1842,14 @@ pair_ptf<-mapply(
   sort(unique(duke_position_scrape$pair))
 )
 
+long_pair_ptf<-pmax(pair_ptf,0)
+short_pair_ptf<-pmin(pair_ptf,0)
+
+
 duke_pairs<-local_tret%*%pair_ptf
 intraday_duke_pairs<-bar_matrix[,all_tickers]%*%pair_ptf
+long_intraday_duke_pairs<-bar_matrix[,all_tickers]%*%long_pair_ptf
+short_intraday_duke_pairs<-bar_matrix[,all_tickers]%*%short_pair_ptf
 
 
 total_gross <- sum(abs(duke_position_scrape$exposure))
@@ -1850,6 +1859,13 @@ manager_gross<-duke_position_scrape[,.(
   gross=sum(abs(exposure)),
   gross_fraction=sum(abs(exposure))/total_gross
 ),keyby=manager][,.SD,keyby=manager]
+
+pair_vols<-do.call(rbind,mapply(function(n){
+  vol<-do.call(data.table,as.list(16*apply(tail(duke_pairs,n),2,sd)))
+  data.table(days=n,vol)
+},n=floor(seq(from=365,to=30,length.out=20)),SIMPLIFY=FALSE))%>%
+{melt(.,id.vars="days",measure.vars=colnames(duke_pairs))}
+
 
 pair_rp<-duke_position_scrape[,.(
   manager=manager[1],
@@ -1868,13 +1884,23 @@ pair_rp<-duke_position_scrape[,.(
   list(
     daily_conviction=structure(
       1/daily_rp_gross_ratio,
-      hdr=tbl(c("daily","conviction")),
+      hdr=tbl(c("1day","conv")),
       format=quote(round(this,digits=2))
     ),
     intraday_conviction=structure(
       1/intraday_rp_gross_ratio,
-      hdr=tbl(c("intraday","conviction")),
+      hdr=tbl(c("10min","conv")),
       format=quote(round(this,digits=2))
+    ),
+    vol30=structure(
+      pair_vols[days==30][,.SD,keyby=variable][pair,value],
+      hdr=tbl(c("30d","vol")),
+      format=quote(round(this,digits=1))
+    ),
+    vol365=structure(
+      pair_vols[days==365][,.SD,keyby=variable][pair,value],
+      hdr=tbl(c("365d","vol")),
+      format=quote(round(this,digits=1))
     )
   )
 )]
@@ -1926,11 +1952,6 @@ pair_rp<-duke_position_scrape[,.(
 
 <<,cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
 
-pair_vols<-do.call(rbind,mapply(function(n){
-  vol<-do.call(data.table,as.list(16*apply(tail(duke_pairs,n),2,sd)))
-  data.table(days=n,vol)
-},n=seq(from=365,to=30,length.out=20),SIMPLIFY=FALSE))%>%
-{melt(.,id.vars="days",measure.vars=colnames(duke_pairs))}
 
 
 make_manager_page<-function(m){
@@ -1960,7 +1981,7 @@ make_manager_page<-function(m){
     "\\rowcolor{gray!20}",
     "Conviction ratios & Historical vols \\\\",
     ntable(
-      df=pair_rp[manager==m,.(pair,daily_conviction,intraday_conviction)][order(-daily_conviction)]
+      df=pair_rp[manager==m,.(pair,daily_conviction,intraday_conviction,vol30,vol365)][order(-daily_conviction)]
     ),
     " & ",
     make_plot(
