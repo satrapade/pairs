@@ -53,6 +53,8 @@ require(ggplot2)
 require(magrittr)
 library(Rblpapi)
 require(FRAPO)
+require(scales)
+
 rcon<-Rblpapi::blpConnect()
 
 #
@@ -246,6 +248,10 @@ NNcast<-function(
   res[cbind(i,j)[!is.na(df$x),]]<-df$x[!is.na(df$x)]
   scrub_fun(res)
 }
+@
+
+
+<<,cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
 
 require(stringi)
 require(data.table)
@@ -376,9 +382,11 @@ scrape_tim<-function(
   
   dollar_neutral_tim
 }
+@
 
+<<,cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
 #
-# form reference matrix
+# fetch data
 #
 
 fname_offs<-"https://raw.githubusercontent.com/satrapade/pairs/data/AbsoluteUK%20xp%20final.xlsm"
@@ -387,7 +395,7 @@ fname_ons<-"N:/Depts/Global/Absolute Insight/UK Equity/AbsoluteUK xp final.xlsm"
 duke_position_scrape<-scrape_duke(fname_ons)
 tim_position_scrape<-scrape_tim("N:/Depts/Share/UK Alpha Team/Analytics/test/tim1.csv")
 
-duke_position_scrape<-scrape_tim("N:/Depts/Share/UK Alpha Team/Analytics/test/tim1.csv")
+duke_position_scrape<-scrape_duke(fname_ons)
 
 duke_position_scrape$ticker[duke_position_scrape$ticker=="MHG NO Equity"]<-"MOWI NO Equity"
 
@@ -418,7 +426,6 @@ local_tret<-as.matrix(memo_populate_history_matrix(
     verbose=TRUE,
     force=FALSE
 ))
-
 
 
   
@@ -564,18 +571,21 @@ bars<-do.call(
 )
 
 
-bar_matrix<-apply(NNcast(
-  bars,
-  i_name="times",
-  j_name="ticker",
-  v_name="close",
-  fun=sum
-),2,function(x)x%>%replace_zero_with_last%>%{diff(.)/head(.,-1)})
+x0<-NNcast(bars, i_name="times", j_name="ticker", v_name="close", fun=sum)
+
+bar_matrix<-structure(apply(
+  x0,
+  2,
+  function(x)x%>%replace_zero_with_last%>%{diff(.)/head(.,-1)}
+),dimnames=list(tail(rownames(x0),-1),colnames(x0)))
+@
 
 
+
+<<,cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
 
 #
-#
+# calculate stuff
 #
 
 manager_ptf<-mapply(
@@ -589,6 +599,17 @@ manager_ptf<-mapply(
   },
   c(sort(unique(duke_position_scrape$manager)),"*")
 )
+
+pair_ptf<-mapply(
+  function(the_pair)structure(cbind(
+    duke_position_scrape[,.(exposure=sum(ifelse(grepl(paste0("^",the_pair,"$"),pair),exposure,0))),keyby=ticker][,exposure]
+  ),dimnames=list(sort(unique(duke_position_scrape$ticker)),the_pair)),
+  sort(unique(duke_position_scrape$pair))
+)
+
+long_pair_ptf<-pmax(pair_ptf,0)
+short_pair_ptf<-pmin(pair_ptf,0)
+
 
 duke<-local_tret%*%manager_ptf
 
@@ -608,10 +629,195 @@ duke_specific_all <- duke - duke_explain_all
 intraday_duke_specific_all <- intraday_duke - intraday_duke_explain_all  
 benchmark_specific_all <- benchmark_local_tret - benchmark_explain_all  
 
+duke_pairs<-local_tret%*%pair_ptf
+intraday_duke_pairs<-bar_matrix[,all_tickers]%*%pair_ptf
+long_intraday_duke_pairs<-bar_matrix[,all_tickers]%*%long_pair_ptf
+short_intraday_duke_pairs<-bar_matrix[,all_tickers]%*%short_pair_ptf
 
 
 @
 
+
+<<,cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+#
+# intraday grids: row is managers, columns is days
+#
+
+intraday_pair_pnl<-apply(intraday_duke_pairs,2,cumsum) %>%
+{data.table(day=stri_sub(rownames(.),9,11),time=as.POSIXct(rownames(.)),.)} %>%
+{melt(.,id.vars=c("day","time"),measure.vars=NULL)} %>%
+{.[,.(
+    manager=gsub("[0-9]+$","",variable),
+    time=local({i<-order(time); time[i]}),
+    pnl=local({i<-order(time); value[i]-value[i][1]}),
+    date=as.character(time,format="%Y-%m-%d"),
+    bar=seq_along(time),
+    bar_count=length(time)
+  ),keyby=c("variable","day")][bar_count>100]
+}
+
+intraday_pair_long_pnl<-apply(long_intraday_duke_pairs,2,cumsum) %>%
+{data.table(day=stri_sub(rownames(.),9,11),time=as.POSIXct(rownames(.)),.)} %>%
+{melt(.,id.vars=c("day","time"),measure.vars=NULL)} %>%
+{.[,.(
+    manager=gsub("[0-9]+$","",variable),
+    time=local({i<-order(time); time[i]}),
+    pnl=local({i<-order(time); value[i]-value[i][1]}),
+    date=as.character(time,format="%Y-%m-%d"),
+    bar=seq_along(time),
+    bar_count=length(time)
+  ),keyby=c("variable","day")][bar_count>100]
+}
+
+intraday_pair_short_pnl<-apply(short_intraday_duke_pairs,2,cumsum) %>%
+{data.table(day=stri_sub(rownames(.),9,11),time=as.POSIXct(rownames(.)),.)} %>%
+{melt(.,id.vars=c("day","time"),measure.vars=NULL)} %>%
+{.[,.(
+    manager=gsub("[0-9]+$","",variable),
+    time=local({i<-order(time); time[i]}),
+    pnl=local({i<-order(time); value[i]-value[i][1]}),
+    date=as.character(time,format="%Y-%m-%d"),
+    bar=seq_along(time),
+    bar_count=length(time)
+  ),keyby=c("variable","day")][bar_count>100]
+}
+
+intraday_manager_all<-apply(intraday_duke,2,cumsum) %>%
+{data.table(day=stri_sub(rownames(.),9,11),time=as.POSIXct(rownames(.)),.)} %>%
+{melt(.,id.vars=c("day","time"),measure.vars=NULL)} %>%
+{.[,.(
+    manager=variable,
+    time=local({i<-order(time); time[i]}),
+    pnl=local({i<-order(time); value[i]-value[i][1]}),
+    date=as.character(time,format="%Y-%m-%d"),
+    bar=seq_along(time),
+    bar_count=length(time)
+  ),keyby=c("variable","day")][bar_count>100]
+}
+
+intraday_manager_explained<-apply(intraday_duke_explain_all,2,cumsum) %>%
+{data.table(day=stri_sub(rownames(.),9,11),time=as.POSIXct(rownames(.)),.)} %>%
+{melt(.,id.vars=c("day","time"),measure.vars=NULL)} %>%
+{.[,.(
+    manager=variable,
+    time=local({i<-order(time); time[i]}),
+    pnl=local({i<-order(time); value[i]-value[i][1]}),
+    date=as.character(time,format="%Y-%m-%d"),
+    bar=seq_along(time),
+    bar_count=length(time)
+  ),keyby=c("variable","day")][bar_count>100]
+}
+
+
+intraday_manager_specific<-apply(intraday_duke_specific_all,2,cumsum) %>%
+{data.table(day=stri_sub(rownames(.),9,11),time=as.POSIXct(rownames(.)),.)} %>%
+{melt(.,id.vars=c("day","time"),measure.vars=NULL)} %>%
+{.[,.(
+    manager=variable,
+    time=local({i<-order(time); time[i]}),
+    pnl=local({i<-order(time); value[i]-value[i][1]}),
+    date=as.character(time,format="%Y-%m-%d"),
+    bar=seq_along(time),
+    bar_count=length(time)
+  ),keyby=c("variable","day")][bar_count>100]
+}
+
+
+
+intraday_manager_pnl<-rbind(
+  intraday_pair_pnl[,.(pnl=sum(pnl),date=max(date),day=max(day),bar=max(bar),type="all"),keyby=c("manager","time")],
+  intraday_pair_long_pnl[,.(pnl=sum(pnl),date=max(date),day=max(day),bar=max(bar),type="long"),keyby=c("manager","time")],
+  intraday_pair_short_pnl[,.(pnl=sum(pnl),date=max(date),day=max(day),bar=max(bar),type="short"),keyby=c("manager","time")]
+)
+
+intraday_manager<-rbind(
+  data.table(intraday_manager_explained,type="exp"),
+  data.table(intraday_manager_specific,type="spc"),
+  data.table(intraday_manager_all,type="all")
+)
+
+gg_intraday_manager <- intraday_manager_pnl[type=="all"] %>% 
+  ggplot(aes(x=bar,y=pnl,col=manager)) +
+  geom_hline(yintercept=0) +
+  geom_line(size=1) +
+  facet_grid(cols = vars(date), rows = vars(manager)) +
+  theme(legend.position="none")
+
+gg_intraday_manager_ls <- intraday_manager_pnl[type!="all"] %>% 
+  ggplot(aes(x=bar,y=pnl,col=type)) +
+  geom_hline(yintercept=0) +
+  geom_line(size=1) +
+  facet_grid(cols = vars(date), rows = vars(manager)) 
+
+gg_intraday_manager_explain <- intraday_manager[manager!="*"] %>% 
+  ggplot(aes(x=bar,y=pnl,col=type)) +
+  geom_hline(yintercept=0) +
+  geom_line(size=1) +
+  facet_grid(cols = vars(date), rows = vars(manager)) 
+
+gg_intraday_manager_squiggle <- intraday_manager_pnl[type!="all"][,
+    .(
+      long_pnl=pnl[type=="long"][1],
+      short_pnl=pnl[type=="short"][1]
+    ),
+    keyby=c("manager","date","bar")
+  ][,.(
+    long_pnl=floor(rescale(long_pnl[order(bar)],to=c(0,100))),
+    short_pnl=floor(rescale(short_pnl[order(bar)],to=c(0,100))),
+    bar=sort(bar)
+  ),keyby=c("manager","date")] %>% 
+  ggplot()+ 
+  geom_line(aes(x=long_pnl,y=short_pnl,col=bar),size=1) +
+  facet_grid(cols = vars(date), rows = vars(manager)) 
+@
+
+\newpage
+\section{Manager intraday}
+
+\begin{center}
+\Sexpr{make_plot(
+  plot(gg_intraday_manager),
+  width="20cm",
+  height="23cm",
+  envir=environment()
+)}
+\end{center}
+
+\newpage
+\section{Manager long vs short intraday}
+
+\begin{center}
+\Sexpr{make_plot(
+  plot(gg_intraday_manager_ls),
+  width="20cm",
+  height="23cm",
+  envir=environment()
+)}
+\end{center}
+
+\newpage
+\section{Manager squiggle}
+
+\begin{center}
+\Sexpr{make_plot(
+  plot(gg_intraday_manager_squiggle),
+  width="20cm",
+  height="23cm",
+  envir=environment()
+)}
+\end{center}
+
+\newpage
+\section{Manager explain}
+
+\begin{center}
+\Sexpr{make_plot(
+  plot(gg_intraday_manager_explain),
+  width="20cm",
+  height="23cm",
+  envir=environment()
+)}
+\end{center}
 
 
 
@@ -1049,7 +1255,7 @@ pair_stats$gross_fraction<-structure(
 )
 
 pair_stats$gross<-structure(
-    total_gross*gross_fraction,
+    duke_position_scrape[,.(gross=sum(abs(exposure))),keyby="pair"][names(gross_fraction)][,gross],
     format=quote(round(this,digits=0)),
     hdr=tbl(c("ACT","gross","bps"),align="@{}l@{}")
 )
@@ -1782,11 +1988,15 @@ performance_image<-function(
   xformed_m<-apply(m,2,xform_fun)
   pair_perf_rank<-setNames(frank(drop(tail(xformed_m,1)),ties.method="first"),colnames(m))
   
-  x<-data.table(
+  x0<-data.table(
     tick=1:nrow(intraday_duke_pairs[duke_ticking,]),
     xformed_m
-  ) %>% 
-  {melt(data=.,id.vars="tick",measure.vars=rownames(intraday_duke_pairs),variable.factor=FALSE)} %>%
+  ) 
+  
+  x1<- x0 %>% 
+  {melt(data=.,id.vars="tick",measure.vars=colnames(xformed_m),variable.factor=FALSE)} 
+  
+  x<- x1 %>%
   {.[,.(
     tick=tick,
     variable=variable,
@@ -1819,17 +2029,6 @@ performance_image<-function(
 @
 
 
-\newpage
-\section{DUKE performance image: P\&L ordered by pair name}
-
-\begin{center}
-\Sexpr{make_plot(
-  plot(performance_image("*",sort_pnl=FALSE)),
-  width="20cm",
-  height="26cm",
-  envir=environment()
-)}
-\end{center}
 
 <<,cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
 
@@ -1905,13 +2104,22 @@ pair_rp<-duke_position_scrape[,.(
   )
 )]
 
-# rp_duke_pairs<-duke_pairs[,pair_rp$pair]%*%diag(pair_rp$daily_rp_gross_ratio)
-# rp_intraday_duke_pairs<-intraday_duke_pairs[,pair_rp$pair]%*%diag(pair_rp$intraday_rp_gross_ratio)
-# 
-# apply(rp_intraday_duke_pairs,2,sd)
-# apply(rp_duke_pairs,2,sd)
 
 @
+
+
+
+\newpage
+\section{DUKE performance image: P\&L ordered by pair name}
+
+\begin{center}
+\Sexpr{make_plot(
+  plot(performance_image("*",sort_pnl=FALSE)),
+  width="20cm",
+  height="26cm",
+  envir=environment()
+)}
+\end{center}
 
 \newpage
 \section{DUKE performance image: by P\&L}
