@@ -327,7 +327,10 @@ scrape_duke<-function(
     exposure=round(exposure*10000,digits=1)
   )]
   
-  duke_position_scrape
+  list(
+    position=duke_position_scrape,
+    summary=duke_summary_scrape
+  )
   
 }
 
@@ -392,15 +395,61 @@ scrape_tim<-function(
 fname_offs<-"https://raw.githubusercontent.com/satrapade/pairs/data/AbsoluteUK%20xp%20final.xlsm"
 fname_ons<-"N:/Depts/Global/Absolute Insight/UK Equity/AbsoluteUK xp final.xlsm"
 
-duke_position_scrape<-scrape_duke(fname_ons)
+duke_scrape<-scrape_duke(fname_ons)
 tim_position_scrape<-scrape_tim("N:/Depts/Share/UK Alpha Team/Analytics/test/tim1.csv")
 
-duke_position_scrape<-scrape_duke(fname_ons)
+duke_position_scrape<-duke_scrape$position
+duke_summary_scrape<-duke_scrape$summary
 
 duke_position_scrape$ticker[duke_position_scrape$ticker=="MHG NO Equity"]<-"MOWI NO Equity"
 
 
 all_tickers<-sort(unique(duke_position_scrape$ticker))
+
+require(Rblpapi)
+rcon<-Rblpapi::blpConnect()
+
+ticker_static<-local({
+  res0<-Rblpapi::bdp(
+    all_tickers,
+    c("CRNCY","SECURITY_TYP","INDUSTRY_SECTOR","CRNCY_ADJ_PX_LAST","PARSEKYABLE_DES"),
+    overrides=c(EQY_FUND_CRNCY="GBP")
+  )
+  res1<-melt(data.table(res0),id.vars = "PARSEKYABLE_DES",variable.name="field")
+  res1[,.SD,keyby="PARSEKYABLE_DES"]
+})
+
+cix_position_scale <- ticker_static[field=="CRNCY"][duke_position_scrape$ticker,value] %>%
+{mapply(function(x)switch(x,GBp="/100",GBP="/1",paste0("*(",x,"GBP Curncy)")),.)}
+
+cix_position <- duke_summary_scrape$value[1]*duke_position_scrape$exposure / 10000 / 
+  ticker_static[field=="CRNCY_ADJ_PX_LAST"][duke_position_scrape$ticker,as.numeric(value)]
+
+cix_components<-data.table(
+  duke_position_scrape,
+  direction = ifelse(sign(duke_position_scrape$exposure)>0,"LONG","SHORT"),
+  currency=ticker_static[field=="CRNCY"][duke_position_scrape$ticker,value],
+  quantity=round(cix_position),
+  scale=cix_position_scale,
+  text=paste0("(",duke_position_scrape$ticker,"*(",round(cix_position),")",cix_position_scale,")")
+)
+
+cix_legs<-cix_components[,.(
+  cix=paste(text,collapse="+"),
+  description=paste(gsub("( [A-Z]{2} Equity)|( Index)","",ticker),collapse="+")
+),keyby=c("pair","direction")]
+
+cix_complete<-cix_legs[,.(
+  CIX=local({
+    long_text<-if(sum(direction=="LONG")>0){cix[direction=="LONG"]}else{"1"}
+    short_text<-if(sum(direction=="SHORT")>0){cix[direction=="SHORT"]}else{"1"}
+    paste0("(",long_text,")/(",short_text,")")
+  }),
+  Description=paste0(description[direction=="LONG"]," vs ",description[direction=="SHORT"]),
+  Permission=""
+),keyby="pair"][,.("\\Target"=pair, CIX, Description, Permission)]
+
+fwrite(cix_complete,"N:/Depts/Share/UK Alpha Team/Analytics/CIX/duke_all_live.txt",sep=",",quote=FALSE)
 
 all_days<-make_date_range(
   start = as.character(Sys.Date()-365*2,format="%Y-%m-%d"),
